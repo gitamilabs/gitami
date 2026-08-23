@@ -10,27 +10,39 @@ import { SignJWT, importPKCS8 } from "jose";
 
 import fs from "fs";
 import path from "path";
+import { createPrivateKey } from "crypto";
 
 /**
- * Retrieves private key from raw PEM string or file path.
+ * Retrieves private key from raw PEM string or file path and converts it to PKCS#8 if needed.
  */
 function getPrivateKey(): string {
-  const raw = env.GITHUB_APP_PRIVATE_KEY;
+  let raw = env.GITHUB_APP_PRIVATE_KEY || "";
   if (!raw) return "";
 
-  if (raw.includes("-----BEGIN")) {
-    return raw.replace(/\\n/g, "\n");
+  if (!raw.includes("-----BEGIN")) {
+    const resolvedPath = path.isAbsolute(raw)
+      ? raw
+      : path.resolve(process.cwd(), raw);
+    if (fs.existsSync(resolvedPath)) {
+      raw = fs.readFileSync(resolvedPath, "utf-8");
+    }
   }
 
-  const resolvedPath = path.isAbsolute(raw)
-    ? raw
-    : path.resolve(process.cwd(), raw);
+  // Normalize literal \n
+  let cleanKey = raw.replace(/\\n/g, "\n").trim();
 
-  if (fs.existsSync(resolvedPath)) {
-    return fs.readFileSync(resolvedPath, "utf-8");
+  // Ensure newlines after header and before footer if pasted as single string
+  cleanKey = cleanKey
+    .replace(/-----BEGIN ([A-Z ]+)-----/g, "-----BEGIN $1-----\n")
+    .replace(/-----END ([A-Z ]+)-----/g, "\n-----END $1-----");
+
+  try {
+    const pk = createPrivateKey(cleanKey);
+    return pk.export({ type: "pkcs8", format: "pem" }).toString();
+  } catch (err) {
+    console.error("Error parsing GITHUB_APP_PRIVATE_KEY with createPrivateKey:", err);
+    return cleanKey;
   }
-
-  return raw.replace(/\\n/g, "\n");
 }
 
 /**
@@ -57,6 +69,53 @@ export function getAppInstallationUrl(state?: string): string {
 
   const queryString = params.toString();
   return `https://github.com/apps/${env.GITHUB_APP_SLUG}/installations/new${queryString ? `?${queryString}` : ""}`;
+}
+
+/**
+ * Auto-discovers and syncs installations belonging to a user from GitHub App API.
+ */
+export async function syncUserInstallations(
+  userId: string,
+  userGithubId?: string,
+  username?: string,
+): Promise<ConnectedRepository[]> {
+  try {
+    const appJwt = await getAppJwt();
+    const res = await fetch("https://api.github.com/app/installations", {
+      headers: {
+        Authorization: `Bearer ${appJwt}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "Sentinel-API",
+      },
+    });
+
+    if (!res.ok) {
+      console.warn("Failed to fetch app installations from GitHub:", res.statusText);
+      return [];
+    }
+
+    const installations = (await res.json()) as any[];
+    if (!Array.isArray(installations)) return [];
+
+    const allSynced: ConnectedRepository[] = [];
+
+    for (const inst of installations) {
+      const account = inst.account;
+      const matchesGithubId = userGithubId && String(account?.id) === String(userGithubId);
+      const matchesUsername = username && account?.login?.toLowerCase() === username.toLowerCase();
+
+      // If user matched or there is only 1 user installation
+      if (matchesGithubId || matchesUsername || installations.length === 1) {
+        const repos = await syncInstallationRepositories(String(inst.id), userId);
+        allSynced.push(...repos);
+      }
+    }
+
+    return allSynced;
+  } catch (err) {
+    console.error("Auto-sync user installations error:", err);
+    return [];
+  }
 }
 
 /**

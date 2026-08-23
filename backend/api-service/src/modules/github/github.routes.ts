@@ -7,6 +7,7 @@ import {
 import {
   getAppInstallationUrl,
   syncInstallationRepositories,
+  syncUserInstallations,
 } from "./github-app.service";
 import { verifySignature, handleEvent } from "./webhook.service";
 import { db } from "../../db";
@@ -62,10 +63,18 @@ githubRouter.get("/callback", authMiddleware, async (c) => {
 githubRouter.get("/installations", authMiddleware, async (c) => {
   const user = c.get("user");
 
-  const installations = await db
+  let installations = await db
     .select()
     .from(githubInstallations)
     .where(eq(githubInstallations.userId, user.id));
+
+  if (installations.length === 0) {
+    await syncUserInstallations(user.id, user.githubId, user.username);
+    installations = await db
+      .select()
+      .from(githubInstallations)
+      .where(eq(githubInstallations.userId, user.id));
+  }
 
   return c.json({ installations });
 });
@@ -77,7 +86,7 @@ githubRouter.get("/installations", authMiddleware, async (c) => {
 githubRouter.get("/repositories", authMiddleware, async (c) => {
   const user = c.get("user");
 
-  const repositories = await db
+  let repositories = await db
     .select()
     .from(connectedRepositories)
     .where(
@@ -87,7 +96,30 @@ githubRouter.get("/repositories", authMiddleware, async (c) => {
       ),
     );
 
+  if (repositories.length === 0) {
+    await syncUserInstallations(user.id, user.githubId, user.username);
+    repositories = await db
+      .select()
+      .from(connectedRepositories)
+      .where(
+        and(
+          eq(connectedRepositories.userId, user.id),
+          eq(connectedRepositories.isActive, true),
+        ),
+      );
+  }
+
   return c.json({ repositories });
+});
+
+/**
+ * POST /sync
+ * Protected. Manually triggers syncing installations and repositories from GitHub App.
+ */
+githubRouter.post("/sync", authMiddleware, async (c) => {
+  const user = c.get("user");
+  const repos = await syncUserInstallations(user.id, user.githubId, user.username);
+  return c.json({ success: true, repositories: repos });
 });
 
 /**
