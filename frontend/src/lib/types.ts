@@ -77,7 +77,9 @@ export interface ReposResponse {
 
 export interface IngestRequest {
   repo_id: string;
-  repo_dir: string;
+  repo_dir?: string;
+  full_name?: string;
+  access_token?: string;
   branch?: string;
 }
 
@@ -90,6 +92,14 @@ export interface IngestResponse {
   edges_count: number;
   duration_seconds: number;
 }
+
+export interface IngestRepoResult {
+  success: boolean;
+  repository?: ConnectedRepository;
+  ingestResult?: IngestResponse;
+  error?: string;
+}
+
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";

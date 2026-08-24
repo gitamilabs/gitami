@@ -61,6 +61,32 @@ async function getAppJwt(): Promise<string> {
 }
 
 /**
+ * Creates an Installation Access Token for a given GitHub App Installation ID.
+ */
+export async function getInstallationAccessToken(
+  installationId: string,
+): Promise<string> {
+  const appJwt = await getAppJwt();
+  const tokenRes = await fetch(
+    `https://api.github.com/app/installations/${installationId}/access_tokens`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${appJwt}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "Sentinel-API",
+      },
+    },
+  );
+  if (!tokenRes.ok) {
+    throw new Error(`Failed to create installation access token: ${tokenRes.statusText}`);
+  }
+  const tokenData = (await tokenRes.json()) as any;
+  return tokenData.token;
+}
+
+
+/**
  * Generates the URL for a user to install the Platform GitHub App.
  */
 export function getAppInstallationUrl(state?: string): string {

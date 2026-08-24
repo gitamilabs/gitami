@@ -8,6 +8,8 @@ import { Button } from "../../components/ui/Button";
 import { Badge } from "../../components/ui/Badge";
 import { InstallBanner } from "../../components/repositories/InstallBanner";
 import { RepoCard } from "../../components/repositories/RepoCard";
+import { IngestModal } from "../../components/repositories/IngestModal";
+import { ConnectedRepository } from "../../lib/types";
 import { useAuthStore } from "../../store/authStore";
 import { useRepoStore } from "../../store/repoStore";
 import Link from "next/link";
@@ -37,12 +39,15 @@ function DashboardContent() {
     isLoading,
   } = useRepoStore();
 
+  const [selectedRepoForIngest, setSelectedRepoForIngest] = React.useState<ConnectedRepository | null>(null);
+
   useEffect(() => {
     if (token) {
       fetchConnectedRepos(token);
       fetchIndexedRepos();
     }
   }, [token, fetchConnectedRepos, fetchIndexedRepos]);
+
 
   const handleDisconnect = async (repoId: string) => {
     if (token) {
@@ -153,13 +158,21 @@ function DashboardContent() {
             </div>
           ) : connectedRepos.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {connectedRepos.map((repo) => (
-                <RepoCard
-                  key={repo.id}
-                  repo={repo}
-                  onDisconnect={handleDisconnect}
-                />
-              ))}
+              {connectedRepos.map((repo) => {
+                const isIngested =
+                  indexedRepos.includes(repo.name) ||
+                  indexedRepos.includes(repo.fullName);
+
+                return (
+                  <RepoCard
+                    key={repo.id}
+                    repo={repo}
+                    isIngested={isIngested}
+                    onDisconnect={handleDisconnect}
+                    onIngest={(r) => setSelectedRepoForIngest(r)}
+                  />
+                );
+              })}
             </div>
           ) : (
             <div className="p-8 text-center glass-card rounded-2xl border border-slate-800">
@@ -172,7 +185,18 @@ function DashboardContent() {
               </p>
             </div>
           )}
+
+          {/* Ingestion Confirmation & Progress Modal */}
+          <IngestModal
+            isOpen={!!selectedRepoForIngest}
+            repo={selectedRepoForIngest}
+            onClose={() => setSelectedRepoForIngest(null)}
+            onSuccess={() => {
+              fetchIndexedRepos();
+            }}
+          />
         </div>
+
 
         {/* Knowledge Base Fast Query Shortcuts */}
         <div className="glass-panel rounded-3xl p-6 border border-slate-800 space-y-3">

@@ -11,6 +11,8 @@ import { Badge } from "../../components/ui/Badge";
 import { useAuthStore } from "../../store/authStore";
 import { useRepoStore } from "../../store/repoStore";
 import { githubApi } from "../../lib/api";
+import { IngestModal } from "../../components/repositories/IngestModal";
+import { ConnectedRepository } from "../../lib/types";
 import {
   FolderGit2,
   Search,
@@ -20,6 +22,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ExternalLink,
+  Sparkles,
 } from "lucide-react";
 
 function RepositoriesContent() {
@@ -28,17 +31,22 @@ function RepositoriesContent() {
   const {
     connectedRepos,
     installations,
+    indexedRepos,
     fetchConnectedRepos,
     fetchInstallations,
+    fetchIndexedRepos,
     disconnectRepo,
     isLoading,
   } = useRepoStore();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  const [selectedRepoForIngest, setSelectedRepoForIngest] = useState<ConnectedRepository | null>(null);
 
   useEffect(() => {
     if (!token) return;
+
+    fetchIndexedRepos();
 
     // Check if redirected from GitHub App installation callback
     const installationId = searchParams.get("installation_id");
@@ -52,6 +60,7 @@ function RepositoriesContent() {
           setSyncStatus("GitHub repositories synced successfully!");
           fetchConnectedRepos(token);
           fetchInstallations(token);
+          fetchIndexedRepos();
           setTimeout(() => setSyncStatus(null), 4000);
         })
         .catch((err) => {
@@ -61,7 +70,8 @@ function RepositoriesContent() {
       fetchConnectedRepos(token);
       fetchInstallations(token);
     }
-  }, [token, searchParams, fetchConnectedRepos, fetchInstallations]);
+  }, [token, searchParams, fetchConnectedRepos, fetchInstallations, fetchIndexedRepos]);
+
 
   const handleDisconnect = async (repoId: string) => {
     if (token) {
@@ -169,13 +179,21 @@ function RepositoriesContent() {
           </div>
         ) : filteredRepos.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filteredRepos.map((repo) => (
-              <RepoCard
-                key={repo.id}
-                repo={repo}
-                onDisconnect={handleDisconnect}
-              />
-            ))}
+            {filteredRepos.map((repo) => {
+              const isIngested =
+                indexedRepos.includes(repo.name) ||
+                indexedRepos.includes(repo.fullName);
+
+              return (
+                <RepoCard
+                  key={repo.id}
+                  repo={repo}
+                  isIngested={isIngested}
+                  onDisconnect={handleDisconnect}
+                  onIngest={(r) => setSelectedRepoForIngest(r)}
+                />
+              );
+            })}
           </div>
         ) : (
           <div className="p-12 text-center glass-card rounded-2xl border border-slate-800">
@@ -190,10 +208,21 @@ function RepositoriesContent() {
             </p>
           </div>
         )}
+
+        {/* Ingestion Confirmation & Progress Modal */}
+        <IngestModal
+          isOpen={!!selectedRepoForIngest}
+          repo={selectedRepoForIngest}
+          onClose={() => setSelectedRepoForIngest(null)}
+          onSuccess={() => {
+            fetchIndexedRepos();
+          }}
+        />
       </div>
     </div>
   );
 }
+
 
 export default function RepositoriesPage() {
   return (

@@ -92,7 +92,9 @@ class ChatResponse(BaseModel):
 
 class IngestRequest(BaseModel):
     repo_id: str
-    repo_dir: str
+    repo_dir: Optional[str] = None
+    full_name: Optional[str] = None
+    access_token: Optional[str] = None
     branch: Optional[str] = "main"
 
 
@@ -142,22 +144,53 @@ async def list_repositories():
 
 @app.post("/api/ingest")
 async def ingest_repository(req: IngestRequest):
-    """Ingest a repository codebase into Neo4j Graph DB and ChromaDB Vector DB."""
-    repo_path = Path(req.repo_dir)
-    if not repo_path.exists():
-        raise HTTPException(status_code=400, detail=f"Repository directory '{req.repo_dir}' does not exist.")
+    """
+    Ingest a repository codebase into Neo4j Graph DB and ChromaDB Vector DB.
+    Supports in-memory archive streaming from GitHub (0 disk usage) or local directory.
+    """
+    from ai_service.repo.streamer import stream_and_parse_github_repo
 
     graph_client = Neo4jClient()
     await graph_client.connect()
     vector_client = VectorKBClient()
+
     try:
-        result = await run_init_job(
-            repo_id=req.repo_id,
-            branch=req.branch or "main",
-            repo_dir=repo_path,
-            client=graph_client,
-            vector_client=vector_client,
-        )
+        if req.full_name:
+            # In-memory streaming from GitHub Tarball API
+            parse_results = stream_and_parse_github_repo(
+                full_name=req.full_name,
+                token=req.access_token,
+                branch=req.branch or "main",
+            )
+            result = await run_init_job(
+                repo_id=req.repo_id,
+                branch=req.branch or "main",
+                parse_results=parse_results,
+                client=graph_client,
+                vector_client=vector_client,
+            )
+        elif req.repo_dir:
+            repo_path = Path(req.repo_dir)
+            if not repo_path.exists():
+                raise HTTPException(status_code=400, detail=f"Repository directory '{req.repo_dir}' does not exist.")
+
+            result = await run_init_job(
+                repo_id=req.repo_id,
+                branch=req.branch or "main",
+                repo_dir=repo_path,
+                client=graph_client,
+                vector_client=vector_client,
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Must provide either 'full_name' (with optional 'access_token') for GitHub in-memory streaming, or 'repo_dir' for local folder ingestion.",
+            )
+
+        if getattr(result, "status", "") == "ERROR":
+            err_msg = "; ".join(getattr(result, "errors", [])) or "Unknown ingestion error"
+            raise HTTPException(status_code=500, detail=f"Ingestion failed: {err_msg}")
+
         return {
             "status": "success",
             "repo_id": req.repo_id,
@@ -167,8 +200,16 @@ async def ingest_repository(req: IngestRequest):
             "edges_count": getattr(result, "edges_count", 0),
             "duration_seconds": getattr(result, "duration_seconds", 0.0),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
+    finally:
+        try:
+            await graph_client.close()
+        except Exception:
+            pass
+
 @app.post("/api/chat/stream")
 async def agent_chat_stream(req: ChatRequest):
     """
@@ -412,7 +453,7 @@ async def agent_chat_query(req: ChatRequest):
             title="Google Gemini Dual-LLM Orchestrator",
             status="completed",
             latency_ms=round(t_synth_latency, 2),
-            args={"model": "gemini-2.0-flash", "citations_count": len(citations)},
+            args={"model": "gemini-3.6-flash", "citations_count": len(citations)},
             summary="Synthesized Knowledge Base context into a cited response.",
             raw_output={"response_length": len(synthesis_response)},
         )

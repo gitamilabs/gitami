@@ -31,8 +31,9 @@ const envSchema = z.object({
     .string()
     .default("super_secret_jwt_key_change_in_production_32bytes"),
   FRONTEND_URL: z.string().default("http://localhost:3000"),
-  AI_SERVICE_URL: z.string().default("https://final-year-project-szf1.onrender.com"),
+  AI_SERVICE_URL: z.string().default("http://localhost:8000"),
 });
+
 
 export type Env = z.infer<typeof envSchema>;
 

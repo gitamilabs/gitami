@@ -70,6 +70,33 @@ class CodeParser:
             self._parsers[lang_name] = Parser(language)
         return self._parsers[lang_name]
 
+    def parse_code_bytes(self, code_bytes: bytes, file_path: str) -> Optional[ParseResult]:
+        """Parse code directly from byte content in-memory without reading from disk."""
+        norm_path = file_path.replace("\\", "/")
+        ext = Path(norm_path).suffix
+
+        lang_tuple = LanguageRegistry.get_language_and_extractor(ext)
+        if not lang_tuple:
+            return None  # Unsupported file extension
+
+        language, extractor, lang_type = lang_tuple
+        if language is None or extractor is None:
+            return ParseResult(file_path=norm_path, language=lang_type)
+
+        parser = self._get_parser(lang_type, language)
+
+        try:
+            tree = parser.parse(code_bytes)
+            res = extractor.extract(tree, code_bytes, norm_path)
+            res.file_path = norm_path
+            return res
+        except Exception as e:
+            return ParseResult(
+                file_path=norm_path,
+                language=lang_type,
+                errors=[f"Failed to parse file bytes: {str(e)}"],
+            )
+
     def parse_file(self, file_path: str | Path, relative_to_dir: Optional[str | Path] = None) -> Optional[ParseResult]:
         path = Path(file_path).resolve()
         if not path.is_file():
@@ -83,27 +110,14 @@ class CodeParser:
         else:
             rel_file_path = str(path).replace("\\", "/")
 
-        lang_tuple = LanguageRegistry.get_language_and_extractor(path.suffix)
-        if not lang_tuple:
-            return None  # Unsupported file extension
-
-        language, extractor, lang_type = lang_tuple
-        if language is None or extractor is None:
-            return ParseResult(file_path=rel_file_path, language=lang_type)
-
-        parser = self._get_parser(lang_type, language)
-
         try:
             code_bytes = path.read_bytes()
-            tree = parser.parse(code_bytes)
-            res = extractor.extract(tree, code_bytes, rel_file_path)
-            res.file_path = rel_file_path
-            return res
+            return self.parse_code_bytes(code_bytes, rel_file_path)
         except Exception as e:
             return ParseResult(
                 file_path=rel_file_path,
-                language=lang_type,
-                errors=[f"Failed to parse file: {str(e)}"],
+                language="unknown",
+                errors=[f"Failed to read file: {str(e)}"],
             )
 
     def parse_directory(self, dir_path: str | Path, ignore_dirs: Optional[set[str]] = None) -> list[ParseResult]:
@@ -121,3 +135,4 @@ class CodeParser:
                     results.append(res)
 
         return results
+

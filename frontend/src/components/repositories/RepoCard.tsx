@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useState } from "react";
 import { ConnectedRepository } from "../../lib/types";
 import { Button } from "../ui/Button";
@@ -13,16 +11,26 @@ import {
   Trash2,
   ExternalLink,
   Bot,
-  Layers,
+  Sparkles,
+  CheckCircle2,
+  RefreshCw,
+  Database,
 } from "lucide-react";
 import Link from "next/link";
 
 interface RepoCardProps {
   repo: ConnectedRepository;
+  isIngested?: boolean;
   onDisconnect: (id: string) => Promise<void>;
+  onIngest?: (repo: ConnectedRepository) => void;
 }
 
-export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDisconnect }) => {
+export const RepoCard: React.FC<RepoCardProps> = ({
+  repo,
+  isIngested = false,
+  onDisconnect,
+  onIngest,
+}) => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
@@ -36,7 +44,7 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDisconnect }) => {
   };
 
   return (
-    <div className="glass-card glass-card-hover rounded-2xl p-5 border border-slate-800 flex flex-col justify-between relative overflow-hidden">
+    <div className="glass-card glass-card-hover rounded-2xl p-5 border border-slate-800 flex flex-col justify-between relative overflow-hidden group">
       <div>
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -76,28 +84,67 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDisconnect }) => {
             <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
             {repo.defaultBranch}
           </span>
-          <span className="text-[11px] text-slate-400">
+
+          {isIngested ? (
+            <span className="flex items-center gap-1 bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-mono text-[11px]">
+              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+              Ingested & Ready
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 bg-amber-950/40 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg font-mono text-[11px]">
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              Not Ingested
+            </span>
+          )}
+
+          <span className="text-[11px] text-slate-500">
             Connected {formatTimeAgo(repo.createdAt)}
           </span>
         </div>
       </div>
 
       <div className="flex items-center justify-between gap-2 pt-4 border-t border-slate-800/80">
-        <Link
-          href={`/chat?repo=${encodeURIComponent(repo.name)}&branch=${encodeURIComponent(
-            repo.defaultBranch
-          )}`}
-          className="flex-1"
-        >
+        {isIngested ? (
+          <>
+            <Link
+              href={`/chat?repo=${encodeURIComponent(repo.name)}&branch=${encodeURIComponent(
+                repo.defaultBranch
+              )}`}
+              className="flex-1"
+            >
+              <Button
+                variant="glow"
+                size="sm"
+                leftIcon={<Bot className="w-3.5 h-3.5" />}
+                className="w-full text-xs"
+              >
+                Chat with Codebase
+              </Button>
+            </Link>
+
+            {onIngest && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => onIngest(repo)}
+                className="text-xs"
+                title="Re-index Knowledge Base"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+              </Button>
+            )}
+          </>
+        ) : (
           <Button
-            variant="secondary"
+            variant="glow"
             size="sm"
-            leftIcon={<Bot className="w-3.5 h-3.5 text-indigo-400" />}
-            className="w-full text-xs"
+            onClick={() => onIngest && onIngest(repo)}
+            leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+            className="flex-1 text-xs"
           >
-            Chat with Codebase
+            Ingest Knowledge Base
           </Button>
-        </Link>
+        )}
 
         <Button
           variant="danger"
@@ -113,3 +160,4 @@ export const RepoCard: React.FC<RepoCardProps> = ({ repo, onDisconnect }) => {
     </div>
   );
 };
+

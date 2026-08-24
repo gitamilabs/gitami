@@ -15,6 +15,10 @@ class TestVectorDBClient(unittest.TestCase):
             del os.environ["GEMINI_API_KEY"]
             
         self.client = VectorDBClient(persist_directory=self.test_dir, api_key="")
+        try:
+            self.client.collection.delete(where={"repo": "test/repo"})
+        except Exception:
+            pass
 
     def tearDown(self):
         # Close chroma to release file locks before deleting temp dir

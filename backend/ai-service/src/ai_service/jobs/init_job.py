@@ -33,24 +33,33 @@ class InitResult:
         return 0
 
 
+from ai_service.parsing.models import ParseResult
+
+
 async def run_init_job(
     repo_id: str,
     branch: str,
-    repo_dir: str | Path,
-    client: Neo4jClient,
+    repo_dir: Optional[str | Path] = None,
+    parse_results: Optional[List[ParseResult]] = None,
+    client: Optional[Neo4jClient] = None,
     vector_client: Optional[VectorKBClient] = None,
 ) -> InitResult:
     """Flow 1 — Repository Initialization job: parse AST and ingest dual Knowledge Base into Neo4j and ChromaDB."""
     start_time = time.time()
-    root = Path(repo_dir)
 
     commit_hash = "init"
-    try:
-        repo = Repo(root, search_parent_directories=True)
-        commit_hash = repo.head.commit.hexsha
-        repo.close()
-    except Exception:
-        pass
+    if repo_dir:
+        root = Path(repo_dir)
+        try:
+            repo = Repo(root, search_parent_directories=True)
+            commit_hash = repo.head.commit.hexsha
+            repo.close()
+        except Exception:
+            pass
+
+    if client is None:
+        client = Neo4jClient()
+        await client.connect()
 
     if vector_client is None:
         vector_client = VectorKBClient()
@@ -66,8 +75,12 @@ async def run_init_job(
         except Exception:
             pass
 
-        parser = CodeParser()
-        parse_results = parser.parse_directory(root)
+        if parse_results is None:
+            if repo_dir is None:
+                raise ValueError("Either repo_dir or parse_results must be provided to run_init_job.")
+            parser = CodeParser()
+            parse_results = parser.parse_directory(Path(repo_dir))
+
 
         total_symbols = 0
         total_edges = 0
@@ -75,15 +88,13 @@ async def run_init_job(
 
         from ai_service.graph.writer import upsert_file_and_symbols
         vector_entries = []
+
+        # Pass 1: Upsert all File and Symbol nodes first
         for pr in parse_results:
-            s_count = await upsert_file_and_symbols(
+            await upsert_file_and_symbols(
                 client, repo_id=repo_id, branch=branch, file_path=pr.file_path, language=pr.language, symbols=pr.symbols
             )
-            c_count = await upsert_call_edges(client, repo_id=repo_id, branch=branch, calls=pr.calls)
-            i_count = await upsert_import_edges(client, repo_id=repo_id, branch=branch, imports=pr.imports)
-
             total_symbols += len(pr.symbols)
-            total_edges += (c_count + i_count)
 
             if pr.symbols:
                 for sym in pr.symbols:
@@ -110,6 +121,12 @@ async def run_init_job(
                     "code_body": f"File: {pr.file_path}\nLanguage: {pr.language}",
                     "commit_hash": commit_hash,
                 })
+
+        # Pass 2: Upsert CALLS and IMPORTS edges now that all Symbols exist in Neo4j
+        for pr in parse_results:
+            c_count = await upsert_call_edges(client, repo_id=repo_id, branch=branch, calls=pr.calls)
+            i_count = await upsert_import_edges(client, repo_id=repo_id, branch=branch, imports=pr.imports)
+            total_edges += (c_count + i_count)
 
         # Dual-write into Vector KB in batch
         if vector_entries:

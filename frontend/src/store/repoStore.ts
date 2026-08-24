@@ -15,6 +15,11 @@ interface RepoState {
   fetchInstallations: (token: string) => Promise<void>;
   fetchIndexedRepos: () => Promise<void>;
   disconnectRepo: (token: string, repoId: string) => Promise<boolean>;
+  ingestConnectedRepo: (
+    token: string,
+    repoId: string,
+    branch?: string
+  ) => Promise<any>;
   getInstallUrl: (token: string) => Promise<string>;
 }
 
@@ -73,8 +78,19 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     }
   },
 
+  ingestConnectedRepo: async (
+    token: string,
+    repoId: string,
+    branch?: string
+  ): Promise<any> => {
+    const res = await githubApi.ingestRepository(token, repoId, branch);
+    await get().fetchIndexedRepos();
+    return res.ingestResult;
+  },
+
   getInstallUrl: async (token: string): Promise<string> => {
     const data = await githubApi.getInstallUrl(token);
     return data.installUrl;
   },
 }));
+

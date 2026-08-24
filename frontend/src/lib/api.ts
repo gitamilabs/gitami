@@ -135,7 +135,29 @@ export const githubApi = {
     }
     return res.json();
   },
+
+  ingestRepository: async (
+    token: string,
+    repoId: string,
+    branch?: string
+  ): Promise<{ success: boolean; repository: any; ingestResult: IngestResponse }> => {
+    const res = await fetch(`${API_BASE_URL}/github/repositories/${repoId}/ingest`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ branch }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to ingest repository (${res.status})`);
+    }
+    return res.json();
+  },
 };
+
 
 // ==========================================
 // AI Service API (ai-service on FastAPI)

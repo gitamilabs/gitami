@@ -195,34 +195,38 @@ class AutonomousAgentLoop:
 
     async def _call_llm_json(self, prompt: str, system_prompt: str) -> str:
         """Helper to invoke LLM with JSON format expectation."""
-        if self.llm_client.has_groq:
-            try:
-                from groq import Groq
-                client = Groq(api_key=self.llm_client.groq_key)
-                completion = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.1,
-                    response_format={"type": "json_object"},
-                )
-                return completion.choices[0].message.content or ""
-            except Exception:
-                pass
-
         if self.llm_client.has_gemini:
-            try:
-                from google import genai
-                client = genai.Client(api_key=self.llm_client.gemini_key)
-                res = client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=f"{system_prompt}\n\n{prompt}",
-                )
-                return res.text if res else ""
-            except Exception:
-                pass
+            for model_name in ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-flash-latest"]:
+                try:
+                    from google import genai
+                    client = genai.Client(api_key=self.llm_client.gemini_key)
+                    res = client.models.generate_content(
+                        model=model_name,
+                        contents=f"{system_prompt}\n\n{prompt}",
+                    )
+                    if res and res.text:
+                        return res.text
+                except Exception:
+                    pass
+
+        if self.llm_client.has_groq:
+            for model_name in ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "groq/compound-mini"]:
+                try:
+                    from groq import Groq
+                    client = Groq(api_key=self.llm_client.groq_key)
+                    completion = client.chat.completions.create(
+                        model=model_name,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": prompt},
+                        ],
+                        temperature=0.1,
+                        response_format={"type": "json_object"},
+                    )
+                    if completion.choices and completion.choices[0].message.content:
+                        return completion.choices[0].message.content
+                except Exception:
+                    pass
 
         return ""
 
@@ -231,10 +235,17 @@ class AutonomousAgentLoop:
             return {"action": "call_tool", "tool_name": "hybrid_search", "thought": "Executing default hybrid search..."}
         try:
             clean = text.strip()
-            if clean.startswith("```json"):
-                clean = clean[7:]
-            if clean.endswith("```"):
-                clean = clean[:-3]
+            if "```json" in clean:
+                clean = clean.split("```json")[1].split("```")[0]
+            elif "```" in clean:
+                clean = clean.split("```")[1].split("```")[0]
+            
+            # Find outermost JSON object braces
+            first_brace = clean.find("{")
+            last_brace = clean.rfind("}")
+            if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+                clean = clean[first_brace:last_brace+1]
+
             return json.loads(clean.strip())
         except Exception:
             return {"action": "call_tool", "tool_name": "hybrid_search", "thought": text[:200]}
