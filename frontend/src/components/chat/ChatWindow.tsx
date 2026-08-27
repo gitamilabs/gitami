@@ -5,6 +5,7 @@ import { useChatStore } from "../../store/chatStore";
 import { MessageBubble } from "./MessageBubble";
 import { RepoSelector } from "./RepoSelector";
 import { Button } from "../ui/Button";
+import { Badge } from "../ui/Badge";
 import {
   Send,
   Square,
@@ -12,6 +13,11 @@ import {
   Sparkles,
   AlertCircle,
   CornerDownLeft,
+  Bot,
+  Zap,
+  Share2,
+  Database,
+  Terminal,
 } from "lucide-react";
 
 export const ChatWindow: React.FC = () => {
@@ -52,44 +58,121 @@ export const ChatWindow: React.FC = () => {
     }
   };
 
-  const starterPrompts = [
-    "What is the ripple blast radius if I change authentication tokens?",
-    "Show the call hierarchy and dependencies for user service",
-    "How does the dual-KB (Neo4j AST + ChromaDB) architecture work?",
-    "Find all exported functions and classes across the repository",
+  const starterCategories = [
+    {
+      category: "Blast Radius & Ripple Risk",
+      icon: <Zap className="w-3.5 h-3.5 text-rose-400" />,
+      prompts: [
+        "What is the ripple blast radius if I modify session authentication token signing?",
+        "Which downstream files and callers will break if user payload schema changes?",
+      ],
+    },
+    {
+      category: "AST Topology & Call Graphs",
+      icon: <Share2 className="w-3.5 h-3.5 text-indigo-400" />,
+      prompts: [
+        "Show the complete caller hierarchy and dependencies for auth callback service",
+        "Find all exported classes and methods across backend services",
+      ],
+    },
+    {
+      category: "Vector KB & Architecture",
+      icon: <Database className="w-3.5 h-3.5 text-cyan-400" />,
+      prompts: [
+        "How does the dual-KB (Neo4j AST + ChromaDB vector embeddings) architecture work?",
+        "Explain how the FastMCP server tools interface with the ReAct agent loop",
+      ],
+    },
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-5rem)] glass-panel rounded-2xl border border-slate-800 overflow-hidden relative">
+    <div className="flex flex-col h-[calc(100vh-5.5rem)] glass-panel rounded-3xl border border-slate-800/80 overflow-hidden relative shadow-2xl shadow-black/40">
       {/* Header bar */}
-      <div className="p-3.5 border-b border-slate-800/80 bg-slate-950/60 flex flex-wrap items-center justify-between gap-3">
-        <RepoSelector />
+      <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <RepoSelector />
+        </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+            <span>Gemini 2.0 Flash + Groq 70B</span>
+          </div>
+
           <Button
             variant="ghost"
             size="sm"
             onClick={clearMessages}
-            leftIcon={<Trash2 className="w-3.5 h-3.5 text-slate-400" />}
-            className="text-xs text-slate-400 hover:text-rose-400"
+            leftIcon={<Trash2 className="w-3.5 h-3.5 text-slate-500" />}
+            className="text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl"
+            title="Clear Chat History"
           >
-            Clear History
+            Clear
           </Button>
         </div>
       </div>
 
       {/* Message List */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-        {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
-        ))}
+        {messages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center max-w-2xl mx-auto py-10 space-y-6">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 p-[1.5px] shadow-lg shadow-indigo-500/25">
+              <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
+                <Bot className="w-7 h-7 text-indigo-400" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                Ask Sentinel Codebase Agent
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
+                Inspect call graphs, compute transitive blast radius, or search semantic vector passages across your repository.
+              </p>
+            </div>
+
+            {/* Categorized Starter Prompts */}
+            <div className="w-full space-y-3 pt-2 text-left">
+              {starterCategories.map((cat, idx) => (
+                <div key={idx} className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono flex items-center gap-1.5 px-1">
+                    {cat.icon}
+                    <span>{cat.category}</span>
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {cat.prompts.map((prompt, pIdx) => (
+                      <button
+                        key={pIdx}
+                        onClick={() => {
+                          setInput(prompt);
+                          if (textareaRef.current) textareaRef.current.focus();
+                        }}
+                        className="text-left text-xs p-3 rounded-2xl bg-slate-900/80 hover:bg-indigo-950/40 border border-slate-800/90 hover:border-indigo-700/60 text-slate-300 transition-all leading-relaxed truncate group shadow-sm"
+                      >
+                        <span className="group-hover:text-indigo-200 transition-colors">
+                          {prompt}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+            {messages.map((message) => (
+              <MessageBubble key={message.id} message={message} />
+            ))}
+          </>
+        )}
 
         {error && (
-          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-2.5 text-rose-300 text-xs">
+          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3 text-rose-300 text-xs animate-fade-in">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold">AI Service Error:</p>
-              <p>{error}</p>
+              <p className="font-bold">AI Service Error:</p>
+              <p className="font-mono mt-0.5 text-rose-200">{error}</p>
             </div>
           </div>
         )}
@@ -97,33 +180,9 @@ export const ChatWindow: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Starter Prompts */}
-      {messages.length <= 1 && (
-        <div className="px-4 sm:px-6 pb-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-            <Sparkles className="w-3 h-3 text-indigo-400" />
-            <span>Suggested Queries</span>
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {starterPrompts.map((prompt, i) => (
-              <button
-                key={i}
-                onClick={() => {
-                  setInput(prompt);
-                  if (textareaRef.current) textareaRef.current.focus();
-                }}
-                className="text-left text-xs p-2.5 rounded-xl bg-slate-900/80 hover:bg-indigo-950/40 border border-slate-800 hover:border-indigo-800/60 text-slate-300 transition-all truncate"
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Input area */}
-      <div className="p-3 sm:p-4 border-t border-slate-800/80 bg-slate-950/80 backdrop-blur-md">
-        <div className="relative flex items-end gap-2 bg-slate-900 border border-slate-700/80 focus-within:border-indigo-500 rounded-2xl p-2 shadow-inner transition-colors">
+      {/* Input Composer area */}
+      <div className="p-3 sm:p-4 border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-xl">
+        <div className="relative flex items-end gap-2 bg-slate-900/90 border border-slate-700/80 focus-within:border-indigo-500 rounded-2xl p-2 shadow-inner transition-all">
           <textarea
             ref={textareaRef}
             rows={1}
@@ -134,8 +193,8 @@ export const ChatWindow: React.FC = () => {
               e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about functions, call graphs, blast radius, or architecture..."
-            className="flex-1 max-h-36 bg-transparent text-sm text-slate-100 placeholder-slate-400 focus:outline-none resize-none px-2 py-1 leading-relaxed"
+            placeholder="Ask about functions, call hierarchies, blast radius, or architecture..."
+            className="flex-1 max-h-36 bg-transparent text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none resize-none px-2.5 py-1.5 leading-relaxed font-sans"
           />
 
           <div className="flex items-center gap-1.5 shrink-0">
@@ -162,17 +221,18 @@ export const ChatWindow: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 px-1">
+        <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 px-1 font-mono">
           <span className="flex items-center gap-1">
-            <CornerDownLeft className="w-3 h-3 text-slate-400" />
-            <kbd className="font-mono bg-slate-800 px-1 rounded text-[10px]">Enter</kbd> to send,{" "}
-            <kbd className="font-mono bg-slate-800 px-1 rounded text-[10px]">Shift+Enter</kbd> for newline
+            <CornerDownLeft className="w-3 h-3 text-slate-500" />
+            <kbd className="bg-slate-800/80 px-1.5 py-0.5 rounded text-[10px] text-slate-400">Enter</kbd> to send,{" "}
+            <kbd className="bg-slate-800/80 px-1.5 py-0.5 rounded text-[10px] text-slate-400">Shift+Enter</kbd> for newline
           </span>
-          <span className="hidden sm:inline-block font-mono">
-            Powered by FastMCP & Tree-sitter
+          <span className="hidden sm:inline-block">
+            FastMCP • Tree-sitter AST • Neo4j • ChromaDB
           </span>
         </div>
       </div>
     </div>
   );
 };
+

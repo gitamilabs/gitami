@@ -72,7 +72,6 @@ function RepositoriesContent() {
     }
   }, [token, searchParams, fetchConnectedRepos, fetchInstallations, fetchIndexedRepos]);
 
-
   const handleDisconnect = async (repoId: string) => {
     if (token) {
       await disconnectRepo(token, repoId);
@@ -98,11 +97,14 @@ function RepositoriesContent() {
 
       <div className="flex-1 space-y-6 min-w-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel rounded-3xl p-6 border border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel rounded-3xl p-6 sm:p-7 border border-slate-800 shadow-lg shadow-black/20">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Badge variant="primary" size="sm" className="font-mono text-[10px]">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Badge variant="primary" size="sm" className="font-mono text-[10px]" dot>
                 GitHub App Integrations
+              </Badge>
+              <Badge variant="info" size="sm" className="font-mono text-[10px]">
+                {connectedRepos.length} Connected
               </Badge>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
@@ -113,7 +115,7 @@ function RepositoriesContent() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Button
               variant="secondary"
               size="sm"
@@ -121,14 +123,14 @@ function RepositoriesContent() {
               onClick={handleRefresh}
               isLoading={isLoading}
             >
-              Refresh
+              Sync Repos
             </Button>
           </div>
         </div>
 
         {/* Sync notification banner */}
         {syncStatus && (
-          <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center gap-3 text-indigo-200 text-xs font-mono animate-fade-in">
+          <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center gap-3 text-indigo-200 text-xs font-mono animate-fade-in shadow-sm">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{syncStatus}</span>
           </div>
@@ -136,17 +138,19 @@ function RepositoriesContent() {
 
         {/* GitHub Installations Overview */}
         {installations.length > 0 && (
-          <div className="glass-panel rounded-2xl p-4 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2">
-              <Github className="w-4 h-4 text-slate-300" />
-              <span className="text-slate-300 font-medium">
+          <div className="glass-panel rounded-3xl p-4 sm:p-5 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm">
+            <div className="flex items-center gap-2.5">
+              <Github className="w-4 h-4 text-slate-300 shrink-0" />
+              <span className="text-slate-300 font-semibold font-mono text-xs">
                 Active Installations:
               </span>
-              {installations.map((inst) => (
-                <Badge key={inst.id} variant="info" size="sm" className="font-mono">
-                  {inst.accountLogin} ({inst.accountType})
-                </Badge>
-              ))}
+              <div className="flex flex-wrap gap-1.5">
+                {installations.map((inst) => (
+                  <Badge key={inst.id} variant="info" size="sm" className="font-mono">
+                    {inst.accountLogin} ({inst.accountType})
+                  </Badge>
+                ))}
+              </div>
             </div>
             <span className="text-slate-400 font-mono text-[11px]">
               {connectedRepos.length} Repositories Synchronized
@@ -165,16 +169,17 @@ function RepositoriesContent() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search connected repositories..."
+              placeholder="Search connected repositories by name or owner..."
               aria-label="Search connected repositories"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              className="w-full bg-slate-900/90 border border-slate-800 rounded-2xl pl-10 pr-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono shadow-inner"
             />
           </div>
         </div>
 
         {/* Repositories Grid */}
         {isLoading ? (
-          <div className="p-12 text-center glass-card rounded-2xl border border-slate-800 text-xs text-slate-400 font-mono">
+          <div className="p-12 text-center glass-card rounded-3xl border border-slate-800 text-xs text-slate-400 font-mono">
+            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
             Loading repositories from database...
           </div>
         ) : filteredRepos.length > 0 ? (
@@ -196,7 +201,7 @@ function RepositoriesContent() {
             })}
           </div>
         ) : (
-          <div className="p-12 text-center glass-card rounded-2xl border border-slate-800">
+          <div className="p-12 text-center glass-card rounded-3xl border border-slate-800">
             <FolderGit2 className="w-12 h-12 text-slate-600 mx-auto mb-3" />
             <h3 className="text-base font-bold text-slate-200">
               {searchQuery ? "No matching repositories found" : "No Connected Repositories"}
@@ -223,7 +228,6 @@ function RepositoriesContent() {
   );
 }
 
-
 export default function RepositoriesPage() {
   return (
     <ProtectedRoute>
@@ -233,3 +237,4 @@ export default function RepositoriesPage() {
     </ProtectedRoute>
   );
 }
+

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Citation } from "../../lib/types";
-import { FileCode, Database, Share2, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Database, Share2, Copy, Check, ChevronDown, ChevronRight, FileCode } from "lucide-react";
 
 interface CitationCardProps {
   citation: Citation;
@@ -20,13 +20,13 @@ export const CitationCard: React.FC<CitationCardProps> = ({ citation }) => {
   };
 
   return (
-    <div className="rounded-xl border border-slate-800/80 bg-slate-900/70 p-3 hover:border-slate-700 transition-all text-xs">
+    <div className="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-3.5 hover:border-slate-700 transition-all text-xs shadow-sm">
       <div
-        className="flex items-center justify-between cursor-pointer"
+        className="flex items-center justify-between cursor-pointer select-none"
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="w-5 h-5 rounded-md bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 flex items-center justify-center font-mono font-bold text-[10px] shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-5 h-5 rounded-lg bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 flex items-center justify-center font-mono font-bold text-[10px] shrink-0 shadow-sm">
             {citation.id}
           </span>
           <div className="flex items-center gap-1.5 min-w-0">
@@ -35,7 +35,7 @@ export const CitationCard: React.FC<CitationCardProps> = ({ citation }) => {
             ) : (
               <Share2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
             )}
-            <span className="font-mono text-slate-200 font-medium truncate">
+            <span className="font-mono text-slate-200 font-semibold truncate">
               {citation.file_path}
             </span>
           </div>
@@ -43,21 +43,21 @@ export const CitationCard: React.FC<CitationCardProps> = ({ citation }) => {
 
         <div className="flex items-center gap-2 shrink-0">
           {citation.lines && (
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+            <span className="text-[10px] font-mono text-slate-400 bg-slate-800/90 border border-slate-700/60 px-2 py-0.5 rounded-md">
               L{citation.lines}
             </span>
           )}
           {citation.symbol && (
-            <span className="text-[10px] font-mono text-indigo-400 bg-indigo-950/60 border border-indigo-800/40 px-1.5 py-0.5 rounded truncate max-w-[120px]">
+            <span className="text-[10px] font-mono text-indigo-300 bg-indigo-950/60 border border-indigo-800/50 px-2 py-0.5 rounded-md truncate max-w-[140px] font-semibold">
               {citation.symbol}
             </span>
           )}
           <button
             onClick={handleCopy}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             title="Copy snippet"
           >
-            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
           </button>
           {expanded ? (
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -68,8 +68,8 @@ export const CitationCard: React.FC<CitationCardProps> = ({ citation }) => {
       </div>
 
       {citation.snippet && (
-        <div className={`mt-2 ${expanded ? "block" : "line-clamp-2"}`}>
-          <pre className="p-2 rounded-lg bg-slate-950/80 border border-slate-800/80 font-mono text-[11px] text-slate-300 overflow-x-auto whitespace-pre-wrap">
+        <div className={`mt-2.5 ${expanded ? "block animate-fade-in" : "line-clamp-2 opacity-80"}`}>
+          <pre className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 font-mono text-[11px] text-slate-300 overflow-x-auto whitespace-pre-wrap leading-relaxed">
             {citation.snippet}
           </pre>
         </div>
@@ -77,3 +77,4 @@ export const CitationCard: React.FC<CitationCardProps> = ({ citation }) => {
     </div>
   );
 };
+

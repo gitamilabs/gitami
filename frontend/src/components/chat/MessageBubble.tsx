@@ -18,6 +18,7 @@ import {
   Copy,
   Layers,
   BookOpen,
+  Cpu,
 } from "lucide-react";
 
 interface MessageBubbleProps {
@@ -43,34 +44,34 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       } animate-fade-in`}
     >
       {!isUser && (
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 p-0.5 shrink-0 shadow-md shadow-indigo-500/20 mt-1">
-          <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 p-[1.5px] shrink-0 shadow-md shadow-indigo-500/20 mt-1">
+          <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
             <Bot className="w-4 h-4 text-indigo-400" />
           </div>
         </div>
       )}
 
       <div
-        className={`max-w-3xl rounded-2xl p-4.5 ${
+        className={`max-w-3xl rounded-3xl p-5 ${
           isUser
-            ? "bg-indigo-600 text-white rounded-br-sm shadow-md shadow-indigo-600/20"
-            : "glass-card rounded-bl-sm border border-slate-800 text-slate-100"
+            ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-br-md shadow-lg shadow-indigo-600/20 border border-indigo-500/40 shadow-inner-light"
+            : "glass-panel rounded-bl-md border border-slate-800 text-slate-100 shadow-lg shadow-black/20"
         }`}
       >
         {isUser ? (
-          <p className="text-sm font-medium whitespace-pre-wrap leading-relaxed">
+          <p className="text-xs sm:text-sm font-medium whitespace-pre-wrap leading-relaxed">
             {message.content}
           </p>
         ) : (
-          <div className="space-y-3.5">
+          <div className="space-y-4">
             {/* Autonomous ReAct Thoughts (Collapsible) */}
             {message.thoughts && message.thoughts.length > 0 && (
-              <div className="rounded-xl border border-indigo-900/40 bg-indigo-950/20 p-2.5">
+              <div className="rounded-2xl border border-indigo-900/50 bg-indigo-950/30 p-3 shadow-inner">
                 <button
                   onClick={() => setThoughtsOpen(!thoughtsOpen)}
-                  className="w-full flex items-center justify-between text-left text-xs font-semibold text-indigo-300 hover:text-indigo-200"
+                  className="w-full flex items-center justify-between text-left text-xs font-semibold text-indigo-300 hover:text-indigo-200 transition-colors"
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                     <span>
                       Autonomous Reasoning Thoughts ({message.thoughts.length}{" "}
@@ -85,9 +86,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
                 </button>
 
                 {thoughtsOpen && (
-                  <div className="mt-2 space-y-1.5 text-xs text-indigo-200/90 font-mono border-t border-indigo-900/40 pt-2">
+                  <div className="mt-2.5 space-y-2 text-xs text-indigo-200/90 font-mono border-t border-indigo-900/40 pt-2.5">
                     {message.thoughts.map((thought, idx) => (
-                      <div key={idx} className="flex gap-2">
+                      <div key={idx} className="flex gap-2 bg-indigo-950/40 p-2 rounded-xl border border-indigo-900/30">
                         <span className="text-indigo-400 font-bold shrink-0">
                           #{idx + 1}
                         </span>
@@ -101,9 +102,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
             {/* Executed Knowledge Base Tool Steps */}
             {message.toolSteps && message.toolSteps.length > 0 && (
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 px-1">
-                  <Layers className="w-3 h-3 text-cyan-400" />
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 font-mono">
+                  <Layers className="w-3.5 h-3.5 text-cyan-400" />
                   <span>Knowledge Base & Graph Tool Execution</span>
                 </div>
                 {message.toolSteps.map((step) => (
@@ -114,24 +115,24 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
             {/* Synthesized Answer Body */}
             {message.content ? (
-              <div className="prose-custom text-sm leading-relaxed text-slate-200 relative pt-1">
+              <div className="prose-custom text-xs sm:text-sm leading-relaxed text-slate-200 relative pt-1">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {message.content}
                 </ReactMarkdown>
               </div>
             ) : message.isStreaming ? (
-              <div className="flex items-center gap-2 text-xs text-indigo-400 font-mono py-1">
-                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
-                Synthesizing response from Knowledge Base tools...
+              <div className="flex items-center gap-2.5 text-xs text-indigo-400 font-mono py-2">
+                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping shrink-0" />
+                <span>Synthesizing response from Knowledge Base tools...</span>
               </div>
             ) : null}
 
             {/* Cited Sources List */}
             {message.citations && message.citations.length > 0 && (
-              <div className="border-t border-slate-800/80 pt-3 space-y-2">
+              <div className="border-t border-slate-800/80 pt-3.5 space-y-2.5">
                 <button
                   onClick={() => setCitationsOpen(!citationsOpen)}
-                  className="w-full flex items-center justify-between text-left text-xs font-semibold text-slate-300 hover:text-white"
+                  className="w-full flex items-center justify-between text-left text-xs font-semibold text-slate-300 hover:text-white transition-colors"
                 >
                   <div className="flex items-center gap-1.5">
                     <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
@@ -140,9 +141,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
                     </span>
                   </div>
                   {citationsOpen ? (
-                    <ChevronDown className="w-3.5 h-3.5" />
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                   ) : (
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                   )}
                 </button>
 
@@ -158,24 +159,24 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
             {/* Footer Metadata & Copy */}
             {!message.isStreaming && message.content && (
-              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/60 font-mono">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-3 border-t border-slate-800/80 font-mono">
+                <div className="flex items-center gap-3">
                   {message.latencyMs && message.latencyMs > 0 && (
                     <span className="flex items-center gap-1 text-slate-400">
-                      <Clock className="w-3 h-3 text-slate-400" />
+                      <Clock className="w-3 h-3 text-amber-400" />
                       {formatLatency(message.latencyMs)}
                     </span>
                   )}
-                  <span>Dual-LLM (Gemini + Groq)</span>
+                  <span className="text-slate-500 hidden sm:inline-block">Dual-LLM (Gemini + Groq)</span>
                 </div>
                 <button
                   onClick={handleCopyAnswer}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors border border-transparent hover:border-slate-700"
                 >
                   {copied ? (
                     <>
                       <Check className="w-3 h-3 text-emerald-400" />
-                      <span className="text-emerald-400">Copied</span>
+                      <span className="text-emerald-400 font-semibold">Copied</span>
                     </>
                   ) : (
                     <>
@@ -191,10 +192,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       </div>
 
       {isUser && (
-        <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 p-0.5 shrink-0 flex items-center justify-center text-slate-300 mt-1">
+        <div className="w-8 h-8 rounded-2xl bg-slate-800 border border-slate-700 p-0.5 shrink-0 flex items-center justify-center text-slate-300 mt-1 shadow-sm">
           <User className="w-4 h-4" />
         </div>
       )}
     </div>
   );
 };
+

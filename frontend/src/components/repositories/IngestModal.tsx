@@ -138,20 +138,20 @@ export const IngestModal: React.FC<IngestModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl animate-fade-in">
       <div
         className="glass-panel rounded-3xl border border-slate-800 w-full max-w-xl shadow-2xl overflow-hidden relative flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="p-6 border-b border-slate-800/80 flex items-center justify-between">
+        <div className="p-6 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/60">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
+            <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 shadow-inner">
               <Database className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <Badge variant="primary" size="sm" className="font-mono text-[10px]">
+                <Badge variant="primary" size="sm" className="font-mono text-[10px]" dot>
                   Neo4j & ChromaDB
                 </Badge>
                 {repo.isPrivate ? (
@@ -186,13 +186,11 @@ export const IngestModal: React.FC<IngestModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5 text-xs">
-          {/* ========================================================= */}
           {/* PHASE 1: CONFIRMATION VIEW */}
-          {/* ========================================================= */}
           {phase === "confirm" && (
             <div className="space-y-4">
               {/* Repository Summary Card */}
-              <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
+              <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 shadow-inner">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-[11px] font-mono text-slate-400">Target Repository</p>
@@ -213,13 +211,13 @@ export const IngestModal: React.FC<IngestModalProps> = ({
                     value={branch}
                     onChange={(e) => setBranch(e.target.value)}
                     placeholder="main"
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500"
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-100 font-mono focus:outline-none focus:border-indigo-500 shadow-inner"
                   />
                 </div>
               </div>
 
               {/* In-Memory Zero-Disk Feature Badge */}
-              <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-start gap-2.5 text-cyan-200">
+              <div className="p-3.5 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-start gap-2.5 text-cyan-200">
                 <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                 <div className="text-[11px] leading-relaxed">
                   <span className="font-bold text-cyan-300">In-Memory Streaming Ingestion:</span>{" "}
@@ -229,13 +227,13 @@ export const IngestModal: React.FC<IngestModalProps> = ({
 
               {/* Pipeline Breakdown Steps */}
               <div className="space-y-2">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5 font-mono">
                   <Layers className="w-3.5 h-3.5 text-indigo-400" />
                   What will happen during ingestion:
                 </p>
                 <div className="grid grid-cols-1 gap-2 font-mono">
                   <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start gap-2.5">
-                    <span className="w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[10px] shrink-0 mt-0.5">
+                    <span className="w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">
                       1
                     </span>
                     <div>
@@ -245,7 +243,7 @@ export const IngestModal: React.FC<IngestModalProps> = ({
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start gap-2.5">
-                    <span className="w-4 h-4 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-[10px] shrink-0 mt-0.5">
+                    <span className="w-4 h-4 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">
                       2
                     </span>
                     <div>
@@ -255,7 +253,7 @@ export const IngestModal: React.FC<IngestModalProps> = ({
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start gap-2.5">
-                    <span className="w-4 h-4 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-[10px] shrink-0 mt-0.5">
+                    <span className="w-4 h-4 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-[10px] shrink-0 mt-0.5 font-bold">
                       3
                     </span>
                     <div>
@@ -297,9 +295,7 @@ export const IngestModal: React.FC<IngestModalProps> = ({
             </div>
           )}
 
-          {/* ========================================================= */}
           {/* PHASE 2: INGESTING LOADING SCREEN */}
-          {/* ========================================================= */}
           {phase === "ingesting" && (
             <div className="space-y-6 py-4">
               {/* Animated Glowing Radar Pulse */}
@@ -348,10 +344,10 @@ export const IngestModal: React.FC<IngestModalProps> = ({
                           </div>
                         ) : isCurrent ? (
                           <div className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
-                            <RefreshCw className="w-3 h-3 animate-spin" />
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                           </div>
                         ) : (
-                          <div className="w-5 h-5 rounded-full bg-slate-800 text-slate-500 flex items-center justify-center text-[10px] shrink-0">
+                          <div className="w-5 h-5 rounded-full bg-slate-800 text-slate-500 flex items-center justify-center text-[10px] shrink-0 font-bold">
                             {stage.id}
                           </div>
                         )}
@@ -375,9 +371,7 @@ export const IngestModal: React.FC<IngestModalProps> = ({
             </div>
           )}
 
-          {/* ========================================================= */}
           {/* PHASE 3: SUCCESS VIEW */}
-          {/* ========================================================= */}
           {phase === "success" && result && (
             <div className="space-y-5 py-2 animate-fade-in">
               <div className="text-center space-y-1.5">
@@ -394,19 +388,19 @@ export const IngestModal: React.FC<IngestModalProps> = ({
 
               {/* Statistics Summary Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono text-xs">
-                <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center">
+                <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center shadow-inner">
                   <p className="text-[10px] uppercase text-slate-400">Symbols</p>
                   <p className="text-lg font-bold text-indigo-400 mt-0.5">{result.symbols_parsed}</p>
                 </div>
-                <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center">
+                <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center shadow-inner">
                   <p className="text-[10px] uppercase text-slate-400">Files</p>
                   <p className="text-lg font-bold text-cyan-400 mt-0.5">{result.files_parsed}</p>
                 </div>
-                <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center">
+                <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center shadow-inner">
                   <p className="text-[10px] uppercase text-slate-400">Graph Edges</p>
                   <p className="text-lg font-bold text-purple-400 mt-0.5">{result.edges_count}</p>
                 </div>
-                <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center">
+                <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center shadow-inner">
                   <p className="text-[10px] uppercase text-slate-400">Duration</p>
                   <p className="text-lg font-bold text-amber-400 mt-0.5">{result.duration_seconds.toFixed(2)}s</p>
                 </div>
@@ -448,9 +442,7 @@ export const IngestModal: React.FC<IngestModalProps> = ({
             </div>
           )}
 
-          {/* ========================================================= */}
           {/* PHASE 4: ERROR VIEW */}
-          {/* ========================================================= */}
           {phase === "error" && (
             <div className="space-y-4 py-2 animate-fade-in">
               <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-3">
@@ -481,3 +473,4 @@ export const IngestModal: React.FC<IngestModalProps> = ({
     </div>
   );
 };
+

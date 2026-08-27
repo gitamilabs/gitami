@@ -44,15 +44,15 @@ export const RepoCard: React.FC<RepoCardProps> = ({
   };
 
   return (
-    <div className="glass-card glass-card-hover rounded-2xl p-5 border border-slate-800 flex flex-col justify-between relative overflow-hidden group">
+    <div className="glass-card glass-card-hover rounded-3xl p-5 sm:p-6 border border-slate-800 flex flex-col justify-between relative overflow-hidden group shadow-lg shadow-black/20">
       <div>
         <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 shrink-0 shadow-inner">
               <FolderGit2 className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-base font-bold text-slate-100 truncate flex items-center gap-2">
+              <h3 className="text-base font-bold text-white truncate flex items-center gap-2">
                 {repo.name}
                 {repo.isPrivate ? (
                   <Badge variant="warning" size="sm" className="text-[10px]">
@@ -72,7 +72,7 @@ export const RepoCard: React.FC<RepoCardProps> = ({
             href={repo.htmlUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             title="Open on GitHub"
           >
             <ExternalLink className="w-4 h-4" />
@@ -80,30 +80,28 @@ export const RepoCard: React.FC<RepoCardProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 my-4">
-          <span className="flex items-center gap-1 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800 font-mono">
+          <span className="flex items-center gap-1.5 bg-slate-900/90 px-3 py-1 rounded-xl border border-slate-800 font-mono text-[11px] font-semibold text-slate-300">
             <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
             {repo.defaultBranch}
           </span>
 
           {isIngested ? (
-            <span className="flex items-center gap-1 bg-emerald-950/40 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-mono text-[11px]">
-              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+            <Badge variant="success" size="sm" dot className="font-mono text-[11px]">
               Ingested & Ready
-            </span>
+            </Badge>
           ) : (
-            <span className="flex items-center gap-1 bg-amber-950/40 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg font-mono text-[11px]">
-              <Sparkles className="w-3 h-3 text-amber-400" />
+            <Badge variant="warning" size="sm" className="font-mono text-[11px]">
               Not Ingested
-            </span>
+            </Badge>
           )}
 
-          <span className="text-[11px] text-slate-500">
+          <span className="text-[11px] text-slate-500 font-mono">
             Connected {formatTimeAgo(repo.createdAt)}
           </span>
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 pt-4 border-t border-slate-800/80">
+      <div className="flex items-center justify-between gap-2.5 pt-4 border-t border-slate-800/80">
         {isIngested ? (
           <>
             <Link
@@ -160,4 +158,5 @@ export const RepoCard: React.FC<RepoCardProps> = ({
     </div>
   );
 };
+
 
