@@ -10,7 +10,7 @@
 /dataSources.local.xml
 .env
 chroma_db/
-.__pycache__
+__pycache__
 .idea
 .vercel
 .env*
