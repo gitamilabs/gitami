@@ -44,18 +44,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       } animate-fade-in`}
     >
       {!isUser && (
-        <div className="w-8 h-8 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 p-[1.5px] shrink-0 shadow-md shadow-indigo-500/20 mt-1">
-          <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-            <Bot className="w-4 h-4 text-indigo-400" />
-          </div>
+        <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 shrink-0 flex items-center justify-center mt-1">
+          <Bot className="w-4 h-4 text-blue-400" />
         </div>
       )}
 
       <div
-        className={`max-w-3xl rounded-3xl p-5 ${
+        className={`max-w-3xl rounded-2xl p-5 ${
           isUser
-            ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-br-md shadow-lg shadow-indigo-600/20 border border-indigo-500/40 shadow-inner-light"
-            : "glass-panel rounded-bl-md border border-slate-800 text-slate-100 shadow-lg shadow-black/20"
+            ? "bg-blue-600 text-white rounded-br-md border border-blue-500/40"
+            : "glass-panel rounded-bl-md border border-slate-800 text-slate-100"
         }`}
       >
         {isUser ? (
@@ -66,7 +64,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
           <div className="space-y-4">
             {/* Autonomous ReAct Thoughts (Collapsible) */}
             {message.thoughts && message.thoughts.length > 0 && (
-              <div className="rounded-2xl border border-indigo-900/50 bg-indigo-950/30 p-3 shadow-inner">
+              <div className="rounded-xl border border-indigo-900/50 bg-indigo-950/30 p-3 shadow-inner">
                 <button
                   onClick={() => setThoughtsOpen(!thoughtsOpen)}
                   className="w-full flex items-center justify-between text-left text-xs font-semibold text-indigo-300 hover:text-indigo-200 transition-colors"
@@ -192,7 +190,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       </div>
 
       {isUser && (
-        <div className="w-8 h-8 rounded-2xl bg-slate-800 border border-slate-700 p-0.5 shrink-0 flex items-center justify-center text-slate-300 mt-1 shadow-sm">
+        <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 p-0.5 shrink-0 flex items-center justify-center text-slate-300 mt-1 shadow-sm">
           <User className="w-4 h-4" />
         </div>
       )}

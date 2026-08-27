@@ -93,8 +93,8 @@ export default function LandingPage() {
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-4rem)]">
       {/* Hero Section */}
       <section className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-20 text-center relative overflow-hidden">
-        {/* Glow backdrop circles */}
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[380px] bg-gradient-to-r from-indigo-500/15 via-cyan-500/10 to-indigo-500/15 rounded-full blur-[140px] pointer-events-none -z-10" />
+        {/* Subtle backdrop glow */}
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[380px] bg-white/[0.04] rounded-full blur-[140px] pointer-events-none -z-10" />
 
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-8 shadow-sm shadow-indigo-500/10 animate-fade-in">
           <Sparkles className="w-4 h-4 text-indigo-400" />
@@ -103,7 +103,7 @@ export default function LandingPage() {
 
         <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white max-w-5xl mx-auto leading-[1.12]">
           Architectural Code Graph &{" "}
-          <span className="bg-gradient-to-r from-indigo-400 via-cyan-400 to-indigo-300 bg-clip-text text-transparent">
+          <span className="text-zinc-400">
             Agentic RAG
           </span>
         </h1>
@@ -149,7 +149,7 @@ export default function LandingPage() {
           {stats.map((stat, i) => (
             <div
               key={i}
-              className="glass-card rounded-2xl p-4 border border-slate-800/80 shadow-sm"
+              className="glass-card rounded-xl p-4 border border-slate-800/80 shadow-sm"
             >
               <p className="text-xl sm:text-2xl font-extrabold text-white font-mono">{stat.value}</p>
               <p className="text-xs font-bold text-slate-200 mt-0.5">{stat.label}</p>
@@ -159,7 +159,7 @@ export default function LandingPage() {
         </div>
 
         {/* Live Architecture Flow Preview Card with Interactive Tabs */}
-        <div className="mt-12 max-w-5xl mx-auto glass-panel-elevated rounded-3xl p-6 sm:p-8 border border-slate-800 shadow-2xl relative text-left">
+        <div className="mt-12 max-w-5xl mx-auto glass-panel-elevated rounded-2xl p-6 sm:p-8 border border-slate-800 shadow-2xl relative text-left">
           {/* Header Bar */}
           <div className="flex flex-wrap items-center justify-between border-b border-slate-800/80 pb-4 mb-6 gap-3">
             <div className="flex items-center gap-2">
@@ -229,7 +229,7 @@ export default function LandingPage() {
               <p className="text-slate-300 text-xs font-sans leading-relaxed">
                 Tree-sitter extracts Symbol nodes (functions, classes, methods) with start/end lines and constructs directional CALLS and IMPORTS edges for exact transitive graph queries.
               </p>
-              <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 text-indigo-300 space-y-1.5">
+              <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 text-indigo-300 space-y-1.5">
                 <p className="text-slate-500 text-[11px] font-mono">// Cypher Transitive Blast Radius Query</p>
                 <p className="text-slate-200">
                   MATCH (root:Symbol &#123; name: $symbol_name &#125;)
@@ -256,7 +256,7 @@ export default function LandingPage() {
               <p className="text-slate-300 text-xs font-sans leading-relaxed">
                 High-density code chunking with AST context: function signatures, docstrings, and bodies are embedded with Gemini embedding models and filtered by repository tenant space.
               </p>
-              <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 text-cyan-300 space-y-1.5">
+              <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 text-cyan-300 space-y-1.5">
                 <p className="text-slate-500 text-[11px] font-mono">// Hybrid Vector Query with Metadata Filter</p>
                 <p className="text-slate-200">
                   collection = chroma_client.get_collection(&quot;repo_knowledge_base&quot;)
@@ -283,7 +283,7 @@ export default function LandingPage() {
               <p className="text-slate-300 text-xs font-sans leading-relaxed">
                 Google Gemini 2.0 Flash acts as the autonomous planning brain executing tool steps, while Groq Llama-3.3-70B verifies AST hunks at ultra-low latency with Server-Sent Events (SSE).
               </p>
-              <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 text-purple-300 space-y-1.5">
+              <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 text-purple-300 space-y-1.5">
                 <p className="text-slate-500 text-[11px] font-mono">// Autonomous ReAct Trace Stream</p>
                 <p className="text-slate-200">event: thought &#8594; &quot;Step 1: Inspect call hierarchy for handleCallback&quot;</p>
                 <p className="text-purple-300">event: tool_call &#8594; get_blast_radius(symbol=&quot;handleCallback&quot;)</p>
@@ -304,7 +304,7 @@ export default function LandingPage() {
               <p className="text-slate-300 text-xs font-sans leading-relaxed">
                 Exposes standardized tool interfaces to IDE AI assistants (Claude, Cursor, Copilot) via FastMCP server endpoints for blast radius, symbol inspection, and vector lookups.
               </p>
-              <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 text-amber-300 space-y-1.5">
+              <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 text-amber-300 space-y-1.5">
                 <p className="text-slate-500 text-[11px] font-mono">// MCP Tool Registration</p>
                 <p className="text-slate-200">@mcp.tool()</p>
                 <p className="text-amber-300">def calculate_blast_radius(symbol: str, depth: int = 3) -&gt; BlastRadiusResult:</p>
@@ -333,11 +333,11 @@ export default function LandingPage() {
           {features.map((feature, i) => (
             <div
               key={i}
-              className="glass-card glass-card-hover rounded-3xl p-6 border border-slate-800 flex flex-col justify-between"
+              className="glass-card glass-card-hover rounded-2xl p-6 border border-slate-800 flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <div className="p-3 rounded-2xl bg-slate-900 border border-slate-800 shadow-inner">
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 shadow-inner">
                     {feature.icon}
                   </div>
                   <Badge variant="primary" size="sm" className="font-mono text-[10px]">
@@ -358,7 +358,7 @@ export default function LandingPage() {
 
       {/* Comparison Section: Traditional Linter vs Sentinel */}
       <section className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-slate-800">
+        <div className="glass-panel rounded-2xl p-6 sm:p-8 border border-slate-800">
           <div className="text-center mb-8">
             <h3 className="text-2xl font-bold text-white tracking-tight">
               Why Sentinel AST Graph Beats Naive LLM Reviewers
@@ -369,7 +369,7 @@ export default function LandingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-            <div className="p-5 rounded-2xl bg-rose-500/5 border border-rose-500/20 space-y-3">
+            <div className="p-5 rounded-xl bg-rose-500/5 border border-rose-500/20 space-y-3">
               <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
                 <CloseIcon className="w-4 h-4" />
                 <span>Naive LLM Diff Reviewers</span>
@@ -390,7 +390,7 @@ export default function LandingPage() {
               </ul>
             </div>
 
-            <div className="p-5 rounded-2xl bg-emerald-500/5 border border-emerald-500/30 space-y-3">
+            <div className="p-5 rounded-xl bg-emerald-500/5 border border-emerald-500/30 space-y-3">
               <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
                 <Check className="w-4 h-4" />
                 <span>Sentinel AI Platform</span>

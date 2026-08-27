@@ -9,6 +9,7 @@ import {
   getInstallationAccessToken,
   syncInstallationRepositories,
   syncUserInstallations,
+  getOrCreateLocalInstallation,
 } from "./github-app.service";
 import { verifySignature, handleEvent } from "./webhook.service";
 import { db } from "../../db";
@@ -197,8 +198,12 @@ githubRouter.post("/repositories/:id/ingest", authMiddleware, async (c) => {
   const branch = targetBranch || repo.defaultBranch || "main";
   let aiServiceUrl = process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://localhost:8000";
 
+  // Use the fully-qualified "owner/repo" as the KB tenant key — the AI
+  // service's multi-tenant isolation is keyed purely on this string, so a
+  // bare repo name would let two different users' same-named repos collide
+  // into the same knowledge base.
   const payload = {
-    repo_id: repo.name,
+    repo_id: repo.fullName,
     full_name: repo.fullName,
     access_token: token,
     branch,
@@ -306,6 +311,124 @@ githubRouter.delete("/repositories/:id", authMiddleware, async (c) => {
   });
 });
 
+
+/**
+ * POST /ingest-local
+ * Protected. Ingests a local filesystem directory into the Knowledge Base.
+ * Unlike GitHub-connected repos, a locally-ingested repo has no natural
+ * owner — so this records one explicitly as a `connectedRepositories` row
+ * (via a per-user pseudo installation) before forwarding to the AI service,
+ * ensuring it only ever shows up for the user who ingested it.
+ */
+githubRouter.post("/ingest-local", authMiddleware, async (c) => {
+  const user = c.get("user");
+  const body = (await c.req.json().catch(() => ({}))) as {
+    repo_id?: string;
+    repo_dir?: string;
+    branch?: string;
+  };
+  const repoId = (body.repo_id || "").trim();
+  const repoDir = (body.repo_dir || "").trim();
+  const branch = (body.branch || "main").trim();
+
+  if (!repoId || !repoDir) {
+    return c.json({ error: "Missing repo_id or repo_dir" }, 400);
+  }
+
+  const pseudoInst = await getOrCreateLocalInstallation(user.id, user.username);
+  const githubRepoId = `local:${user.id}:${repoId}`;
+
+  const [repo] = await db
+    .insert(connectedRepositories)
+    .values({
+      installationId: pseudoInst.id,
+      userId: user.id,
+      githubRepoId,
+      name: repoId,
+      fullName: repoId,
+      isPrivate: false,
+      htmlUrl: "",
+      defaultBranch: branch,
+      isActive: true,
+    })
+    .onConflictDoUpdate({
+      target: connectedRepositories.githubRepoId,
+      set: { defaultBranch: branch, isActive: true },
+    })
+    .returning();
+
+  const aiServiceUrl = process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://localhost:8000";
+
+  try {
+    const res = await fetch(`${aiServiceUrl}/api/ingest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo_id: repoId, repo_dir: repoDir, branch }),
+    });
+
+    if (!res.ok) {
+      const errData = (await res.json().catch(() => ({}))) as any;
+      throw new Error(errData.detail || errData.error || `AI Service returned status ${res.status}`);
+    }
+
+    const data = await res.json();
+    return c.json({ success: true, repository: repo, ingestResult: data });
+  } catch (err: any) {
+    console.error("Local repository ingestion error:", err);
+    return c.json({ error: err.message || "Failed to ingest local repository" }, 500);
+  }
+});
+
+/**
+ * GET /indexed-repos
+ * Protected. Lists Knowledge Base repo names scoped to repositories this
+ * user actually owns in `connectedRepositories` — cross-referenced against
+ * the AI service's raw (otherwise global, unauthenticated) index. This is
+ * the only safe way to surface "indexed" status without leaking every
+ * other user's ingested repos into this user's view.
+ */
+githubRouter.get("/indexed-repos", authMiddleware, async (c) => {
+  const user = c.get("user");
+
+  const repos = await db
+    .select()
+    .from(connectedRepositories)
+    .where(
+      and(
+        eq(connectedRepositories.userId, user.id),
+        eq(connectedRepositories.isActive, true),
+      ),
+    );
+
+  const owned = new Set<string>();
+  for (const r of repos) {
+    owned.add(r.name);
+    owned.add(r.fullName);
+  }
+
+  const aiServiceUrl = process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://localhost:8000";
+  let globalRepos: string[] = [];
+  let vectorCount = 0;
+
+  try {
+    const res = await fetch(`${aiServiceUrl}/api/repos`);
+    if (res.ok) {
+      const data = (await res.json()) as any;
+      globalRepos = Array.isArray(data.repos) ? data.repos : [];
+      vectorCount = data.vector_count || 0;
+    }
+  } catch (err) {
+    console.warn("Could not reach AI service for indexed repos:", err);
+  }
+
+  const scoped = globalRepos.filter((name) => {
+    if (owned.has(name)) return true;
+    const shortName = name.includes("/") ? name.split("/")[1] ?? name : name;
+    return owned.has(shortName);
+  });
+
+  return c.json({ repos: scoped, vector_count: vectorCount });
+});
 
 /**
  * Webhook route aliases

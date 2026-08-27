@@ -32,11 +32,44 @@ from pathlib import Path
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# Shared, long-lived clients for read-mostly endpoints (currently just
+# /api/repos). Opening a fresh Neo4j driver and reloading the Chroma
+# collection on every single request added several seconds of pure
+# connection overhead per call, and under concurrent load (multiple pages
+# fetching at once) those requests queued up and got progressively slower —
+# reusing one connection across requests removes that overhead entirely.
+_shared_graph_client: Optional[Neo4jClient] = None
+_shared_vector_client: Optional[VectorKBClient] = None
+
+
+async def get_shared_graph_client() -> Neo4jClient:
+    global _shared_graph_client
+    if _shared_graph_client is None:
+        _shared_graph_client = Neo4jClient()
+        await _shared_graph_client.connect()
+    return _shared_graph_client
+
+
+def get_shared_vector_client() -> VectorKBClient:
+    global _shared_vector_client
+    if _shared_vector_client is None:
+        _shared_vector_client = VectorKBClient()
+    return _shared_vector_client
+
+
 app = FastAPI(
     title="AI Service Knowledge Base & Agent API",
     description="API for Codebase RAG Chat, Graph & Vector Search, Agent Tool Visualization, and Ingestion.",
     version="1.0.0",
 )
+
+
+@app.on_event("shutdown")
+async def _close_shared_clients():
+    global _shared_graph_client
+    if _shared_graph_client is not None:
+        await _shared_graph_client.close()
+        _shared_graph_client = None
 
 # Enable CORS for local Next.js frontend
 app.add_middleware(
@@ -108,7 +141,7 @@ async def health_check():
 async def list_repositories():
     """List indexed repositories from Vector KB and Graph DB."""
     try:
-        vector_client = VectorKBClient()
+        vector_client = get_shared_vector_client()
         data = vector_client.collection.get(include=["metadatas"])
         vector_repos = set()
         if data and data.get("metadatas"):
@@ -117,21 +150,16 @@ async def list_repositories():
                     vector_repos.add(meta["repo"])
 
         graph_repos = set()
-        graph_client = Neo4jClient()
         try:
-            await graph_client.connect()
+            graph_client = await get_shared_graph_client()
             records = await graph_client.execute_query("MATCH (f:File) RETURN DISTINCT f.repo_id AS repo")
             for r in records:
                 if r.get("repo"):
                     graph_repos.add(r["repo"])
         except Exception:
             pass
-        finally:
-            await graph_client.close()
 
         all_repos = sorted(list(vector_repos.union(graph_repos)))
-        if not all_repos:
-            all_repos = ["final-year-project", "demo-mern", "integration-test-mern"]
 
         return {
             "repos": all_repos,
@@ -139,7 +167,7 @@ async def list_repositories():
             "graph_repos": list(graph_repos),
         }
     except Exception as e:
-        return {"repos": ["final-year-project", "demo-mern"], "error": str(e)}
+        return {"repos": [], "error": str(e)}
 
 
 @app.post("/api/ingest")

@@ -1,11 +1,10 @@
-import { eq, desc, inArray, or, ilike } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import {
   pullRequests,
   prReviews,
   prIssues,
   connectedRepositories,
-  githubInstallations,
   type PullRequest,
   type PRReview,
   type PRIssue,
@@ -20,23 +19,29 @@ import {
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://127.0.0.1:8000";
 
 export async function listPullRequests(repoFullName?: string, userId?: string) {
+  // Only ever list PRs for repositories the requesting user actually owns —
+  // an unauthenticated caller, or a repoFullName they don't own, gets nothing
+  // rather than a global dump of every user's pull requests.
+  if (!userId) return [];
+
+  const ownedRepos = await db
+    .select()
+    .from(connectedRepositories)
+    .where(eq(connectedRepositories.userId, userId));
+  const ownedFullNames = new Set(ownedRepos.map((r) => r.fullName));
+  const ownedShortNames = new Map(ownedRepos.map((r) => [r.name, r.fullName]));
+
   let targetFullName = repoFullName?.trim();
 
-  if (targetFullName && !targetFullName.includes("/")) {
-    const [found] = await db
-      .select()
-      .from(connectedRepositories)
-      .where(eq(connectedRepositories.name, targetFullName))
-      .limit(1);
+  if (targetFullName && !ownedFullNames.has(targetFullName)) {
+    // Allow callers to pass a bare repo name instead of "owner/repo".
+    const resolved = ownedShortNames.get(targetFullName);
+    targetFullName = resolved;
+  }
 
-    if (found) {
-      targetFullName = found.fullName;
-    } else {
-      const [inst] = await db.select().from(githubInstallations).limit(1);
-      if (inst && inst.accountLogin) {
-        targetFullName = `${inst.accountLogin}/${targetFullName}`;
-      }
-    }
+  if (repoFullName && !targetFullName) {
+    // Caller asked for a specific repo they don't own — deny, don't leak.
+    return [];
   }
 
   // Sync latest PRs from GitHub in real-time
@@ -50,26 +55,21 @@ export async function listPullRequests(repoFullName?: string, userId?: string) {
     console.warn("Notice: background PR sync from GitHub encountered an issue:", err);
   }
 
-  if (targetFullName || repoFullName) {
-    const rawName = (repoFullName || targetFullName)!.trim();
+  if (targetFullName) {
     const prs = await db
       .select()
       .from(pullRequests)
-      .where(
-        or(
-          eq(pullRequests.repoFullName, targetFullName || rawName),
-          eq(pullRequests.repoFullName, rawName),
-          ilike(pullRequests.repoFullName, `%/${rawName}`),
-          ilike(pullRequests.repoFullName, `%${rawName}%`),
-        ),
-      )
+      .where(eq(pullRequests.repoFullName, targetFullName))
       .orderBy(desc(pullRequests.createdAt));
     return enrichPRsWithReviewData(prs);
   }
 
+  if (ownedFullNames.size === 0) return [];
+
   const prs = await db
     .select()
     .from(pullRequests)
+    .where(inArray(pullRequests.repoFullName, Array.from(ownedFullNames)))
     .orderBy(desc(pullRequests.createdAt));
   return enrichPRsWithReviewData(prs);
 }
@@ -107,6 +107,20 @@ async function enrichPRsWithReviewData(prs: PullRequest[]) {
     });
   }
   return result;
+}
+
+/**
+ * Verifies the given user actually owns (has connected) the repository a
+ * PR belongs to — used to gate read/review/fix access to a specific PR so
+ * a guessed or leaked PR id can't be used to read or act on someone else's
+ * pull request.
+ */
+export async function userOwnsRepo(userId: string, repoFullName: string): Promise<boolean> {
+  const rows = await db
+    .select()
+    .from(connectedRepositories)
+    .where(eq(connectedRepositories.userId, userId));
+  return rows.some((r) => r.fullName.toLowerCase() === repoFullName.toLowerCase());
 }
 
 export async function getPullRequestDetails(prId: string) {

@@ -20,7 +20,7 @@ export const CitationCard: React.FC<CitationCardProps> = ({ citation }) => {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800/80 bg-slate-900/70 p-3.5 hover:border-slate-700 transition-all text-xs shadow-sm">
+    <div className="rounded-xl border border-slate-800/80 bg-slate-900/70 p-3.5 hover:border-slate-700 transition-all text-xs shadow-sm">
       <div
         className="flex items-center justify-between cursor-pointer select-none"
         onClick={() => setExpanded(!expanded)}

@@ -29,7 +29,7 @@ export const PRReviewCard: React.FC<PRReviewCardProps> = ({
 }) => {
   if (!review) {
     return (
-      <div className="glass-panel border border-slate-800/80 rounded-2xl p-6 mb-6 shadow-xl relative overflow-hidden">
+      <div className="glass-panel border border-slate-800/80 rounded-xl p-6 mb-6 shadow-xl relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
             <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
@@ -54,7 +54,7 @@ export const PRReviewCard: React.FC<PRReviewCardProps> = ({
             <button
               onClick={onEvaluateNow}
               disabled={isEvaluating}
-              className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white rounded-xl font-semibold text-xs flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition-all cursor-pointer shrink-0"
+              className="px-4 py-2.5 bg-white hover:bg-zinc-200 disabled:opacity-50 text-black rounded-lg font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0"
             >
               {isEvaluating ? (
                 <>
@@ -84,18 +84,7 @@ export const PRReviewCard: React.FC<PRReviewCardProps> = ({
   };
 
   return (
-    <div className="glass-panel border border-slate-800/80 rounded-2xl p-6 mb-6 shadow-xl relative overflow-hidden">
-      {/* Background ambient glow */}
-      <div
-        className={`absolute -top-24 -right-24 w-64 h-64 rounded-full blur-3xl opacity-20 pointer-events-none ${
-          isSkipped
-            ? "bg-purple-500"
-            : isAccept
-            ? "bg-emerald-500"
-            : "bg-amber-500"
-        }`}
-      />
-
+    <div className="glass-panel border border-slate-800/80 rounded-xl p-6 mb-6 shadow-xl relative overflow-hidden">
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5">
         <div className="flex items-start gap-3.5">

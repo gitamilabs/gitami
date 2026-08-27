@@ -46,7 +46,7 @@ function AuthCallbackContent() {
 
   return (
     <div className="min-h-[75vh] flex items-center justify-center p-4">
-      <div className="glass-panel rounded-3xl p-8 max-w-md w-full text-center border border-slate-800 shadow-2xl">
+      <div className="glass-panel rounded-2xl p-8 max-w-md w-full text-center border border-slate-800 shadow-2xl">
         {status === "loading" && (
           <div className="space-y-4">
             <Loader2 className="w-12 h-12 text-indigo-500 animate-spin mx-auto" />

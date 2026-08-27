@@ -151,6 +151,47 @@ export async function getInstallationTokenForRepo(
 
 
 /**
+ * Gets or creates a per-user pseudo GitHub App installation used to record
+ * ownership of repositories ingested from a local filesystem directory
+ * (i.e. not connected via the real GitHub App). This lets local ingestions
+ * participate in the same `connectedRepositories` ownership model — and
+ * therefore the same per-user scoping — as real GitHub-connected repos,
+ * without any schema changes (installationId/githubRepoId stay unique via
+ * deterministic "local:" prefixed values).
+ */
+export async function getOrCreateLocalInstallation(
+  userId: string,
+  username: string,
+): Promise<{ id: string }> {
+  const pseudoInstallationId = `local:${userId}`;
+
+  const [existing] = await db
+    .select()
+    .from(githubInstallations)
+    .where(eq(githubInstallations.installationId, pseudoInstallationId))
+    .limit(1);
+
+  if (existing) return existing;
+
+  const [created] = await db
+    .insert(githubInstallations)
+    .values({
+      userId,
+      installationId: pseudoInstallationId,
+      accountLogin: username,
+      accountId: "local",
+      targetType: "Local",
+    })
+    .onConflictDoUpdate({
+      target: githubInstallations.installationId,
+      set: { accountLogin: username },
+    })
+    .returning();
+
+  return created!;
+}
+
+/**
  * Generates the URL for a user to install the Platform GitHub App.
  */
 export function getAppInstallationUrl(state?: string): string {

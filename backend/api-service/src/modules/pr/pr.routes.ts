@@ -5,10 +5,15 @@ import {
   getPullRequestDetails,
   evaluatePRWithAIService,
   fixSelectedPRIssues,
+  userOwnsRepo,
 } from "./pr.service";
 import { verifySessionToken } from "../auth/auth.service";
+import {
+  authMiddleware,
+  type AuthContextVariables,
+} from "../../middlewares/auth.middleware";
 
-const prRouter = new Hono();
+const prRouter = new Hono<{ Variables: AuthContextVariables }>();
 
 async function getOptionalUser(c: any): Promise<string | null> {
   const authHeader = c.req.header("authorization") || c.req.header("Authorization");
@@ -29,7 +34,8 @@ async function getOptionalUser(c: any): Promise<string | null> {
 
 /**
  * GET /api/prs
- * Public/Protected. Lists PRs in the system, automatically synchronizing with GitHub App.
+ * Lists PRs for repositories the authenticated caller owns (empty list if
+ * unauthenticated or no repoFullName match), synchronizing with GitHub App.
  */
 const getPrListHandler = async (c: any) => {
   const repoFullName = c.req.query("repoFullName");
@@ -57,25 +63,38 @@ prRouter.get("/sync", syncPrHandler);
 
 /**
  * GET /api/prs/:id
- * Fetch details of a single PR with review and checklist.
+ * Protected. Fetch details of a single PR with review and checklist —
+ * only if the requesting user owns the repository it belongs to.
  */
-prRouter.get("/:id", async (c) => {
+prRouter.get("/:id", authMiddleware, async (c) => {
   const prId = c.req.param("id");
+  if (!prId) return c.json({ error: "Missing PR id" }, 400);
   if (prId === "sync") {
     return syncPrHandler(c);
   }
+  const user = c.get("user");
   const pr = await getPullRequestDetails(prId);
   if (!pr) return c.json({ error: "PR not found" }, 404);
+  if (!(await userOwnsRepo(user.id, pr.repoFullName))) {
+    return c.json({ error: "PR not found" }, 404);
+  }
   return c.json({ pullRequest: pr });
 });
 
 /**
  * POST /api/prs/:id/review
- * Manually trigger/re-run AI PR evaluation.
+ * Protected. Manually trigger/re-run AI PR evaluation — owner only.
  */
-prRouter.post("/:id/review", async (c) => {
+prRouter.post("/:id/review", authMiddleware, async (c) => {
   const prId = c.req.param("id");
+  if (!prId) return c.json({ error: "Missing PR id" }, 400);
+  const user = c.get("user");
   try {
+    const pr = await getPullRequestDetails(prId);
+    if (!pr) return c.json({ error: "PR not found" }, 404);
+    if (!(await userOwnsRepo(user.id, pr.repoFullName))) {
+      return c.json({ error: "PR not found" }, 404);
+    }
     const result = await evaluatePRWithAIService(prId);
     return c.json({ success: true, pullRequest: result });
   } catch (err: any) {
@@ -85,11 +104,20 @@ prRouter.post("/:id/review", async (c) => {
 
 /**
  * POST /api/prs/:id/fix
- * Trigger AI Agent to generate fix patch & raise PR on GitHub for selected issues.
+ * Protected. Trigger AI Agent to generate a fix patch & raise a PR on
+ * GitHub for selected issues — owner only, since this pushes a real commit.
  */
-prRouter.post("/:id/fix", async (c) => {
+prRouter.post("/:id/fix", authMiddleware, async (c) => {
   const prId = c.req.param("id");
+  if (!prId) return c.json({ error: "Missing PR id" }, 400);
+  const user = c.get("user");
   try {
+    const pr = await getPullRequestDetails(prId);
+    if (!pr) return c.json({ error: "PR not found" }, 404);
+    if (!(await userOwnsRepo(user.id, pr.repoFullName))) {
+      return c.json({ error: "PR not found" }, 404);
+    }
+
     const body = await c.req.json();
     const issueIds: string[] = body.issueIds || [];
     if (!issueIds || issueIds.length === 0) {

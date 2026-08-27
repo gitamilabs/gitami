@@ -67,7 +67,7 @@ export const ToolStepAccordion: React.FC<ToolStepAccordionProps> = ({ step }) =>
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800/80 bg-slate-900/70 overflow-hidden transition-all my-1.5 shadow-sm">
+    <div className="rounded-xl border border-slate-800/80 bg-slate-900/70 overflow-hidden transition-all my-1.5 shadow-sm">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between p-3 text-left hover:bg-slate-800/50 transition-colors"

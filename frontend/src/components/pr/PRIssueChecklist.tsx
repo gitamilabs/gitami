@@ -111,7 +111,7 @@ export const PRIssueChecklist: React.FC<PRIssueChecklistProps> = ({
 
   if (issues.length === 0) {
     return (
-      <div className="glass-panel border border-slate-800/80 rounded-2xl p-8 text-center my-6">
+      <div className="glass-panel border border-slate-800/80 rounded-xl p-8 text-center my-6">
         <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
         <h4 className="text-lg font-bold text-white">No Issues Detected</h4>
         <p className="text-xs text-slate-400 mt-1">
@@ -122,7 +122,7 @@ export const PRIssueChecklist: React.FC<PRIssueChecklistProps> = ({
   }
 
   return (
-    <div className="glass-panel border border-slate-800/80 rounded-2xl p-6 my-6 shadow-xl">
+    <div className="glass-panel border border-slate-800/80 rounded-xl p-6 my-6 shadow-xl">
       {/* Action Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5 mb-5">
         <div>
@@ -153,7 +153,7 @@ export const PRIssueChecklist: React.FC<PRIssueChecklistProps> = ({
           <button
             onClick={handleFixSubmit}
             disabled={selectedIds.length === 0 || isFixing}
-            className="px-5 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:via-indigo-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-bold text-xs flex items-center gap-2.5 shadow-xl shadow-indigo-500/25 transition-all cursor-pointer"
+            className="px-5 py-2.5 bg-white hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed text-black rounded-lg font-semibold text-xs flex items-center gap-2.5 transition-all cursor-pointer"
           >
             {isFixing ? (
               <>
@@ -162,7 +162,7 @@ export const PRIssueChecklist: React.FC<PRIssueChecklistProps> = ({
               </>
             ) : (
               <>
-                <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+                <Sparkles className="w-4 h-4 text-black" />
                 <span>
                   Fix {selectedIds.length > 0 ? `(${selectedIds.length})` : ""} Selected Issues using AI
                 </span>

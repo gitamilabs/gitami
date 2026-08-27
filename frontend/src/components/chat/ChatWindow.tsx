@@ -86,7 +86,7 @@ export const ChatWindow: React.FC = () => {
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-5.5rem)] glass-panel rounded-3xl border border-slate-800/80 overflow-hidden relative shadow-2xl shadow-black/40">
+    <div className="flex flex-col h-[calc(100vh-2rem)] sm:h-[calc(100vh-3rem)] glass-panel rounded-xl border border-slate-800/80 overflow-hidden relative">
       {/* Header bar */}
       <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -116,10 +116,8 @@ export const ChatWindow: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center max-w-2xl mx-auto py-10 space-y-6">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 p-[1.5px] shadow-lg shadow-indigo-500/25">
-              <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-                <Bot className="w-7 h-7 text-indigo-400" />
-              </div>
+            <div className="w-14 h-14 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+              <Bot className="w-7 h-7 text-blue-400" />
             </div>
 
             <div className="space-y-2">
@@ -147,7 +145,7 @@ export const ChatWindow: React.FC = () => {
                           setInput(prompt);
                           if (textareaRef.current) textareaRef.current.focus();
                         }}
-                        className="text-left text-xs p-3 rounded-2xl bg-slate-900/80 hover:bg-indigo-950/40 border border-slate-800/90 hover:border-indigo-700/60 text-slate-300 transition-all leading-relaxed truncate group shadow-sm"
+                        className="text-left text-xs p-3 rounded-xl bg-slate-900/80 hover:bg-indigo-950/40 border border-slate-800/90 hover:border-indigo-700/60 text-slate-300 transition-all leading-relaxed truncate group shadow-sm"
                       >
                         <span className="group-hover:text-indigo-200 transition-colors">
                           {prompt}
@@ -168,7 +166,7 @@ export const ChatWindow: React.FC = () => {
         )}
 
         {error && (
-          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3 text-rose-300 text-xs animate-fade-in">
+          <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3 text-rose-300 text-xs animate-fade-in">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <div>
               <p className="font-bold">AI Service Error:</p>
@@ -182,7 +180,7 @@ export const ChatWindow: React.FC = () => {
 
       {/* Input Composer area */}
       <div className="p-3 sm:p-4 border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-xl">
-        <div className="relative flex items-end gap-2 bg-slate-900/90 border border-slate-700/80 focus-within:border-indigo-500 rounded-2xl p-2 shadow-inner transition-all">
+        <div className="relative flex items-end gap-2 bg-slate-900/90 border border-slate-700/80 focus-within:border-indigo-500 rounded-xl p-2 shadow-inner transition-all">
           <textarea
             ref={textareaRef}
             rows={1}

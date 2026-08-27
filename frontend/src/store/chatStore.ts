@@ -34,8 +34,9 @@ interface ChatState {
   stopStreaming: () => void;
 }
 
+//hardcoded repo selection and such # needs to be fixed
 export const useChatStore = create<ChatState>((set, get) => ({
-  selectedRepo: "final-year-project",
+  selectedRepo: "",
   selectedBranch: "main",
   messages: [
     {
@@ -79,6 +80,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendMessage: async (text: string) => {
     const { selectedRepo, selectedBranch, messages, isStreaming } = get();
     if (!text.trim() || isStreaming) return;
+    if (!selectedRepo) {
+      set({ error: "Select an indexed repository before starting a chat." });
+      return;
+    }
 
     const userMessage: DisplayMessage = {
       id: `user-${Date.now()}`,

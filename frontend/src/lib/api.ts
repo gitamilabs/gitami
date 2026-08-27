@@ -13,6 +13,7 @@ import {
   PRData,
   PRReviewData,
   PRIssueItem,
+  ConnectedRepository,
 } from "./types";
 
 const API_BASE_URL =
@@ -156,6 +157,71 @@ export const githubApi = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Failed to ingest repository (${res.status})`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Ingests a local filesystem directory, authenticated so the resulting
+   * knowledge-base entry is recorded as owned by the current user.
+   */
+  ingestLocal: async (
+    token: string,
+    payload: { repo_id: string; repo_dir: string; branch?: string }
+  ): Promise<{ success: boolean; repository: any; ingestResult: IngestResponse }> => {
+    const res = await fetch(`${API_BASE_URL}/github/ingest-local`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to ingest repository (${res.status})`);
+    }
+    return res.json();
+  },
+
+  /**
+   * Lists Knowledge Base repo names scoped to the current user's own
+   * connected/ingested repositories only (never other users' data).
+   */
+  listIndexedRepos: async (
+    token: string
+  ): Promise<{ repos: string[]; vector_count?: number }> => {
+    const res = await fetch(`${API_BASE_URL}/github/indexed-repos`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch indexed repositories");
+    }
+    return res.json();
+  },
+
+  /**
+   * Forces a live re-sync of GitHub App installations & repositories
+   * (as opposed to just re-reading the cached DB rows).
+   */
+  syncInstallations: async (
+    token: string
+  ): Promise<{ success: boolean; repositories: ConnectedRepository[] }> => {
+    const res = await fetch(`${API_BASE_URL}/github/sync`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to sync GitHub installations");
     }
     return res.json();
   },

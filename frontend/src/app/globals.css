@@ -4,10 +4,10 @@
 
 @layer base {
   :root {
-    --background: #080c14;
-    --foreground: #f8fafc;
-    --font-inter: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --background: #000000;
+    --foreground: #ededed;
+    --font-inter: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
   body {
@@ -15,10 +15,14 @@
     background: var(--background);
     font-family: var(--font-inter);
     overflow-x: hidden;
-    selection-background-color: #6366f1;
-    selection-color: #ffffff;
+    letter-spacing: -0.011em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: #27272a;
+    color: #ffffff;
   }
 }
 
@@ -33,88 +37,155 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: #27272a;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.5);
+  background: #3f3f46;
 }
 
-/* Glassmorphism & Tonal Surfaces */
+/* Flat panel surfaces (Vercel-style) — kept under the original class names so
+   every existing component that references .glass-panel / .glass-card keeps
+   working, just rendered as flat near-black surfaces instead of blurred glass. */
 .glass-panel {
-  background: rgba(11, 17, 32, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: none;
 }
 
 .glass-panel-elevated {
-  background: rgba(15, 23, 42, 0.88);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: #0f0f0f;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 28px -12px rgba(0, 0, 0, 0.65);
 }
 
 .glass-card {
-  background: rgba(18, 27, 46, 0.65);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .glass-card-hover {
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.15s ease;
 }
 
 .glass-card-hover:hover {
-  background: rgba(22, 33, 56, 0.88);
-  border-color: rgba(99, 102, 241, 0.4);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px -8px rgba(99, 102, 241, 0.2), inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+  background: #0f0f0f;
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .glass-card-active {
-  background: rgba(30, 41, 75, 0.7);
-  border-color: rgba(99, 102, 241, 0.6);
-  box-shadow: 0 0 20px -3px rgba(99, 102, 241, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  background: #0f0f0f;
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
-/* Glow Utilities */
-.glow-subtle {
-  box-shadow: 0 0 30px -5px rgba(99, 102, 241, 0.25);
-}
-
-.glow-cyan {
-  box-shadow: 0 0 30px -5px rgba(6, 182, 212, 0.25);
-}
-
-.glow-emerald {
-  box-shadow: 0 0 30px -5px rgba(16, 185, 129, 0.25);
-}
-
+/* Glow utilities kept as no-ops / very subtle so components that still
+   reference them stay flat rather than reintroducing colored bloom. */
+.glow-subtle,
+.glow-cyan,
+.glow-emerald,
 .glow-amber {
-  box-shadow: 0 0 30px -5px rgba(245, 158, 11, 0.25);
+  box-shadow: none;
 }
 
-/* Background Gradients */
+/* Vercel-style surfaces */
+.vercel-card {
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vercel-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.vercel-input {
+  background: #0a0a0a;
+  border: 1px solid #27272a;
+  color: #fafafa;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.vercel-input:focus {
+  outline: none;
+  border-color: #71717a;
+  box-shadow: 0 0 0 1px #71717a;
+}
+
+.vercel-button-primary {
+  background: #ffffff;
+  color: #000000;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.vercel-button-primary:hover {
+  background: #d4d4d8;
+}
+
+.vercel-button-secondary {
+  background: #18181b;
+  border: 1px solid #27272a;
+  color: #fafafa;
+  transition: all 0.15s ease;
+}
+
+.vercel-button-secondary:hover {
+  background: #27272a;
+  border-color: #3f3f46;
+}
+
+/* Background Grids (subtle, monochrome — no colored radial glow) */
 .bg-radial-gradient {
-  background: radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.14) 0%, rgba(6, 182, 212, 0.05) 35%, rgba(8, 12, 20, 0) 75%);
+  background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.05) 0%, rgba(0, 0, 0, 0) 60%);
 }
 
 .bg-grid-pattern {
   background-size: 36px 36px;
-  background-image: 
+  background-image:
     linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
 }
 
+.bg-dot-grid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.06) 50%, rgba(255, 255, 255, 0) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s infinite;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 /* Markdown typography styling inside chat */
 .prose-custom pre {
-  background: #060911 !important;
+  background: #0a0a0a !important;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0.75rem;
   padding: 1rem;
@@ -122,48 +193,56 @@
   margin: 0.75rem 0;
   font-family: var(--font-mono);
   font-size: 0.8125rem;
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
 }
 
 .prose-custom code {
-  background: rgba(99, 102, 241, 0.12);
-  color: #c7d2fe;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e4e4e7;
   padding: 0.15rem 0.4rem;
   border-radius: 0.375rem;
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   font-size: 0.84em;
   font-family: var(--font-mono);
 }
 
 .prose-custom pre code {
   background: transparent !important;
-  color: #e2e8f0;
+  color: #e4e4e7;
   padding: 0;
   border: none;
 }
 
-.prose-custom h1, .prose-custom h2, .prose-custom h3 {
-  color: #f8fafc;
+.prose-custom h1,
+.prose-custom h2,
+.prose-custom h3 {
+  color: #fafafa;
   font-weight: 700;
   margin-top: 1.15rem;
   margin-bottom: 0.5rem;
   letter-spacing: -0.02em;
 }
 
-.prose-custom h1 { font-size: 1.25rem; }
-.prose-custom h2 { font-size: 1.1rem; }
-.prose-custom h3 { font-size: 0.975rem; }
+.prose-custom h1 {
+  font-size: 1.25rem;
+}
+.prose-custom h2 {
+  font-size: 1.1rem;
+}
+.prose-custom h3 {
+  font-size: 0.975rem;
+}
 
 .prose-custom p {
   margin-bottom: 0.75rem;
   line-height: 1.68;
-  color: #cbd5e1;
+  color: #d4d4d8;
 }
 
-.prose-custom ul, .prose-custom ol {
+.prose-custom ul,
+.prose-custom ol {
   padding-left: 1.25rem;
   margin-bottom: 0.75rem;
-  color: #cbd5e1;
+  color: #d4d4d8;
 }
 
 .prose-custom li {
@@ -177,7 +256,7 @@
 }
 
 .prose-custom a {
-  color: #818cf8;
+  color: #60a5fa;
   text-decoration: underline;
   text-underline-offset: 3px;
   font-weight: 500;
@@ -185,16 +264,16 @@
 }
 
 .prose-custom a:hover {
-  color: #a5b4fc;
+  color: #93c5fd;
 }
 
 .prose-custom blockquote {
-  border-left: 3px solid #6366f1;
+  border-left: 3px solid #3f3f46;
   padding-left: 1rem;
-  color: #94a3b8;
+  color: #a1a1aa;
   margin: 0.75rem 0;
   font-style: italic;
-  background: rgba(99, 102, 241, 0.05);
+  background: rgba(255, 255, 255, 0.03);
   border-radius: 0 0.5rem 0.5rem 0;
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
@@ -208,8 +287,8 @@
 }
 
 .prose-custom th {
-  background: rgba(15, 23, 42, 0.9);
-  color: #e2e8f0;
+  background: #0f0f0f;
+  color: #e4e4e7;
   font-weight: 600;
   text-align: left;
   padding: 0.5rem 0.75rem;
@@ -219,9 +298,9 @@
 .prose-custom td {
   padding: 0.5rem 0.75rem;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #cbd5e1;
+  color: #d4d4d8;
 }
 
 .prose-custom tr:nth-child(even) td {
-  background: rgba(15, 23, 42, 0.4);
+  background: rgba(255, 255, 255, 0.02);
 }

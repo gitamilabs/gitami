@@ -140,8 +140,7 @@ function GraphContent() {
 
       <div className="flex-1 space-y-6 min-w-0">
         {/* Header */}
-        <div className="glass-panel rounded-3xl p-6 border border-slate-800 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="glass-panel rounded-2xl p-6 border border-slate-800 relative overflow-hidden">
 
           <div className="relative z-10">
             <div className="flex items-center gap-2 mb-1.5">
@@ -162,7 +161,7 @@ function GraphContent() {
         </div>
 
         {/* Visual Graph Topology Flow Banner */}
-        <div className="glass-panel rounded-3xl p-6 border border-slate-800 space-y-4">
+        <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono flex items-center gap-2">
               <Share2 className="w-4 h-4 text-indigo-400" />
@@ -175,7 +174,7 @@ function GraphContent() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs items-center">
             {/* Left: Incoming Callers */}
-            <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2">
+            <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-indigo-400 font-bold text-xs">
                 <span>Incoming Callers</span>
                 <Badge variant="primary" size="sm">{activeNode.callers.length}</Badge>
@@ -193,7 +192,7 @@ function GraphContent() {
             </div>
 
             {/* Center: Active Symbol Node */}
-            <div className="p-5 rounded-2xl bg-indigo-950/40 border-2 border-indigo-500/80 text-center space-y-2 shadow-lg shadow-indigo-500/10 relative">
+            <div className="p-5 rounded-xl bg-indigo-950/40 border-2 border-indigo-500/80 text-center space-y-2 shadow-lg shadow-indigo-500/10 relative">
               <Badge variant={getKindBadgeVariant(activeNode.kind)} size="sm" className="font-mono text-[10px]">
                 {activeNode.kind.toUpperCase()}
               </Badge>
@@ -205,7 +204,7 @@ function GraphContent() {
             </div>
 
             {/* Right: Outgoing Callees */}
-            <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2">
+            <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-cyan-400 font-bold text-xs">
                 <span>Outgoing Callees</span>
                 <Badge variant="info" size="sm">{activeNode.callees.length}</Badge>
@@ -245,7 +244,7 @@ function GraphContent() {
         {/* Main Grid: Left Node List + Right Detailed Inspector */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Node List */}
-          <div className="lg:col-span-5 glass-panel rounded-3xl p-4 border border-slate-800 space-y-3">
+          <div className="lg:col-span-5 glass-panel rounded-2xl p-4 border border-slate-800 space-y-3">
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
@@ -264,7 +263,7 @@ function GraphContent() {
                   <div
                     key={node.id}
                     onClick={() => setActiveNode(node)}
-                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                    className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
                       isSelected
                         ? "bg-indigo-950/50 border-indigo-500 shadow-md shadow-indigo-600/15"
                         : "glass-card border-slate-800/80 hover:border-slate-700"
@@ -292,7 +291,7 @@ function GraphContent() {
           </div>
 
           {/* Right Node Inspector */}
-          <div className="lg:col-span-7 glass-panel rounded-3xl p-6 border border-slate-800 space-y-5">
+          <div className="lg:col-span-7 glass-panel rounded-2xl p-6 border border-slate-800 space-y-5">
             <div className="flex items-start justify-between border-b border-slate-800/80 pb-5 gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-1.5">
@@ -313,7 +312,7 @@ function GraphContent() {
 
               {activeNode.blastRisk && (
                 <div
-                  className={`text-right p-3 rounded-2xl border ${getRiskColor(
+                  className={`text-right p-3 rounded-xl border ${getRiskColor(
                     activeNode.blastRisk
                   )} shrink-0 shadow-sm`}
                 >
@@ -333,7 +332,7 @@ function GraphContent() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono mb-1.5">
                   Docstring / Functional Purpose
                 </p>
-                <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-xs text-slate-200 leading-relaxed font-sans shadow-inner">
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-200 leading-relaxed font-sans shadow-inner">
                   {activeNode.docstring}
                 </div>
               </div>
@@ -345,7 +344,7 @@ function GraphContent() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono mb-1.5">
                   AST Symbol Source Hunk
                 </p>
-                <pre className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 text-xs text-indigo-300 font-mono overflow-x-auto leading-relaxed shadow-inner">
+                <pre className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 text-xs text-indigo-300 font-mono overflow-x-auto leading-relaxed shadow-inner">
                   {activeNode.sampleCode}
                 </pre>
               </div>
@@ -353,7 +352,7 @@ function GraphContent() {
 
             {/* Callers vs Callees Breakdown */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2.5">
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
                 <div className="flex items-center justify-between text-indigo-300 font-bold font-mono text-xs">
                   <span className="flex items-center gap-1.5">
                     <Share2 className="w-3.5 h-3.5 text-indigo-400" />
@@ -373,7 +372,7 @@ function GraphContent() {
                 </ul>
               </div>
 
-              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2.5">
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
                 <div className="flex items-center justify-between text-cyan-300 font-bold font-mono text-xs">
                   <span className="flex items-center gap-1.5">
                     <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
