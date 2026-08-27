@@ -27,6 +27,8 @@ import {
   Cpu,
   CheckCircle2,
   ExternalLink,
+  GitPullRequest,
+  Wrench,
 } from "lucide-react";
 
 function DashboardContent() {
@@ -207,6 +209,38 @@ function DashboardContent() {
               fetchIndexedRepos();
             }}
           />
+        </div>
+
+        {/* PR Review & Auto-Fix Studio Spotlight Card */}
+        <div className="glass-panel rounded-3xl p-6 border border-slate-800 relative overflow-hidden shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="p-3 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">
+              <GitPullRequest className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                  PR Review & Auto-Fix Studio
+                </h3>
+                <Badge variant="primary" size="sm" className="font-mono text-[9px]">
+                  ReAct Fixer
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-400 max-w-xl leading-relaxed">
+                Scan pull requests for security vulnerabilities, AST blast radius risks, and deploy autonomous agents to generate GitHub fix PRs.
+              </p>
+            </div>
+          </div>
+
+          <Link href="/prs" className="shrink-0">
+            <Button
+              variant="secondary"
+              size="sm"
+              rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
+            >
+              Open PR Studio
+            </Button>
+          </Link>
         </div>
 
         {/* Knowledge Base Fast Query Shortcuts */}

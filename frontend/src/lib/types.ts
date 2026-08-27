@@ -213,3 +213,51 @@ export type SSEEvent =
   | SSECitationsEvent
   | SSEDoneEvent
   | SSEErrorEvent;
+
+// ==========================================
+// Pull Request Review & Auto-Fixer Types
+// ==========================================
+
+export interface PRIssueItem {
+  id: string;
+  prId?: string;
+  title: string;
+  description: string;
+  category: "bug" | "security" | "logical_error" | "convention" | "blast_radius" | string;
+  severity: "error" | "warning" | "info" | string;
+  filePath: string;
+  line: number;
+  suggestedFix?: string;
+  isFixed?: boolean;
+  fixPrUrl?: string;
+}
+
+export interface PRReviewData {
+  id?: string;
+  prId?: string;
+  verdict: "ACCEPT" | "SUGGEST" | "REJECT" | string;
+  riskScore: number;
+  summary: string;
+  agentRationale?: string;
+  status?: string;
+  createdAt?: string;
+}
+
+export interface PRData {
+  id: string;
+  repoFullName: string;
+  prNumber: number;
+  title: string;
+  body?: string;
+  state: "open" | "closed" | "merged" | string;
+  status: "pending" | "reviewed" | "skipped_ai_fix" | string;
+  baseBranch: string;
+  headBranch: string;
+  authorLogin?: string;
+  htmlUrl?: string;
+  review?: PRReviewData | null;
+  issues?: PRIssueItem[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+

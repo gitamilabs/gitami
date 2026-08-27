@@ -1,4 +1,4 @@
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, inArray, or, ilike } from "drizzle-orm";
 import { db } from "../../db";
 import {
   pullRequests,
@@ -11,16 +11,58 @@ import {
   type PRIssue,
 } from "../../db/schema";
 import { env } from "../../configs/env";
-import { getInstallationOctokitForRepo } from "../github/github-app.service";
+import {
+  getInstallationTokenForRepo,
+  syncPullRequestsForRepo,
+  syncAllConnectedPullRequests,
+} from "../github/github-app.service";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://127.0.0.1:8000";
 
-export async function listPullRequests(repoFullName?: string) {
-  if (repoFullName) {
+export async function listPullRequests(repoFullName?: string, userId?: string) {
+  let targetFullName = repoFullName?.trim();
+
+  if (targetFullName && !targetFullName.includes("/")) {
+    const [found] = await db
+      .select()
+      .from(connectedRepositories)
+      .where(eq(connectedRepositories.name, targetFullName))
+      .limit(1);
+
+    if (found) {
+      targetFullName = found.fullName;
+    } else {
+      const [inst] = await db.select().from(githubInstallations).limit(1);
+      if (inst && inst.accountLogin) {
+        targetFullName = `${inst.accountLogin}/${targetFullName}`;
+      }
+    }
+  }
+
+  // Sync latest PRs from GitHub in real-time
+  try {
+    if (targetFullName) {
+      await syncPullRequestsForRepo(targetFullName);
+    } else {
+      await syncAllConnectedPullRequests(userId);
+    }
+  } catch (err) {
+    console.warn("Notice: background PR sync from GitHub encountered an issue:", err);
+  }
+
+  if (targetFullName || repoFullName) {
+    const rawName = (repoFullName || targetFullName)!.trim();
     const prs = await db
       .select()
       .from(pullRequests)
-      .where(eq(pullRequests.repoFullName, repoFullName))
+      .where(
+        or(
+          eq(pullRequests.repoFullName, targetFullName || rawName),
+          eq(pullRequests.repoFullName, rawName),
+          ilike(pullRequests.repoFullName, `%/${rawName}`),
+          ilike(pullRequests.repoFullName, `%${rawName}%`),
+        ),
+      )
       .orderBy(desc(pullRequests.createdAt));
     return enrichPRsWithReviewData(prs);
   }
@@ -30,6 +72,15 @@ export async function listPullRequests(repoFullName?: string) {
     .from(pullRequests)
     .orderBy(desc(pullRequests.createdAt));
   return enrichPRsWithReviewData(prs);
+}
+
+export async function syncPullRequests(repoFullName?: string, userId?: string) {
+  if (repoFullName) {
+    await syncPullRequestsForRepo(repoFullName);
+  } else {
+    await syncAllConnectedPullRequests(userId);
+  }
+  return listPullRequests(repoFullName, userId);
 }
 
 async function enrichPRsWithReviewData(prs: PullRequest[]) {
@@ -138,7 +189,7 @@ export async function evaluatePRWithAIService(prId: string) {
     throw new Error(`AI Service review failed: ${errText}`);
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as any;
 
   // Save/update review
   const existingReview = pr.review;
@@ -280,76 +331,103 @@ export async function fixSelectedPRIssues(prId: string, issueIds: string[]) {
     throw new Error(`AI Service fix patch generation failed: ${errText}`);
   }
 
-  const fixResult = await aiResponse.json();
+  const fixResult = (await aiResponse.json()) as any;
   const fileFixes: Array<{ file_path: string; content: string }> = fixResult.file_fixes || [];
 
   if (fileFixes.length === 0) {
     throw new Error("AI Agent did not return any modified file contents");
   }
 
-  const [owner, repoName] = pr.repoFullName.split("/");
+  const [owner, repoName] = (pr.repoFullName || "").split("/");
+  if (!owner || !repoName) {
+    throw new Error(`Invalid repository name: ${pr.repoFullName}`);
+  }
   const newBranchName = `ai-fix/pr-${pr.prNumber}-${Date.now()}`;
   let fixPrUrl = "";
 
-  if (githubToken) {
-    // -----------------------------------------------------------------------
-    // Standard GitHub REST API execution via fetch (Deployment Friendly)
-    // -----------------------------------------------------------------------
-    const headers = {
-      Authorization: `Bearer ${githubToken}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "Sentinel-AI-Fix-Agent",
-      "Content-Type": "application/json",
-    };
+  // 1. Resolve token: User PAT / OAuth token -> Fallback: GitHub App Installation Token
+  let token = (process.env.GITHUB_TOKEN || process.env.GITHUB_PAT || env.GITHUB_TOKEN || "").trim();
 
-    try {
-      // 1. Get base branch SHA
-      const refRes = await fetch(`https://api.github.com/repos/${pr.repoFullName}/git/ref/heads/${pr.headBranch}`, { headers });
-      if (!refRes.ok) {
-        const refErr = await refRes.text();
-        if (refRes.status === 403 || refRes.status === 404) {
-          throw new Error(
-            `GitHub Permission Denied: GITHUB_TOKEN lacks read/write permissions for '${pr.repoFullName}'.`
-          );
-        }
-        throw new Error(`Failed to fetch ref for branch '${pr.headBranch}': ${refErr}`);
+  if (!token) {
+    const appToken = await getInstallationTokenForRepo(owner, repoName);
+    if (appToken) {
+      token = appToken;
+    }
+  }
+
+  if (!token) {
+    throw new Error(
+      `GitHub Authentication Error: No GITHUB_TOKEN or GitHub App installation found for '${pr.repoFullName}'. Please configure your GitHub OAuth token or install the GitHub App.`,
+    );
+  }
+
+  // 2. Standard GitHub REST API execution via fetch
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "User-Agent": "Sentinel-AI-Fix-Agent",
+    "Content-Type": "application/json",
+  };
+
+  try {
+    // 1. Get base branch SHA
+    const refRes = await fetch(
+      `https://api.github.com/repos/${pr.repoFullName}/git/ref/heads/${pr.headBranch}`,
+      { headers },
+    );
+    if (!refRes.ok) {
+      const refErr = await refRes.text();
+      if (refRes.status === 403 || refRes.status === 404) {
+        throw new Error(
+          `GitHub Permission Denied: Token lacks read/write permissions for '${pr.repoFullName}'.`,
+        );
       }
-      const refData = await refRes.json();
-      const baseSha = refData.object.sha;
+      throw new Error(`Failed to fetch ref for branch '${pr.headBranch}': ${refErr}`);
+    }
+    const refData = (await refRes.json()) as any;
+    const baseSha = refData.object.sha;
 
-      // 2. Create new branch
-      const createBranchRes = await fetch(`https://api.github.com/repos/${pr.repoFullName}/git/refs`, {
+    // 2. Create new branch
+    const createBranchRes = await fetch(
+      `https://api.github.com/repos/${pr.repoFullName}/git/refs`,
+      {
         method: "POST",
         headers,
         body: JSON.stringify({
           ref: `refs/heads/${newBranchName}`,
           sha: baseSha,
         }),
-      });
-      if (!createBranchRes.ok) {
-        const branchErr = await createBranchRes.text();
-        if (createBranchRes.status === 403 || createBranchRes.status === 404) {
-          throw new Error(
-            `GitHub Write Permission Denied: Your GITHUB_TOKEN does not have permission to push branches to '${pr.repoFullName}'. You can only push AI fix branches to repositories you own or have write access to.`
-          );
+      },
+    );
+    if (!createBranchRes.ok) {
+      const branchErr = await createBranchRes.text();
+      if (createBranchRes.status === 403 || createBranchRes.status === 404) {
+        throw new Error(
+          `GitHub Write Permission Denied: Token does not have permission to push branches to '${pr.repoFullName}'.`,
+        );
+      }
+      throw new Error(`Failed to create branch '${newBranchName}': ${branchErr}`);
+    }
+
+    // 3. Commit modified files to new branch
+    for (const fileFix of fileFixes) {
+      let currentSha: string | undefined = undefined;
+      try {
+        const fileRes = await fetch(
+          `https://api.github.com/repos/${pr.repoFullName}/contents/${fileFix.file_path}?ref=${newBranchName}`,
+          { headers },
+        );
+        if (fileRes.ok) {
+          const fileData = (await fileRes.json()) as any;
+          currentSha = fileData.sha;
         }
-        throw new Error(`Failed to create branch '${newBranchName}': ${branchErr}`);
+      } catch {
+        // File might be new
       }
 
-      // 3. Commit modified files to new branch
-      for (const fileFix of fileFixes) {
-        let currentSha: string | undefined = undefined;
-        try {
-          const fileRes = await fetch(`https://api.github.com/repos/${pr.repoFullName}/contents/${fileFix.file_path}?ref=${newBranchName}`, { headers });
-          if (fileRes.ok) {
-            const fileData = await fileRes.json();
-            currentSha = fileData.sha;
-          }
-        } catch {
-          // File might be new
-        }
-
-        const putRes = await fetch(`https://api.github.com/repos/${pr.repoFullName}/contents/${fileFix.file_path}`, {
+      const putRes = await fetch(
+        `https://api.github.com/repos/${pr.repoFullName}/contents/${fileFix.file_path}`,
+        {
           method: "PUT",
           headers,
           body: JSON.stringify({
@@ -358,15 +436,20 @@ export async function fixSelectedPRIssues(prId: string, issueIds: string[]) {
             branch: newBranchName,
             sha: currentSha,
           }),
-        });
+        },
+      );
 
-        if (!putRes.ok) {
-          throw new Error(`Failed to commit file '${fileFix.file_path}': ${await putRes.text()}`);
-        }
+      if (!putRes.ok) {
+        throw new Error(
+          `Failed to commit file '${fileFix.file_path}': ${await putRes.text()}`,
+        );
       }
+    }
 
-      // 4. Create Pull Request
-      const prRes = await fetch(`https://api.github.com/repos/${pr.repoFullName}/pulls`, {
+    // 4. Create Pull Request
+    const prRes = await fetch(
+      `https://api.github.com/repos/${pr.repoFullName}/pulls`,
+      {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -375,93 +458,22 @@ export async function fixSelectedPRIssues(prId: string, issueIds: string[]) {
           base: pr.headBranch,
           body:
             `🤖 **AI Automated PR Fix**\n\nThis PR was automatically raised by the Sentinel AI Agent to resolve the following selected issues from PR #${pr.prNumber}:\n\n` +
-            selectedIssues.map((i) => `- **${i.title}** (\`${i.filePath}:${i.line}\`)`).join("\n"),
+            selectedIssues
+              .map((i) => `- **${i.title}** (\`${i.filePath}:${i.line}\`)`)
+              .join("\n"),
         }),
-      });
+      },
+    );
 
-      if (!prRes.ok) {
-        throw new Error(`Failed to create GitHub Pull Request: ${await prRes.text()}`);
-      }
-
-      const prData = await prRes.json();
-      fixPrUrl = prData.html_url;
-    } catch (err: any) {
-      console.error("❌ GitHub Token REST API Error:", err);
-      throw new Error(`GitHub PR Creation failed: ${err.message || err}`);
-    }
-  } else {
-    // Fallback: GitHub App Octokit
-    let octokit;
-    try {
-      octokit = await getInstallationOctokitForRepo(owner, repoName);
-    } catch (e: any) {
-      throw new Error(`GitHub Authentication Notice: Please set GITHUB_TOKEN=ghp_... in backend/api-service/.env to enable automated PR creation.`);
+    if (!prRes.ok) {
+      throw new Error(`Failed to create GitHub Pull Request: ${await prRes.text()}`);
     }
 
-    if (!octokit) {
-      throw new Error(
-        `GitHub Authentication Notice: Please set GITHUB_TOKEN=ghp_... in backend/api-service/.env to enable automated PR creation.`
-      );
-    }
-
-    try {
-      const { data: refData } = await octokit.request("GET /repos/{owner}/{repo}/git/ref/{ref}", {
-        owner,
-        repo: repoName,
-        ref: `heads/${pr.headBranch}`,
-      });
-      const baseSha = refData.object.sha;
-
-      await octokit.request("POST /repos/{owner}/{repo}/git/refs", {
-        owner,
-        repo: repoName,
-        ref: `refs/heads/${newBranchName}`,
-        sha: baseSha,
-      });
-
-      for (const fileFix of fileFixes) {
-        let currentSha: string | undefined = undefined;
-        try {
-          const { data: fileData } = await octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
-            owner,
-            repo: repoName,
-            path: fileFix.file_path,
-            ref: newBranchName,
-          });
-          if (!Array.isArray(fileData)) {
-            currentSha = fileData.sha;
-          }
-        } catch {
-          // File might be new
-        }
-
-        await octokit.request("PUT /repos/{owner}/{repo}/contents/{path}", {
-          owner,
-          repo: repoName,
-          path: fileFix.file_path,
-          message: `fix(ai): resolve automated PR issue in ${fileFix.file_path}`,
-          content: Buffer.from(fileFix.content).toString("base64"),
-          branch: newBranchName,
-          sha: currentSha,
-        });
-      }
-
-      const { data: newPrData } = await octokit.request("POST /repos/{owner}/{repo}/pulls", {
-        owner,
-        repo: repoName,
-        title: `[AI Fix] Resolve ${selectedIssues.length} issue(s) for PR #${pr.prNumber}`,
-        head: newBranchName,
-        base: pr.headBranch,
-        body:
-          `🤖 **AI Automated PR Fix**\n\nThis PR was automatically raised by the Sentinel AI Agent to resolve the following selected issues from PR #${pr.prNumber}:\n\n` +
-          selectedIssues.map((i) => `- **${i.title}** (\`${i.filePath}:${i.line}\`)`).join("\n"),
-      });
-
-      fixPrUrl = newPrData.html_url;
-    } catch (err: any) {
-      console.error("❌ GitHub Octokit error while pushing fix branch:", err);
-      throw new Error(`GitHub PR Creation failed: ${err.message || err}`);
-    }
+    const prData = (await prRes.json()) as any;
+    fixPrUrl = prData.html_url;
+  } catch (err: any) {
+    console.error("❌ GitHub Token REST API Error:", err);
+    throw new Error(`GitHub PR Creation failed: ${err.message || err}`);
   }
 
   // Mark selected issues as fixed

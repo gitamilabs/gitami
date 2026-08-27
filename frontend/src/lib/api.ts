@@ -10,6 +10,9 @@ import {
   ChatRequest,
   ChatResponse,
   SSEEvent,
+  PRData,
+  PRReviewData,
+  PRIssueItem,
 } from "./types";
 
 const API_BASE_URL =
@@ -279,3 +282,101 @@ export const aiApi = {
     }
   },
 };
+
+// ==========================================
+// PR Review & Fixer API (api-service)
+// ==========================================
+
+export const prApi = {
+  listPullRequests: async (
+    repoFullName?: string,
+    token?: string
+  ): Promise<{ pullRequests: PRData[] }> => {
+    const url = repoFullName
+      ? `${API_BASE_URL}/prs?repoFullName=${encodeURIComponent(repoFullName)}`
+      : `${API_BASE_URL}/prs`;
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch pull requests");
+    }
+    return res.json();
+  },
+
+  syncPullRequests: async (
+    token?: string,
+    repoFullName?: string
+  ): Promise<{ success: boolean; pullRequests: PRData[] }> => {
+    const url = repoFullName
+      ? `${API_BASE_URL}/prs?repoFullName=${encodeURIComponent(repoFullName)}`
+      : `${API_BASE_URL}/prs`;
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to sync pull requests from GitHub");
+    }
+    return res.json();
+  },
+
+  getPullRequest: async (id: string, token?: string): Promise<{ pullRequest: PRData }> => {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const res = await fetch(`${API_BASE_URL}/prs/${id}`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch PR details");
+    }
+    return res.json();
+  },
+
+  reviewPullRequest: async (id: string, token?: string): Promise<{ success: boolean; pullRequest: PRData }> => {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const res = await fetch(`${API_BASE_URL}/prs/${id}/review`, {
+      method: "POST",
+      headers,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to evaluate PR");
+    }
+    return res.json();
+  },
+
+  fixSelectedIssues: async (
+    id: string,
+    issueIds: string[],
+    token?: string
+  ): Promise<{ success: boolean; fixPrUrl?: string; message?: string }> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    const res = await fetch(`${API_BASE_URL}/prs/${id}/fix`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ issueIds }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to execute AI fix");
+    }
+    return res.json();
+  },
+};
+

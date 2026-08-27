@@ -15,6 +15,7 @@ import {
   Sparkles,
   Plus,
   ArrowUpRight,
+  GitPullRequest,
 } from "lucide-react";
 import { useRepoStore } from "../../store/repoStore";
 import { Badge } from "../ui/Badge";
@@ -26,6 +27,12 @@ export const Sidebar: React.FC = () => {
 
   const coreNav = [
     { href: "/dashboard", label: "Overview", icon: <Layers className="w-4 h-4" /> },
+    {
+      href: "/prs",
+      label: "PR Reviews & Fixer",
+      icon: <GitPullRequest className="w-4 h-4" />,
+      badge: "Auto-Fix",
+    },
     {
       href: "/chat",
       label: "Agentic RAG Chat",

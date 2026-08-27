@@ -1,9 +1,10 @@
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { env } from "../../configs/env";
 import { db } from "../../db";
 import {
   githubInstallations,
   connectedRepositories,
+  pullRequests,
   type ConnectedRepository,
 } from "../../db/schema";
 import { SignJWT, importPKCS8 } from "jose";
@@ -86,13 +87,13 @@ export async function getInstallationAccessToken(
 }
 
 /**
- * Dynamically resolves an Octokit client for a given owner/repo.
+ * Dynamically resolves a GitHub App Installation Access Token for a given owner/repo.
  * First checks DB records, then falls back to GitHub App API lookup.
  */
-export async function getInstallationOctokitForRepo(owner: string, repo: string) {
-  const app = getOctokitApp();
-  if (!app) return null;
-
+export async function getInstallationTokenForRepo(
+  owner: string,
+  repo: string,
+): Promise<string | null> {
   const fullName = `${owner}/${repo}`;
 
   // 1. Try DB lookup
@@ -111,24 +112,38 @@ export async function getInstallationOctokitForRepo(owner: string, repo: string)
         .limit(1);
 
       if (instRecord && instRecord.installationId) {
-        return await app.getInstallationOctokit(Number(instRecord.installationId));
+        return await getInstallationAccessToken(instRecord.installationId);
       }
     }
   } catch (e) {
-    console.warn("DB lookup notice in getInstallationOctokitForRepo:", e);
+    console.warn("DB lookup notice in getInstallationTokenForRepo:", e);
   }
 
-  // 2. Query GitHub App API directly
+  // 2. Query GitHub App API directly using App JWT
   try {
-    const { data: instData } = await app.octokit.request("GET /repos/{owner}/{repo}/installation", {
-      owner,
-      repo,
-    });
-    if (instData && instData.id) {
-      return await app.getInstallationOctokit(instData.id);
+    const appJwt = await getAppJwt();
+    const instRes = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/installation`,
+      {
+        headers: {
+          Authorization: `Bearer ${appJwt}`,
+          Accept: "application/vnd.github+json",
+          "User-Agent": "Sentinel-API",
+        },
+      },
+    );
+
+    if (instRes.ok) {
+      const instData = (await instRes.json()) as any;
+      if (instData && instData.id) {
+        return await getInstallationAccessToken(String(instData.id));
+      }
     }
   } catch (err: any) {
-    console.warn(`Could not resolve Octokit installation for ${fullName}:`, err.message || err);
+    console.warn(
+      `Could not resolve GitHub App installation for ${fullName}:`,
+      err.message || err,
+    );
   }
 
   return null;
@@ -307,7 +322,196 @@ export async function syncInstallationRepositories(
       .returning();
 
     syncedRepos.push(savedRepo!);
+
+    // Immediately trigger background pull request synchronization for this repo
+    syncPullRequestsForRepo(repo.full_name, savedRepo!.id).catch((err) => {
+      console.warn(`Initial PR sync error for ${repo.full_name}:`, err);
+    });
   }
 
   return syncedRepos;
 }
+
+/**
+ * Fetches pull requests from GitHub REST API for a repository and syncs them to database.
+ */
+export async function syncPullRequestsForRepo(
+  repoFullName: string,
+  repositoryId?: string,
+): Promise<any[]> {
+  if (!repoFullName) return [];
+
+  let targetFullName = repoFullName.trim();
+  let targetRepoId = repositoryId;
+
+  // 1. If repoFullName is just "repo" without owner (no "/"), look up in connectedRepositories
+  if (!targetFullName.includes("/")) {
+    const [found] = await db
+      .select()
+      .from(connectedRepositories)
+      .where(eq(connectedRepositories.name, targetFullName))
+      .limit(1);
+
+    if (found) {
+      targetFullName = found.fullName;
+      targetRepoId = targetRepoId || found.id;
+    } else {
+      // Look up in githubInstallations for account login
+      const [inst] = await db.select().from(githubInstallations).limit(1);
+      if (inst && inst.accountLogin) {
+        targetFullName = `${inst.accountLogin}/${targetFullName}`;
+      }
+    }
+  }
+
+  const [owner, repo] = (targetFullName || "").split("/");
+  if (!owner || !repo) {
+    console.warn(`Could not resolve owner/repo for PR sync: '${repoFullName}'`);
+    return [];
+  }
+
+  // 2. Resolve token: GitHub App Installation Token -> PAT / env token
+  let token: string | null = null;
+  try {
+    token = await getInstallationTokenForRepo(owner, repo);
+  } catch (err) {
+    console.warn(`Could not get installation token for ${targetFullName}:`, err);
+  }
+
+  if (!token) {
+    token = (process.env.GITHUB_TOKEN || process.env.GITHUB_PAT || env.GITHUB_TOKEN || "").trim() || null;
+  }
+
+  // 3. Fetch pull requests from GitHub API
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "Sentinel-API",
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/pulls?state=all&per_page=30&sort=updated&direction=desc`,
+      { headers },
+    );
+
+    if (!res.ok) {
+      console.warn(`GitHub PR fetch returned status ${res.status} for ${targetFullName}`);
+      return [];
+    }
+
+    const prs = (await res.json()) as any[];
+    if (!Array.isArray(prs)) return [];
+
+    const syncedPRs = [];
+
+    for (const pr of prs) {
+      const headBranch = pr.head?.ref || "unknown";
+      const baseBranch = pr.base?.ref || "main";
+      const title = pr.title || `PR #${pr.number}`;
+      const isAiFix = headBranch.startsWith("ai-fix/") || title.toLowerCase().startsWith("[ai fix]");
+
+      // Check if PR already exists in DB (match by either targetFullName or repoFullName)
+      const [existing] = await db
+        .select()
+        .from(pullRequests)
+        .where(
+          and(
+            eq(pullRequests.prNumber, pr.number),
+            eq(pullRequests.repoFullName, targetFullName),
+          ),
+        )
+        .limit(1);
+
+      let savedPR;
+      if (existing) {
+        // Update PR fields, keep existing review status
+        [savedPR] = await db
+          .update(pullRequests)
+          .set({
+            title,
+            body: pr.body || "",
+            state: pr.state || "open",
+            baseBranch,
+            headBranch,
+            baseSha: pr.base?.sha || "",
+            headSha: pr.head?.sha || "",
+            authorLogin: pr.user?.login || "user",
+            htmlUrl: pr.html_url || `https://github.com/${targetFullName}/pull/${pr.number}`,
+          })
+          .where(eq(pullRequests.id, existing.id))
+          .returning();
+      } else {
+        [savedPR] = await db
+          .insert(pullRequests)
+          .values({
+            repositoryId: targetRepoId || null,
+            repoFullName: targetFullName,
+            prNumber: pr.number,
+            title,
+            body: pr.body || "",
+            state: pr.state || "open",
+            status: isAiFix ? "skipped_ai_fix" : "pending",
+            baseBranch,
+            headBranch,
+            baseSha: pr.base?.sha || "",
+            headSha: pr.head?.sha || "",
+            authorLogin: pr.user?.login || "user",
+            htmlUrl: pr.html_url || `https://github.com/${targetFullName}/pull/${pr.number}`,
+          })
+          .returning();
+      }
+
+      if (savedPR) syncedPRs.push(savedPR);
+    }
+
+    console.log(`✅ Synced ${syncedPRs.length} pull requests from GitHub for ${targetFullName}`);
+    return syncedPRs;
+  } catch (err) {
+    console.error(`Error syncing PRs for ${targetFullName}:`, err);
+    return [];
+  }
+}
+
+/**
+ * Syncs pull requests for all connected repositories for a user or system-wide.
+ */
+export async function syncAllConnectedPullRequests(userId?: string): Promise<void> {
+  try {
+    let repos = userId
+      ? await db
+          .select()
+          .from(connectedRepositories)
+          .where(
+            and(
+              eq(connectedRepositories.userId, userId),
+              eq(connectedRepositories.isActive, true),
+            ),
+          )
+      : await db
+          .select()
+          .from(connectedRepositories)
+          .where(eq(connectedRepositories.isActive, true));
+
+    if (repos.length === 0 && userId) {
+      repos = await db
+        .select()
+        .from(connectedRepositories)
+        .where(eq(connectedRepositories.isActive, true));
+    }
+
+    // Parallelize PR syncing across connected repositories in batches of 6
+    const batchSize = 6;
+    for (let i = 0; i < repos.length; i += batchSize) {
+      const batch = repos.slice(i, i + batchSize);
+      await Promise.allSettled(
+        batch.map((repo) => syncPullRequestsForRepo(repo.fullName, repo.id)),
+      );
+    }
+  } catch (err) {
+    console.error("Error in syncAllConnectedPullRequests:", err);
+  }
+}
+
