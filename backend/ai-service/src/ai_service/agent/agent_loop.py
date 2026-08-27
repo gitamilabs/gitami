@@ -256,6 +256,7 @@ class AutonomousAgentLoop:
             "vector_search": "ChromaDB Semantic Vector Search",
             "get_symbol_details": "Neo4j Symbol & Call Graph Analysis",
             "get_file_dependencies": "Neo4j File Dependency Graph Traversal",
+            "get_file_content": "Read Repository File Content from Disk",
             "get_blast_radius": "Neo4j Blast Radius Ripple Analysis",
             "get_repo_structure": "Neo4j Repository File Hierarchy",
             "search_symbols": "Neo4j Fuzzy Symbol Search",
@@ -283,6 +284,21 @@ class AutonomousAgentLoop:
                 })
                 c_id += 1
             return f"Retrieved {len(hits)} semantic code passage(s) from ChromaDB.", citations
+
+        elif tool_name == "get_file_content":
+            f_path = parsed_raw.get("file_path", "file")
+            content = parsed_raw.get("content", "")
+            lines_cnt = parsed_raw.get("lines_count", 0)
+            if content:
+                citations.append({
+                    "id": c_id,
+                    "file_path": f_path,
+                    "symbol": None,
+                    "lines": f"1-{lines_cnt}",
+                    "snippet": content[:350] + ("..." if len(content) > 350 else ""),
+                    "source_type": "disk",
+                })
+            return f"Read {lines_cnt} line(s) of '{f_path}' directly from repository disk.", citations
 
         elif tool_name == "hybrid_search":
             vec_hits = parsed_raw.get("vector_hits", [])

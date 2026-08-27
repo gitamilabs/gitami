@@ -3,6 +3,13 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { env } from "./configs/env";
 import apiRouter from "./routes";
+import { processWebhook } from "./modules/github/github.routes";
+import { ensureDatabaseTablesExist } from "./db/ensure_tables";
+
+// Auto-create database tables on server start
+ensureDatabaseTablesExist().catch((err) => {
+  console.error("⚠️ Ensure tables on boot error:", err);
+});
 
 const app = new Hono();
 
@@ -15,11 +22,20 @@ app.use(
   "*",
   cors({
     origin: [env.FRONTEND_URL, "http://localhost:3000"],
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "X-GitHub-Event", "X-Hub-Signature-256"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
   }),
 );
+
+// ---------------------------------------------------------------------------
+// Webhook Route Aliases (Handles ngrok root URL & subpath webhooks)
+// ---------------------------------------------------------------------------
+
+app.post("/", processWebhook);
+app.post("/webhooks", processWebhook);
+app.post("/api/webhooks", processWebhook);
+app.post("/api/github/webhooks", processWebhook);
 
 // // ---------------------------------------------------------------------------
 // // Health Check

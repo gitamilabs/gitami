@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -469,3 +469,248 @@ async def agent_chat_query(req: ChatRequest):
         branch=req.branch or "main",
         total_latency_ms=round(total_latency, 2),
     )
+
+
+# ---------------------------------------------------------------------------
+# PR Review & AI Fix Agent Endpoints
+# ---------------------------------------------------------------------------
+
+class PRReviewRequest(BaseModel):
+    repo_id: str
+    pr_number: int
+    base_branch: str = "main"
+    head_branch: str
+    title: str
+    body: Optional[str] = ""
+    diff_text: Optional[str] = None
+
+
+class PRFixRequest(BaseModel):
+    repo_id: str
+    pr_number: int
+    base_branch: str = "main"
+    issues: List[Dict[str, Any]]
+    diff_text: str = ""
+    existing_file_contents: Optional[Dict[str, str]] = None
+
+
+class IngestUrlRequest(BaseModel):
+    repo_url: str
+    repo_id: Optional[str] = None
+    branch: Optional[str] = "main"
+
+
+@app.post("/api/pr/review")
+async def review_pull_request(req: PRReviewRequest):
+    """
+    Execute autonomous agentic PR review:
+    Orchestrator (Gemini) uses Knowledge Base tools + Workers (Groq Llama 3.3 70B) analyze diff hunks.
+    """
+    # Guardrail: Skip AI fix branches
+    if req.head_branch.startswith("ai-fix/") or req.title.lower().startswith("[ai fix]"):
+        return {
+            "verdict": "ACCEPT",
+            "risk_score": 0.0,
+            "summary": "Skipped review for AI Fix Agent PR (ai-fix/* branch).",
+            "agent_rationale": "Self-review skipped to prevent loop.",
+            "issues": [],
+            "status": "skipped_ai_fix",
+        }
+
+    graph_client = Neo4jClient()
+    try:
+        await graph_client.connect()
+    except Exception:
+        pass
+
+    vector_client = VectorKBClient()
+    llm_client = DualLLMClient()
+
+    raw_diff = req.diff_text or ""
+    if not raw_diff:
+        raw_diff = (
+            f"PR Title: {req.title}\n"
+            f"PR Description: {req.body}\n"
+            f"Base Branch: {req.base_branch}\n"
+            f"Head Branch: {req.head_branch}\n\n"
+            f"/// PR Diff changes in {req.repo_id} for head branch {req.head_branch} ///\n"
+        )
+
+    from ai_service.agent.reviewer import run_agentic_pr_review
+
+    try:
+        result = await run_agentic_pr_review(
+            client=graph_client,
+            repo_id=req.repo_id,
+            branch=req.head_branch,
+            changed_symbols=[],
+            raw_diff_text=raw_diff,
+            symbols=[],
+            vector_client=vector_client,
+            llm_client=llm_client,
+        )
+
+        return {
+            "verdict": result.decision.verdict,
+            "risk_score": result.decision.risk_score,
+            "summary": result.decision.summary,
+            "agent_rationale": result.agent_rationale,
+            "issues": result.issues,
+            "diff_hunks_count": result.diff_hunks_count,
+            "llm_orchestrator_used": result.llm_orchestrator_used,
+        }
+    finally:
+        try:
+            await graph_client.close()
+        except Exception:
+            pass
+
+
+@app.post("/api/pr/fix")
+async def fix_pull_request_issues(req: PRFixRequest):
+    """
+    Autonomous PR Fix Agent (Surgical Patch Mode):
+    Fetches real file content, applies minimal line-level fixes, validates output.
+    """
+    from ai_service.agent.fixer import run_autonomous_pr_fixer
+
+    llm_client = DualLLMClient()
+    fix_res = await run_autonomous_pr_fixer(
+        repo_id=req.repo_id,
+        pr_number=req.pr_number,
+        base_branch=req.base_branch,
+        issues=req.issues,
+        llm_client=llm_client,
+        diff_text=req.diff_text,
+        existing_file_contents=req.existing_file_contents,
+    )
+
+    return {
+        "success": fix_res.success,
+        "plan_rationale": fix_res.plan_rationale,
+        "file_fixes": [
+            {"file_path": f.file_path, "content": f.content}
+            for f in fix_res.file_fixes
+        ],
+        "error": fix_res.error,
+    }
+
+
+@app.post("/api/ingest-url")
+async def ingest_from_github_url(req: IngestUrlRequest):
+    """
+    Ingest a repository by cloning it directly from GitHub URL.
+    """
+    import git
+
+    repo_id = (req.repo_id or "").strip()
+    if not repo_id:
+        url_clean = req.repo_url.rstrip("/")
+        if url_clean.endswith(".git"):
+            url_clean = url_clean[:-4]
+        parts = url_clean.split("/")
+        if len(parts) >= 2:
+            repo_id = f"{parts[-2]}/{parts[-1]}"
+        elif len(parts) == 1:
+            repo_id = parts[0]
+        else:
+            repo_id = "github-repo"
+
+    target_dir = Path("./chroma_db/repos") / repo_id.replace("/", "_")
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clone or pull repo locally
+    if not (target_dir / ".git").exists():
+        git.Repo.clone_from(req.repo_url, target_dir)
+    else:
+        try:
+            repo = git.Repo(target_dir)
+            repo.remotes.origin.pull()
+        except Exception:
+            pass
+
+    graph_client = Neo4jClient()
+    try:
+        await graph_client.connect()
+    except Exception:
+        pass
+
+    vector_client = VectorKBClient()
+    try:
+        init_res = await run_init_job(
+            repo_id=repo_id,
+            branch=req.branch or "main",
+            repo_dir=target_dir,
+            client=graph_client,
+            vector_client=vector_client,
+        )
+
+        return {
+            "status": "success",
+            "repo_id": repo_id,
+            "symbols_parsed": getattr(init_res, "symbols_count", getattr(init_res, "total_symbols", 0)),
+            "files_parsed": getattr(init_res, "vector_entries_count", getattr(init_res, "total_files", 0)),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ingestion from GitHub URL failed: {str(e)}")
+    finally:
+        try:
+            await graph_client.close()
+        except Exception:
+            pass
+
+
+@app.post("/")
+@app.post("/webhooks")
+@app.post("/api/webhooks")
+@app.post("/api/github/webhooks")
+async def generic_github_webhook(request: Request):
+    """Fallback handler for GitHub webhooks hitting Python service directly."""
+    try:
+        payload = await request.json()
+        action = payload.get("action", "")
+        pr = payload.get("pull_request", {})
+        repo = payload.get("repository", {})
+        head = pr.get("head", {})
+        base = pr.get("base", {})
+
+        if pr and repo:
+            repo_fullName = repo.get("full_name", "")
+            pr_num = pr.get("number", 1)
+            head_branch = head.get("ref", "main")
+            base_branch = base.get("ref", "main")
+            title = pr.get("title", "")
+            body = pr.get("body", "")
+
+            # Guardrail: skip AI fix PRs
+            if head_branch.startswith("ai-fix/") or title.lower().startswith("[ai fix]"):
+                return {"received": True, "action": "skipped_ai_fix"}
+
+            graph_client = Neo4jClient()
+            try:
+                await graph_client.connect()
+            except Exception:
+                pass
+            vector_client = VectorKBClient()
+            llm_client = DualLLMClient()
+
+            from ai_service.agent.reviewer import run_agentic_pr_review
+
+            res = await run_agentic_pr_review(
+                client=graph_client,
+                repo_id=repo_fullName,
+                branch=head_branch,
+                changed_symbols=[],
+                raw_diff_text=f"PR #{pr_num}: {title}\n{body}",
+                symbols=[],
+                vector_client=vector_client,
+                llm_client=llm_client,
+            )
+            return {"received": True, "verdict": res.decision.verdict, "issues": res.issues}
+
+        return {"received": True, "action": action}
+    except Exception as e:
+        return {"received": True, "error": str(e)}
+
+
+

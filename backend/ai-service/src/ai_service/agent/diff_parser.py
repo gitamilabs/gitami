@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass, field
 from typing import List, Tuple
 from unidiff import PatchSet
@@ -61,3 +62,34 @@ def parse_git_diff(raw_diff_text: str) -> List[DiffHunk]:
                 patch_text=raw_diff_text,
             )
         ]
+
+
+def extract_changed_symbols(hunks: List[DiffHunk], raw_diff_text: str) -> List[str]:
+    """Extract modified function, class, and method names from diff hunks."""
+    symbols = set()
+
+    # Regex patterns for Python, JS/TS, Java, C++, Go, Rust definitions
+    patterns = [
+        r"(?:def|function|class|async\s+function)\s+([a-zA-Z0-9_]+)",
+        r"(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(",
+        r"(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*function",
+        r"@@\s+.*\s+@@\s*(?:def|function|class)?\s*([a-zA-Z0-9_]+)",
+    ]
+
+    lines_to_check = []
+    for hunk in hunks:
+        for _, line_str in hunk.added_lines + hunk.removed_lines:
+            lines_to_check.append(line_str)
+
+    if not lines_to_check:
+        lines_to_check = raw_diff_text.splitlines()
+
+    for line in lines_to_check:
+        for pat in patterns:
+            matches = re.findall(pat, line)
+            for m in matches:
+                if m and len(m) > 1 and m not in ("if", "for", "while", "switch", "catch", "return"):
+                    symbols.add(m)
+
+    return list(symbols)
+

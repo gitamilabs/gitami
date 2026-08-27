@@ -9,3 +9,18 @@ export {
   type ConnectedRepository,
   type NewConnectedRepository,
 } from "./connected_repositories";
+export {
+  pullRequests,
+  type PullRequest,
+  type NewPullRequest,
+} from "./pull_requests";
+export {
+  prReviews,
+  type PRReview,
+  type NewPRReview,
+} from "./pr_reviews";
+export {
+  prIssues,
+  type PRIssue,
+  type NewPRIssue,
+} from "./pr_issues";

@@ -18,6 +18,32 @@ import { env } from "../../configs/env";
 const githubRouter = new Hono<{ Variables: AuthContextVariables }>();
 
 /**
+ * Shared webhook handler for GitHub webhook intake.
+ */
+export async function processWebhook(c: any) {
+  const signature = c.req.header("x-hub-signature-256") || "";
+  const eventName = c.req.header("x-github-event") || "pull_request";
+
+  const rawBody = await c.req.text();
+
+  // Verify HMAC signature in production
+  const isValid = await verifySignature(rawBody, signature);
+  if (!isValid && env.NODE_ENV === "production") {
+    return c.json({ error: "Invalid webhook signature" }, 401);
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return c.json({ error: "Invalid JSON payload" }, 400);
+  }
+
+  const result = await handleEvent(eventName, payload);
+  return c.json({ received: true, ...result });
+}
+
+/**
  * GET /install-url
  * Protected. Returns the GitHub App installation URL for the current user.
  */
@@ -282,30 +308,9 @@ githubRouter.delete("/repositories/:id", authMiddleware, async (c) => {
 
 
 /**
- * POST /webhooks
- * Public. Ingestion endpoint for GitHub App webhooks.
+ * Webhook route aliases
  */
-githubRouter.post("/webhooks", async (c) => {
-  const signature = c.req.header("x-hub-signature-256") || "";
-  const eventName = c.req.header("x-github-event") || "";
-
-  const rawBody = await c.req.text();
-
-  // Verify HMAC signature in production
-  const isValid = await verifySignature(rawBody, signature);
-  if (!isValid && env.NODE_ENV === "production") {
-    return c.json({ error: "Invalid webhook signature" }, 401);
-  }
-
-  let payload: Record<string, unknown>;
-  try {
-    payload = JSON.parse(rawBody);
-  } catch {
-    return c.json({ error: "Invalid JSON payload" }, 400);
-  }
-
-  const result = await handleEvent(eventName, payload);
-  return c.json({ received: true, ...result });
-});
+githubRouter.post("/webhooks", processWebhook);
+githubRouter.post("/", processWebhook);
 
 export default githubRouter;

@@ -205,6 +205,53 @@ async def tool_hybrid_search(
     return json.dumps(res, indent=2)
 
 
+async def tool_get_file_content(repo_id: str, file_path: str) -> str:
+    """Read actual raw source code, documentation, or configuration file contents from repository disk."""
+    from pathlib import Path
+
+    clean_path = file_path.strip().lstrip("/").lstrip("\\")
+    repo_slug = repo_id.replace("/", "_")
+
+    candidates = [
+        Path("./chroma_db/repos") / repo_slug / clean_path,
+        Path("./chroma_db/repos") / repo_id / clean_path,
+        Path(".") / clean_path,
+    ]
+
+    target_file = None
+    for cand in candidates:
+        if cand.exists() and cand.is_file():
+            target_file = cand
+            break
+
+    if not target_file:
+        repo_dir = Path("./chroma_db/repos") / repo_slug
+        if repo_dir.exists():
+            for p in repo_dir.rglob(Path(clean_path).name):
+                if p.is_file():
+                    target_file = p
+                    break
+
+    if not target_file or not target_file.exists():
+        return json.dumps({
+            "error": f"File '{file_path}' not found on disk for repo '{repo_id}'",
+            "file_path": file_path,
+            "content": "",
+        }, indent=2)
+
+    try:
+        text = target_file.read_text(encoding="utf-8", errors="ignore")
+        lines = text.splitlines()
+        return json.dumps({
+            "file_path": file_path,
+            "lines_count": len(lines),
+            "content": text[:5000],
+            "truncated": len(text) > 5000,
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"error": f"Failed to read file '{file_path}': {str(e)}"})
+
+
 async def execute_tool_by_name(
     tool_name: str,
     tool_args: Dict[str, Any],
@@ -242,6 +289,9 @@ async def execute_tool_by_name(
             return await tool_get_file_dependencies(
                 graph_client, repo_id=repo_id, file_path=fpath, branch=branch
             )
+        elif tool_name == "get_file_content":
+            fpath = tool_args.get("file_path") or tool_args.get("file") or tool_args.get("path") or "README.md"
+            return await tool_get_file_content(repo_id=repo_id, file_path=fpath)
         elif tool_name == "get_blast_radius":
             syms = (
                 tool_args.get("changed_symbols")
@@ -276,4 +326,5 @@ async def execute_tool_by_name(
             )
     except Exception as e:
         return json.dumps({"error": f"Failed to execute tool '{tool_name}': {str(e)}"})
+
 
