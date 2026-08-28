@@ -8,6 +8,7 @@ import {
 } from "../../db/schema";
 import { getUserByGithubId } from "../auth/auth.service";
 import { evaluatePRWithAIService } from "../pr/pr.service";
+import { getIngestedRepoNames, isRepoIngested } from "./github-app.service";
 
 
 export async function verifySignature(
@@ -277,6 +278,13 @@ async function handlePullRequestEvent(
   // We act on opened, synchronize, or reopened PR events
   if (!["opened", "synchronize", "reopened"].includes(action)) {
     return { handled: true, action: `pr_${action}_ignored` };
+  }
+
+  // Only process PR events for ingested repositories
+  const ingestedNames = await getIngestedRepoNames();
+  if (!isRepoIngested(repo.full_name, ingestedNames)) {
+    console.log(`ℹ️ Skipping PR webhook review for non-ingested repo: ${repo.full_name}`);
+    return { handled: true, action: "pr_repo_not_ingested" };
   }
 
   const headBranch = pr.head?.ref || "unknown";

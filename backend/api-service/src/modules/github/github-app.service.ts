@@ -363,11 +363,6 @@ export async function syncInstallationRepositories(
       .returning();
 
     syncedRepos.push(savedRepo!);
-
-    // Immediately trigger background pull request synchronization for this repo
-    syncPullRequestsForRepo(repo.full_name, savedRepo!.id).catch((err) => {
-      console.warn(`Initial PR sync error for ${repo.full_name}:`, err);
-    });
   }
 
   return syncedRepos;
@@ -517,10 +512,51 @@ export async function syncPullRequestsForRepo(
 }
 
 /**
- * Syncs pull requests for all connected repositories for a user or system-wide.
+ * Fetches the set of ingested repository names from the AI Service.
+ */
+export async function getIngestedRepoNames(): Promise<Set<string>> {
+  const aiServiceUrl = process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://localhost:8000";
+  try {
+    const res = await fetch(`${aiServiceUrl}/api/repos`);
+    if (res.ok) {
+      const data = (await res.json()) as any;
+      const list = Array.isArray(data.repos) ? data.repos : [];
+      return new Set(list.map((r: string) => (typeof r === "string" ? r.trim() : String(r))));
+    }
+  } catch (err) {
+    console.warn("Could not reach AI service for indexed repos:", err);
+  }
+  return new Set<string>();
+}
+
+/**
+ * Checks if a repository name or fullName is in the set of ingested repositories.
+ */
+export function isRepoIngested(repoFullNameOrName: string, ingestedNames: Set<string>): boolean {
+  if (!repoFullNameOrName || ingestedNames.size === 0) return false;
+  const target = repoFullNameOrName.toLowerCase().trim();
+  const shortName = target.includes("/") ? target.split("/")[1]! : target;
+
+  for (const name of ingestedNames) {
+    const n = name.toLowerCase().trim();
+    const s = n.includes("/") ? n.split("/")[1]! : n;
+    if (target === n || target === s || shortName === n || shortName === s) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Syncs pull requests for only ingested repositories for a user or system-wide.
  */
 export async function syncAllConnectedPullRequests(userId?: string): Promise<void> {
   try {
+    const ingestedNames = await getIngestedRepoNames();
+    if (ingestedNames.size === 0) {
+      return;
+    }
+
     let repos = userId
       ? await db
           .select()
@@ -543,10 +579,19 @@ export async function syncAllConnectedPullRequests(userId?: string): Promise<voi
         .where(eq(connectedRepositories.isActive, true));
     }
 
-    // Parallelize PR syncing across connected repositories in batches of 6
+    // Filter to ONLY ingested repositories
+    const ingestedRepos = repos.filter(
+      (r) => isRepoIngested(r.fullName, ingestedNames) || isRepoIngested(r.name, ingestedNames),
+    );
+
+    if (ingestedRepos.length === 0) {
+      return;
+    }
+
+    // Parallelize PR syncing across only the ingested repositories in batches of 6
     const batchSize = 6;
-    for (let i = 0; i < repos.length; i += batchSize) {
-      const batch = repos.slice(i, i + batchSize);
+    for (let i = 0; i < ingestedRepos.length; i += batchSize) {
+      const batch = ingestedRepos.slice(i, i + batchSize);
       await Promise.allSettled(
         batch.map((repo) => syncPullRequestsForRepo(repo.fullName, repo.id)),
       );
@@ -555,4 +600,5 @@ export async function syncAllConnectedPullRequests(userId?: string): Promise<voi
     console.error("Error in syncAllConnectedPullRequests:", err);
   }
 }
+
 

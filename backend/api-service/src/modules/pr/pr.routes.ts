@@ -7,6 +7,7 @@ import {
   fixSelectedPRIssues,
   userOwnsRepo,
 } from "./pr.service";
+import { syncPullRequestsForRepo } from "../github/github-app.service";
 import { verifySessionToken } from "../auth/auth.service";
 import {
   authMiddleware,
@@ -165,6 +166,12 @@ prRouter.post("/ingest-link", async (c) => {
     }
 
     const data = await res.json();
+
+    // Trigger background PR sync for the newly ingested repo
+    syncPullRequestsForRepo(targetRepo).catch((err) => {
+      console.warn(`PR sync error after link ingestion for ${targetRepo}:`, err);
+    });
+
     return c.json({ success: true, data });
   } catch (err: any) {
     return c.json({ error: err.message || "Failed to trigger ingestion" }, 500);

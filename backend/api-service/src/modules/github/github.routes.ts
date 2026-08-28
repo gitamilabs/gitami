@@ -10,6 +10,8 @@ import {
   syncInstallationRepositories,
   syncUserInstallations,
   getOrCreateLocalInstallation,
+  syncPullRequestsForRepo,
+  getIngestedRepoNames,
 } from "./github-app.service";
 import { verifySignature, handleEvent } from "./webhook.service";
 import { db } from "../../db";
@@ -261,6 +263,12 @@ githubRouter.post("/repositories/:id/ingest", authMiddleware, async (c) => {
     }
 
     const data = await res.json();
+
+    // Trigger background PR synchronization for this newly ingested repository
+    syncPullRequestsForRepo(repo.fullName, repo.id).catch((err) => {
+      console.warn(`PR sync error after ingestion for ${repo.fullName}:`, err);
+    });
+
     return c.json({
       success: true,
       repository: repo,
