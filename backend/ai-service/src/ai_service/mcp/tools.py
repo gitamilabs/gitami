@@ -147,14 +147,16 @@ async def tool_search_symbols(client: Neo4jClient, repo_id: str, query_str: str,
 
 
 
-def tool_vector_search(
+async def tool_vector_search(
     vector_client: Any,
     query_text: str,
     repo_id: Optional[str] = None,
     content_type: Optional[str] = None,
     n_results: int = 5,
 ) -> str:
-    """Semantic similarity search across code, PRs, commits, and issues in Vector KB."""
+    """Semantic similarity search across code, PRs, commits, and issues in Vector KB (non-blocking)."""
+    import asyncio
+
     where_clause = {}
     if repo_id:
         where_clause["repo"] = repo_id
@@ -169,7 +171,8 @@ def tool_vector_search(
         elif "issue" in ct_lower:
             where_clause["content_type"] = "issue"
 
-    res = vector_client.query(
+    res = await asyncio.to_thread(
+        vector_client.query,
         query_texts=[query_text],
         n_results=n_results,
         where=where_clause if where_clause else None,
@@ -208,11 +211,15 @@ async def tool_hybrid_search(
 async def tool_get_file_content(repo_id: str, file_path: str) -> str:
     """Read actual raw source code, documentation, or configuration file contents from repository disk."""
     from pathlib import Path
+    from ai_service.config import settings
 
     clean_path = file_path.strip().lstrip("/").lstrip("\\")
     repo_slug = repo_id.replace("/", "_")
+    repos_base = Path(settings.chroma_persist_dir) / "repos"
 
     candidates = [
+        repos_base / repo_slug / clean_path,
+        repos_base / repo_id / clean_path,
         Path("./chroma_db/repos") / repo_slug / clean_path,
         Path("./chroma_db/repos") / repo_id / clean_path,
         Path(".") / clean_path,
@@ -225,12 +232,14 @@ async def tool_get_file_content(repo_id: str, file_path: str) -> str:
             break
 
     if not target_file:
-        repo_dir = Path("./chroma_db/repos") / repo_slug
-        if repo_dir.exists():
-            for p in repo_dir.rglob(Path(clean_path).name):
-                if p.is_file():
-                    target_file = p
-                    break
+        for possible_dir in [repos_base / repo_slug, Path("./chroma_db/repos") / repo_slug]:
+            if possible_dir.exists():
+                for p in possible_dir.rglob(Path(clean_path).name):
+                    if p.is_file():
+                        target_file = p
+                        break
+            if target_file:
+                break
 
     if not target_file or not target_file.exists():
         return json.dumps({
@@ -270,7 +279,7 @@ async def execute_tool_by_name(
         elif tool_name == "vector_search":
             query = tool_args.get("query") or tool_args.get("query_text") or tool_args.get("q") or ""
             ctype = tool_args.get("content_type")
-            return tool_vector_search(
+            return await tool_vector_search(
                 vector_client, query_text=query, repo_id=repo_id, content_type=ctype
             )
         elif tool_name == "get_symbol_details":

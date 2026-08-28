@@ -27,7 +27,7 @@ class TestMCPVectorTools(unittest.IsolatedAsyncioTestCase):
         except Exception:
             pass
 
-    def test_tool_vector_search(self):
+    async def test_tool_vector_search(self):
         self.vector_client.add_code_entry(
             repo="org/repo",
             branch="main",
@@ -38,7 +38,7 @@ class TestMCPVectorTools(unittest.IsolatedAsyncioTestCase):
             commit_hash="abc1234"
         )
 
-        res_str = tool_vector_search(
+        res_str = await tool_vector_search(
             vector_client=self.vector_client,
             query_text="auth",
             repo_id="org/repo",

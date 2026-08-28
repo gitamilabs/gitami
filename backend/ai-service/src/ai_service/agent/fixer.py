@@ -1,11 +1,14 @@
 import os
 import re
 import json
+import logging
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
 from ai_service.agent.llm_client import DualLLMClient
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -22,32 +25,6 @@ class AgentFixResult:
     error: Optional[str] = None
 
 
-async def _fetch_github_file(repo_full_name: str, file_path: str, branch: str) -> Optional[str]:
-    """Fetch raw file content from GitHub REST API."""
-    import httpx
-
-    # Try with GITHUB_TOKEN first, then without
-    github_token = (os.getenv("GITHUB_TOKEN") or os.getenv("GITHUB_PAT") or "").strip()
-    headers = {
-        "Accept": "application/vnd.github.v3.raw",
-        "User-Agent": "Sentinel-AI-Agent",
-    }
-    if github_token:
-        headers["Authorization"] = f"Bearer {github_token}"
-
-    url = f"https://api.github.com/repos/{repo_full_name}/contents/{file_path}?ref={branch}"
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(url, headers=headers)
-            if resp.status_code == 200:
-                return resp.text
-    except Exception as e:
-        print(f"⚠️ Could not fetch {file_path} from GitHub: {e}")
-
-    return None
-
-
 async def run_autonomous_pr_fixer(
     repo_id: str,
     pr_number: int,
@@ -60,7 +37,7 @@ async def run_autonomous_pr_fixer(
 ) -> AgentFixResult:
     """
     Autonomous PR Fix Agent — Surgical Patch Mode:
-    1. Fetches exact existing file content from GitHub or local disk.
+    1. Reads existing file content passed from control plane (api-service) or local disk.
     2. Gemini Orchestrator plans minimal, targeted code changes.
     3. Groq Worker applies ONLY the specific line-level edits, preserving all other code.
     4. Returns the complete file with minimal surgical changes applied.
@@ -98,15 +75,13 @@ async def run_autonomous_pr_fixer(
                 if abs_p.exists() and abs_p.is_file():
                     try:
                         file_contents_map[fp] = abs_p.read_text(encoding="utf-8", errors="ignore")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"Failed to read {abs_p} from disk: {e}")
 
-    # Priority 3: Fetch from GitHub REST API
+    # Log any target files that were unavailable
     for fp in target_files:
         if fp not in file_contents_map:
-            content = await _fetch_github_file(repo_id, fp, base_branch)
-            if content:
-                file_contents_map[fp] = content
+            logger.info(f"Target file '{fp}' content not provided in request or local disk.")
 
     # Build existing files context string
     existing_files_text = ""

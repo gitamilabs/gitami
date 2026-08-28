@@ -74,21 +74,34 @@ def extract_changed_symbols(hunks: List[DiffHunk], raw_diff_text: str) -> List[s
         r"(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*(?:async\s*)?\(",
         r"(?:const|let|var)\s+([a-zA-Z0-9_]+)\s*=\s*function",
         r"@@\s+.*\s+@@\s*(?:def|function|class)?\s*([a-zA-Z0-9_]+)",
+        r"export\s+(?:default\s+)?(?:class|function|const|let|var)\s+([a-zA-Z0-9_]+)",
     ]
 
+    reserved_words = {
+        "if", "for", "while", "switch", "catch", "return", "try", "finally",
+        "else", "import", "from", "export", "default", "type", "interface",
+        "void", "null", "undefined", "true", "false", "new", "this", "super",
+    }
+
+    # Prioritize added lines first to find new/modified definitions
     lines_to_check = []
     for hunk in hunks:
-        for _, line_str in hunk.added_lines + hunk.removed_lines:
+        for _, line_str in hunk.added_lines:
             lines_to_check.append(line_str)
 
+    # Fallback to general lines if no added lines found
     if not lines_to_check:
-        lines_to_check = raw_diff_text.splitlines()
+        for hunk in hunks:
+            for _, line_str in hunk.removed_lines:
+                lines_to_check.append(line_str)
+        if not lines_to_check:
+            lines_to_check = raw_diff_text.splitlines()
 
     for line in lines_to_check:
         for pat in patterns:
             matches = re.findall(pat, line)
             for m in matches:
-                if m and len(m) > 1 and m not in ("if", "for", "while", "switch", "catch", "return"):
+                if m and len(m) > 1 and m not in reserved_words:
                     symbols.add(m)
 
     return list(symbols)

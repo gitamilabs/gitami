@@ -1,13 +1,18 @@
 import os
 import json
+import logging
 from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+
+GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-flash-latest"]
+GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "groq/compound-mini"]
 
 
 class DualLLMClient:
-    """Dual-LLM Client wrapper: Google Gemini for Orchestration & Groq (Llama 3.3 70B) for Worker Sub-tasks / Failover."""
+    """Dual-LLM Client wrapper: Google Gemini for Orchestration & Groq for Worker Sub-tasks / Failover."""
 
     def __init__(
         self,
@@ -19,6 +24,80 @@ class DualLLMClient:
 
         self.has_gemini = bool(self.gemini_key)
         self.has_groq = bool(self.groq_key)
+
+        self._genai_client = None
+        self._groq_client = None
+
+    def _get_genai_client(self):
+        if not self._genai_client and self.has_gemini:
+            try:
+                from google import genai
+                self._genai_client = genai.Client(api_key=self.gemini_key)
+            except Exception as e:
+                logger.error(f"Failed to instantiate Google GenAI Client: {e}")
+        return self._genai_client
+
+    def _get_groq_client(self):
+        if not self._groq_client and self.has_groq:
+            try:
+                from groq import Groq
+                self._groq_client = Groq(api_key=self.groq_key)
+            except Exception as e:
+                logger.error(f"Failed to instantiate Groq Client: {e}")
+        return self._groq_client
+
+    async def _call_gemini(
+        self, prompt: str, system_prompt: str, models: Optional[List[str]] = None
+    ) -> Optional[str]:
+        client = self._get_genai_client()
+        if not client:
+            return None
+
+        target_models = models or GEMINI_MODELS
+        for model_name in target_models:
+            try:
+                res = client.models.generate_content(
+                    model=model_name,
+                    contents=f"{system_prompt}\n\n{prompt}",
+                )
+                if res and res.text:
+                    return res.text
+            except Exception as e:
+                logger.warning(f"Gemini generation failed for model [{model_name}]: {e}")
+        return None
+
+    async def _call_groq(
+        self,
+        prompt: str,
+        system_prompt: str,
+        models: Optional[List[str]] = None,
+        temperature: float = 0.2,
+        json_mode: bool = False,
+    ) -> Optional[str]:
+        client = self._get_groq_client()
+        if not client:
+            return None
+
+        target_models = models or GROQ_MODELS
+        for model_name in target_models:
+            try:
+                kwargs: Dict[str, Any] = {
+                    "model": model_name,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": temperature,
+                }
+                if json_mode:
+                    kwargs["response_format"] = {"type": "json_object"}
+
+                completion = client.chat.completions.create(**kwargs)
+                if completion.choices and completion.choices[0].message.content:
+                    return completion.choices[0].message.content
+            except Exception as e:
+                logger.warning(f"Groq completion failed for model [{model_name}]: {e}")
+        return None
 
     async def plan_tool_calls(self, user_query: str, repo_id: str) -> List[Dict[str, Any]]:
         """
@@ -49,47 +128,17 @@ class DualLLMClient:
 
         user_prompt = f"Repository ID: '{repo_id}'\nUser Query: '{user_query}'\nSelect the best tool(s) to execute."
 
-        raw_response = ""
-        # Try Gemini or Groq for fast JSON tool selection
+        raw_response = None
         if self.has_gemini:
-            for model_name in ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-flash-latest"]:
-                try:
-                    from google import genai
-                    client = genai.Client(api_key=self.gemini_key)
-                    res = client.models.generate_content(
-                        model=model_name,
-                        contents=f"{system_prompt}\n\n{user_prompt}",
-                    )
-                    if res and res.text:
-                        raw_response = res.text
-                        break
-                except Exception:
-                    pass
+            raw_response = await self._call_gemini(user_prompt, system_prompt)
 
         if not raw_response and self.has_groq:
-            for model_name in ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "groq/compound-mini"]:
-                try:
-                    from groq import Groq
-                    client = Groq(api_key=self.groq_key)
-                    completion = client.chat.completions.create(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        temperature=0.1,
-                        response_format={"type": "json_object"}
-                    )
-                    if completion.choices and completion.choices[0].message.content:
-                        raw_response = completion.choices[0].message.content
-                        break
-                except Exception:
-                    pass
+            raw_response = await self._call_groq(
+                user_prompt, system_prompt, temperature=0.1, json_mode=True
+            )
 
-        # Parse JSON decision
         if raw_response:
             try:
-                # Strip markdown fence if present
                 clean_json = raw_response.strip()
                 if "```json" in clean_json:
                     clean_json = clean_json.split("```json")[1].split("```")[0]
@@ -99,50 +148,25 @@ class DualLLMClient:
                 calls = data.get("tool_calls", [])
                 if isinstance(calls, list) and len(calls) > 0:
                     return calls
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to parse tool plan JSON: {e}")
 
         # Smart Fallback if LLM parsing fails: default to hybrid_search
         return [{"tool_name": "hybrid_search", "args": {"query": user_query}}]
 
     async def run_orchestrator(self, prompt: str, system_prompt: str) -> str:
         """Call Google Gemini for main orchestration; fail over to Groq if Gemini quota/error occurs."""
-        # 1. Try Gemini
         if self.has_gemini:
-            for model_name in ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-flash-latest"]:
-                try:
-                    from google import genai
-                    client = genai.Client(api_key=self.gemini_key)
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=f"{system_prompt}\n\n{prompt}",
-                    )
-                    if response and response.text:
-                        return response.text
-                except Exception:
-                    pass
+            res = await self._call_gemini(prompt, system_prompt)
+            if res:
+                return res
 
-        # 2. Try Groq as robust failover
         if self.has_groq:
-            for model_name in ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "groq/compound-mini"]:
-                try:
-                    from groq import Groq
-                    client = Groq(api_key=self.groq_key)
-                    completion = client.chat.completions.create(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": prompt},
-                        ],
-                        temperature=0.2,
-                    )
-                    res_text = completion.choices[0].message.content
-                    if res_text:
-                        return res_text
-                except Exception:
-                    pass
+            res = await self._call_groq(prompt, system_prompt, temperature=0.2)
+            if res:
+                return res
 
-        # 3. Local Intelligent RAG Synthesis if both LLMs are offline
+        # Local Intelligent RAG Synthesis if both LLMs are offline
         return (
             "### Knowledge Base Intelligence Summary\n\n"
             "Retrieved relevant code passages and structural knowledge graph entities for your query. "
@@ -150,37 +174,15 @@ class DualLLMClient:
         )
 
     async def run_worker(self, prompt: str, system_prompt: str) -> str:
-        """Call Groq for fast parallel hunk review sub-tasks."""
+        """Call Groq for fast parallel hunk review sub-tasks; fallback to Gemini."""
         if self.has_groq:
-            for model_name in ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "groq/compound-mini"]:
-                try:
-                    from groq import Groq
-                    client = Groq(api_key=self.groq_key)
-                    completion = client.chat.completions.create(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": prompt},
-                        ],
-                        temperature=0.2,
-                    )
-                    return completion.choices[0].message.content or ""
-                except Exception as e:
-                    pass
-        
-        # Fallback to Gemini if Groq is unavailable
+            res = await self._call_groq(prompt, system_prompt, temperature=0.2)
+            if res:
+                return res
+
         if self.has_gemini:
-            for model_name in ["gemini-3.6-flash", "gemini-3.7-flash"]:
-                try:
-                    from google import genai
-                    client = genai.Client(api_key=self.gemini_key)
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=f"{system_prompt}\n\n{prompt}",
-                    )
-                    if response and response.text:
-                        return response.text
-                except Exception:
-                    pass
+            res = await self._call_gemini(prompt, system_prompt)
+            if res:
+                return res
 
         return "[Worker Node - Offline Mode] Hunk analysis completed."

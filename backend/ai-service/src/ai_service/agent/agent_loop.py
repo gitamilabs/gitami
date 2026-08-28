@@ -1,10 +1,24 @@
 import time
 import json
+import logging
 import asyncio
 from typing import AsyncGenerator, List, Dict, Any, Optional
 from ai_service.agent.prompts import REACT_AGENT_SYSTEM_PROMPT
 from ai_service.agent.llm_client import DualLLMClient
 from ai_service.mcp.tools import execute_tool_by_name
+
+logger = logging.getLogger(__name__)
+
+
+def _format_conversation_history(history: Optional[List[Dict[str, str]]]) -> str:
+    if not history:
+        return ""
+    lines = ["\n### RECENT CONVERSATION HISTORY:"]
+    for msg in history[-6:]:  # keep last 6 turns (user/assistant)
+        role = msg.get("role", "user").upper()
+        content = msg.get("content", "")[:500]
+        lines.append(f"{role}: {content}")
+    return "\n".join(lines) + "\n"
 
 
 class AutonomousAgentLoop:
@@ -45,23 +59,28 @@ class AutonomousAgentLoop:
         def format_sse(data: Dict[str, Any]) -> str:
             return f"data: {json.dumps(data)}\n\n"
 
+        history_context = _format_conversation_history(history)
+
         for step_idx in range(1, max_steps + 1):
             # Formulate conversation prompt history for LLM
             history_str = ""
             if observations:
                 history_str = "\n\n### PREVIOUS TOOL OBSERVATIONS & RETRIEVED CODE PASSAGES IN THIS REASONING LOOP:\n"
                 for obs in observations:
+                    age = step_idx - obs["step"]
+                    max_chars = max(800, 2500 // (age + 1))
                     history_str += (
                         f"Step {obs['step']}:\n"
                         f"- Thought: {obs['thought']}\n"
                         f"- Tool Called: {obs['tool_name']}({json.dumps(obs['args'])})\n"
                         f"- Summary: {obs['output_summary']}\n"
-                        f"- Retrieved Payload / Code Content:\n{obs['raw'][:2500]}\n\n"
+                        f"- Retrieved Payload / Code Content:\n{obs['raw'][:max_chars]}\n\n"
                     )
 
             prompt = (
                 f"Repository: '{repo_id}' (branch: '{branch}')\n"
                 f"User Question: '{user_query}'\n"
+                f"{history_context}"
                 f"{history_str}\n"
                 f"Current Reasoning Step #{step_idx}. Decide your next action (call_tool or final_answer) in valid JSON."
             )
@@ -69,9 +88,9 @@ class AutonomousAgentLoop:
             # Call LLM for reasoning turn
             llm_response_text = ""
             try:
-                # Use LLM planner turn
                 llm_response_text = await self._call_llm_json(prompt=prompt, system_prompt=REACT_AGENT_SYSTEM_PROMPT)
             except Exception as e:
+                logger.warning(f"LLM reasoning turn error: {e}")
                 yield format_sse({
                     "type": "thought",
                     "step_index": step_idx,
@@ -179,6 +198,7 @@ class AutonomousAgentLoop:
         synth_prompt = (
             f"Repository: '{repo_id}' (branch: '{branch}')\n"
             f"User Query: '{user_query}'\n\n"
+            f"{history_context}"
             f"--- REASONING TOOL OBSERVATIONS ---\n"
             f"{json.dumps([o['raw'] for o in observations], indent=2)[:3000]}\n\n"
             f"Synthesize a final cited answer to the user query."
@@ -196,41 +216,20 @@ class AutonomousAgentLoop:
     async def _call_llm_json(self, prompt: str, system_prompt: str) -> str:
         """Helper to invoke LLM with JSON format expectation."""
         if self.llm_client.has_gemini:
-            for model_name in ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-flash-latest"]:
-                try:
-                    from google import genai
-                    client = genai.Client(api_key=self.llm_client.gemini_key)
-                    res = client.models.generate_content(
-                        model=model_name,
-                        contents=f"{system_prompt}\n\n{prompt}",
-                    )
-                    if res and res.text:
-                        return res.text
-                except Exception:
-                    pass
+            res = await self.llm_client._call_gemini(prompt, system_prompt)
+            if res:
+                return res
 
         if self.llm_client.has_groq:
-            for model_name in ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "groq/compound-mini"]:
-                try:
-                    from groq import Groq
-                    client = Groq(api_key=self.llm_client.groq_key)
-                    completion = client.chat.completions.create(
-                        model=model_name,
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": prompt},
-                        ],
-                        temperature=0.1,
-                        response_format={"type": "json_object"},
-                    )
-                    if completion.choices and completion.choices[0].message.content:
-                        return completion.choices[0].message.content
-                except Exception:
-                    pass
+            res = await self.llm_client._call_groq(prompt, system_prompt, temperature=0.1, json_mode=True)
+            if res:
+                return res
 
         return ""
 
     def _parse_llm_json(self, text: str) -> Dict[str, Any]:
+        if not text:
+            return {"action": "call_tool", "tool_name": "hybrid_search", "thought": "Executing default hybrid search..."}
         if not text:
             return {"action": "call_tool", "tool_name": "hybrid_search", "thought": "Executing default hybrid search..."}
         try:

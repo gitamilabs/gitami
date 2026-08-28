@@ -1,4 +1,5 @@
 import time
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -9,6 +10,8 @@ from ai_service.graph.schema import ensure_schema
 from ai_service.graph.writer import upsert_symbols, upsert_call_edges, upsert_import_edges
 from ai_service.vector.client import VectorKBClient
 from ai_service.parsing.parser import CodeParser
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -47,15 +50,15 @@ async def run_init_job(
     """Flow 1 — Repository Initialization job: parse AST and ingest dual Knowledge Base into Neo4j and ChromaDB."""
     start_time = time.time()
 
-    commit_hash = "init"
+    commit_hash = branch or "HEAD"
     if repo_dir:
         root = Path(repo_dir)
         try:
             repo = Repo(root, search_parent_directories=True)
             commit_hash = repo.head.commit.hexsha
             repo.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Could not extract HEAD commit hash from repo_dir '{repo_dir}': {e}")
 
     if client is None:
         client = Neo4jClient()

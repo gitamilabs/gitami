@@ -1,5 +1,6 @@
 import json
 import uuid
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -8,7 +9,7 @@ from ai_service.graph.client import Neo4jClient
 from ai_service.vector.client import VectorKBClient
 from ai_service.mcp.tools import tool_get_blast_radius, tool_get_file_dependencies, tool_vector_search
 from ai_service.analysis.blast_radius import compute_blast_radius
-from ai_service.analysis.conventions import check_conventions, ConventionViolation
+from ai_service.analysis.conventions import check_conventions, check_diff_conventions, ConventionViolation
 from ai_service.analysis.decision import DecisionResult, Verdict, Suggestion
 from ai_service.agent.diff_parser import parse_git_diff, extract_changed_symbols, DiffHunk
 from ai_service.agent.llm_client import DualLLMClient
@@ -17,6 +18,8 @@ from ai_service.agent.prompts import (
     SYSTEM_WORKER_PROMPT,
     build_orchestrator_prompt,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -56,20 +59,23 @@ async def run_agentic_pr_review(
     blast_json = await tool_get_blast_radius(client, repo_id=repo_id, changed_symbols=changed_symbols, branch=branch)
     blast_data = json.loads(blast_json)
 
-    # 2b. Retrieve semantic context from Vector KB
+    # 2b. Retrieve semantic context from Vector KB (non-blocking)
     diff_query = raw_diff_text[:400] if raw_diff_text else repo_id
-    semantic_json = tool_vector_search(vector_client, query_text=diff_query, repo_id=repo_id, n_results=3)
+    semantic_json = await tool_vector_search(vector_client, query_text=diff_query, repo_id=repo_id, n_results=3)
 
-    # 3. Static convention checks
-    violations = check_conventions(symbols)
+    # 3. Static convention and diff checks
+    ast_violations = check_conventions(symbols)
+    diff_violations = check_diff_conventions(raw_diff_text)
+    all_violations = ast_violations + diff_violations
+
     violations_dicts = [
         {"rule": v.rule_id, "file": v.file_path, "line": v.line, "msg": v.message, "severity": v.severity}
-        for v in violations
+        for v in all_violations
     ]
 
     # 4. Invoke Groq Worker Node for parallel file diff inspection
     worker_system = (
-        "You are an Elite Senior Security & Quality Assurance Code Inspector powered by Groq Llama-3.3-70B.\n"
+        "You are an Elite Senior Security & Quality Assurance Code Inspector powered by Groq.\n"
         "Analyze the provided Git diff line-by-line for subtle code bugs, syntax mistakes, and runtime flaws.\n\n"
         "YOU MUST CRITICALLY FLAG:\n"
         "1. Invalid Method or Property Calls: (e.g. changing `.size` to `.length()`, using `.size()` on a JS/TS array, `.length` on a Python list/set, calling non-existent methods).\n"
@@ -127,7 +133,7 @@ async def run_agentic_pr_review(
                     "suggested_fix": item.get("suggested_fix", ""),
                 })
     except Exception as e:
-        print(f"⚠️ Worker JSON parse notice: {e}")
+        logger.warning(f"Worker JSON parse notice: {e}")
 
     # 5. Invoke Google Gemini Orchestrator for RAG synthesis & architectural evaluation
     orch_prompt = build_orchestrator_prompt(
@@ -146,7 +152,7 @@ async def run_agentic_pr_review(
     suggestions: List[Suggestion] = []
 
     # Add convention violations to issues list
-    for v in violations:
+    for v in all_violations:
         structured_issues.append({
             "id": str(uuid.uuid4()),
             "title": f"[{v.rule_id}] Style & Convention Violation",
@@ -171,19 +177,19 @@ async def run_agentic_pr_review(
     base_blast_risk = blast_data.get("risk_score", 0.0)
     total_affected = blast_data.get("total_affected", 0)
 
-    issue_risk_score = 0.0
+    issue_severity_score = 0.0
     for issue in structured_issues:
         sev = str(issue.get("severity", "warning")).lower()
         if sev == "error":
-            issue_risk_score += 2.5
+            issue_severity_score += 2.0
         elif sev == "warning":
-            issue_risk_score += 1.0
+            issue_severity_score += 0.5
         else:
-            issue_risk_score += 0.5
+            issue_severity_score += 0.1
 
-    composite_risk_score = round(min(10.0, base_blast_risk + issue_risk_score), 2)
+    composite_risk_score = round(min(10.0, max(base_blast_risk, issue_severity_score)), 2)
 
-    if base_blast_risk > 3.0:
+    if base_blast_risk > 5.0:
         affected_names = [a.get("qualified_name") for a in blast_data.get("affected_symbols", [])[:3]]
         primary_file = changed_files[0] if changed_files else "codebase"
         structured_issues.append({
@@ -191,22 +197,22 @@ async def run_agentic_pr_review(
             "title": f"High Blast Radius Ripple Effect (Risk Score: {base_blast_risk})",
             "description": f"This change affects {total_affected} downstream symbols: {', '.join(affected_names)}",
             "category": "blast_radius",
-            "severity": "error" if base_blast_risk > 5.0 else "warning",
+            "severity": "error" if base_blast_risk > 7.0 else "warning",
             "file_path": primary_file,
             "line": 1,
             "suggested_fix": "Verify downstream call sites and run integration tests for affected dependencies.",
         })
 
-    # Determine verdict
+    # Determine verdict: SUGGEST if actionable issues/suggestions or high risk, else ACCEPT
     has_errors = any(i.get("severity") == "error" for i in structured_issues)
-    has_issues = len(structured_issues) > 0
-    is_high_risk = composite_risk_score > 2.5
+    has_actionable_issues = any(i.get("severity") in ("error", "warning") for i in structured_issues) or len(suggestions) > 0
+    is_high_risk = composite_risk_score > 5.0
 
-    verdict: Verdict = "SUGGEST" if (is_high_risk or has_errors or has_issues) else "ACCEPT"
+    verdict: Verdict = "SUGGEST" if (is_high_risk or has_errors or has_actionable_issues) else "ACCEPT"
 
     summary_text = (
         f"Agentic Review Verdict: {verdict}. Composite Risk Score: {composite_risk_score}/10.0. "
-        f"Detected {len(structured_issues)} issue(s) across {len(changed_files)} changed file(s)."
+        f"Detected {len(structured_issues)} item(s) across {len(changed_files)} changed file(s)."
     )
 
     decision = DecisionResult(
