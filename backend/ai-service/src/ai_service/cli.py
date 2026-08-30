@@ -157,7 +157,7 @@ def reset(repo_id: str, branch: Optional[str]):
                 where_clause = {"repo": repo_id}
                 if branch:
                     where_clause["branch"] = branch
-                vector_client.collection.delete(where=where_clause)
+                vector_client.delete(where=where_clause)
             except Exception:
                 pass
             click.echo(f"Successfully purged Knowledge Base data for repo '{repo_id}'" + (f" (branch: {branch})" if branch else ""))

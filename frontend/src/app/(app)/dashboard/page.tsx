@@ -117,7 +117,7 @@ function ProjectsContent() {
   // never from the AI service's raw index directly, so no other user's data
   // can appear here.
   const projects: ProjectRow[] = useMemo(() => {
-    return connectedRepos.map((r) => {
+    const list: ProjectRow[] = connectedRepos.map((r) => {
       const isIngested =
         indexedRepos.includes(r.name) ||
         indexedRepos.includes(r.fullName) ||
@@ -136,7 +136,46 @@ function ProjectsContent() {
         connectedRepo: r,
       } as ProjectRow;
     });
+
+    // Also surface any repositories already indexed in the Knowledge Base (Supabase / Neo4j)
+    indexedRepos.forEach((idxRepo) => {
+      const alreadyPresent = list.some(
+        (p) =>
+          p.fullName.toLowerCase() === idxRepo.toLowerCase() ||
+          p.name.toLowerCase() === idxRepo.toLowerCase() ||
+          idxRepo.toLowerCase().endsWith(`/${p.name.toLowerCase()}`) ||
+          p.fullName.toLowerCase().endsWith(`/${idxRepo.toLowerCase()}`)
+      );
+      if (!alreadyPresent) {
+        const shortName = idxRepo.includes("/") ? idxRepo.split("/")[1]! : idxRepo;
+        list.push({
+          key: `indexed-${idxRepo}`,
+          name: shortName,
+          fullName: idxRepo,
+          defaultBranch: "main",
+          isPrivate: false,
+          htmlUrl: idxRepo.includes("/") ? `https://github.com/${idxRepo}` : undefined,
+          source: idxRepo.includes("/") ? "github" : "local",
+          isIngested: true,
+          checkingIndexStatus: false,
+          connectedRepo: {
+            id: `indexed-${idxRepo}`,
+            name: shortName,
+            fullName: idxRepo,
+            htmlUrl: idxRepo.includes("/") ? `https://github.com/${idxRepo}` : "",
+            defaultBranch: "main",
+            isPrivate: false,
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          } as ConnectedRepository,
+        });
+      }
+    });
+
+    return list;
   }, [connectedRepos, indexedRepos, indexedReposLoaded]);
+
 
   const filteredProjects = projects.filter(
     (p) =>

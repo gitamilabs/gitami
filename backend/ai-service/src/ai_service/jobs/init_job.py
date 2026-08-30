@@ -74,7 +74,7 @@ async def run_init_job(
         from ai_service.graph.writer import delete_repo_data
         await delete_repo_data(client, repo_id=repo_id, branch=branch)
         try:
-            vector_client.collection.delete(where={"$and": [{"repo": repo_id}, {"branch": branch}]})
+            vector_client.delete(where={"$and": [{"repo": repo_id}, {"branch": branch}]})
         except Exception:
             pass
 

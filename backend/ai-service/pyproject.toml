@@ -21,6 +21,11 @@ dependencies = [
     "unidiff>=0.7.5",
     "fastmcp>=3.4.6",
     "fastapi>=0.141.1",
+    "openai>=1.30.0",
+    "fastembed>=0.3.0",
+    "qdrant-client>=1.9.0",
+    "pinecone>=3.0.0",
+    "supabase>=2.0.0",
 ]
 
 [project.scripts]

@@ -142,12 +142,8 @@ async def list_repositories():
     """List indexed repositories from Vector KB and Graph DB."""
     try:
         vector_client = get_shared_vector_client()
-        data = vector_client.collection.get(include=["metadatas"])
-        vector_repos = set()
-        if data and data.get("metadatas"):
-            for meta in data["metadatas"]:
-                if meta and "repo" in meta:
-                    vector_repos.add(meta["repo"])
+        vector_repos = set(vector_client.get_distinct_repos())
+        vector_count = vector_client.count()
 
         graph_repos = set()
         try:
@@ -163,11 +159,12 @@ async def list_repositories():
 
         return {
             "repos": all_repos,
-            "vector_count": vector_client.collection.count(),
+            "vector_count": vector_count,
             "graph_repos": list(graph_repos),
         }
     except Exception as e:
         return {"repos": [], "error": str(e)}
+
 
 
 @app.post("/api/ingest")

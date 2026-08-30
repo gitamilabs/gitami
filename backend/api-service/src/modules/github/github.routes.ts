@@ -429,13 +429,18 @@ githubRouter.get("/indexed-repos", authMiddleware, async (c) => {
     console.warn("Could not reach AI service for indexed repos:", err);
   }
 
-  const scoped = globalRepos.filter((name) => {
-    if (owned.has(name)) return true;
-    const shortName = name.includes("/") ? name.split("/")[1] ?? name : name;
-    return owned.has(shortName);
-  });
+  const scoped = owned.size > 0
+    ? globalRepos.filter((name) => {
+        if (owned.has(name)) return true;
+        const shortName = name.includes("/") ? name.split("/")[1] ?? name : name;
+        if (owned.has(shortName)) return true;
+        if (user?.username && name.toLowerCase().startsWith(`${user.username.toLowerCase()}/`)) return true;
+        return false;
+      })
+    : globalRepos;
 
   return c.json({ repos: scoped, vector_count: vectorCount });
+
 });
 
 /**
