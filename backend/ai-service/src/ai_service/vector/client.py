@@ -8,12 +8,17 @@ All callers (cli.py, init_job.py, pr_eval_job.py, web/app.py, mcp/server.py, etc
 continue to instantiate VectorKBClient() with no arguments — the factories handle
 backend selection transparently.
 """
+import logging
+import time
 from enum import Enum
 from typing import List, Dict, Any, Optional
 
 from ai_service.config import settings
 from ai_service.vector.embedders.factory import get_embedding_function
 from ai_service.vector.stores.factory import get_vector_store
+from ai_service.vector.splitter import split_markdown_text
+
+logger = logging.getLogger(__name__)
 
 
 class ContentType(str, Enum):
@@ -104,13 +109,13 @@ class VectorKBClient:
         }
         self._upsert(doc_id, document, metadata)
 
-    def add_code_entries_batch(self, entries: List[Dict[str, Any]]) -> None:
+    def add_code_entries_batch(self, entries: List[Dict[str, Any]]) -> Dict[str, int]:
         """
-        Batch upsert multiple code entries.
+        Batch upsert multiple code entries with per-batch resilience and retry.
         Deduplicates by unique doc_id and respects the backend's batch_size.
         """
         if not entries:
-            return
+            return {"total": 0, "successful": 0, "failed": 0}
 
         unique_map: Dict[str, tuple] = {}
         for item in entries:
@@ -143,12 +148,40 @@ class VectorKBClient:
         docs = [v[0] for v in unique_map.values()]
         metas = [v[1] for v in unique_map.values()]
 
+        successful_count = 0
+        failed_count = 0
+
         for i in range(0, len(doc_ids), self._batch_size):
-            self._store.upsert(
-                ids=doc_ids[i:i + self._batch_size],
-                documents=docs[i:i + self._batch_size],
-                metadatas=metas[i:i + self._batch_size],
-            )
+            batch_ids = doc_ids[i:i + self._batch_size]
+            batch_docs = docs[i:i + self._batch_size]
+            batch_metas = metas[i:i + self._batch_size]
+            batch_idx = (i // self._batch_size) + 1
+
+            try:
+                self._store.upsert(
+                    ids=batch_ids,
+                    documents=batch_docs,
+                    metadatas=batch_metas,
+                )
+                successful_count += len(batch_ids)
+            except Exception as e:
+                logger.warning(
+                    f"Vector upsert failed for batch {batch_idx} ({len(batch_ids)} docs): {e}. Retrying once after backoff..."
+                )
+                time.sleep(1.0)
+                try:
+                    self._store.upsert(
+                        ids=batch_ids,
+                        documents=batch_docs,
+                        metadatas=batch_metas,
+                    )
+                    successful_count += len(batch_ids)
+                    logger.info(f"Retry succeeded for batch {batch_idx}")
+                except Exception as retry_err:
+                    logger.error(f"Permanent vector upsert failure for batch {batch_idx}: {retry_err}")
+                    failed_count += len(batch_ids)
+
+        return {"total": len(doc_ids), "successful": successful_count, "failed": failed_count}
 
     def add_pr_entry(
         self,
@@ -158,17 +191,24 @@ class VectorKBClient:
         description_text: str,
         commit_hash: str,
     ) -> None:
-        """Add or update a Pull Request entry."""
-        doc_id = f"pr_{repo}_{branch}_{pr_id}"
-        metadata = {
-            "repo": repo,
-            "branch": branch,
-            "pr_id": pr_id,
-            "content_type": ContentType.PR.value,
-            "commit_hash": commit_hash,
-            "last_valid_commit": commit_hash,
-        }
-        self._upsert(doc_id, description_text, metadata)
+        """Add or update a Pull Request entry, splitting into semantic markdown chunks if large."""
+        chunks = split_markdown_text(description_text, chunk_size=800, chunk_overlap=80)
+        if not chunks:
+            chunks = [description_text]
+
+        for idx, chunk in enumerate(chunks):
+            doc_id = f"pr_{repo}_{branch}_{pr_id}" if len(chunks) == 1 else f"pr_{repo}_{branch}_{pr_id}_chunk_{idx}"
+            metadata = {
+                "repo": repo,
+                "branch": branch,
+                "pr_id": pr_id,
+                "content_type": ContentType.PR.value,
+                "commit_hash": commit_hash,
+                "last_valid_commit": commit_hash,
+                "chunk_index": idx,
+                "total_chunks": len(chunks),
+            }
+            self._upsert(doc_id, chunk, metadata)
 
     def add_commit_entry(
         self,
@@ -177,16 +217,23 @@ class VectorKBClient:
         commit_hash: str,
         commit_message: str,
     ) -> None:
-        """Add a commit message entry."""
-        doc_id = f"commit_{repo}_{branch}_{commit_hash}"
-        metadata = {
-            "repo": repo,
-            "branch": branch,
-            "content_type": ContentType.COMMIT.value,
-            "commit_hash": commit_hash,
-            "last_valid_commit": commit_hash,
-        }
-        self._upsert(doc_id, commit_message, metadata)
+        """Add a commit message entry, chunking if message is extensive."""
+        chunks = split_markdown_text(commit_message, chunk_size=800, chunk_overlap=80)
+        if not chunks:
+            chunks = [commit_message]
+
+        for idx, chunk in enumerate(chunks):
+            doc_id = f"commit_{repo}_{branch}_{commit_hash}" if len(chunks) == 1 else f"commit_{repo}_{branch}_{commit_hash}_chunk_{idx}"
+            metadata = {
+                "repo": repo,
+                "branch": branch,
+                "content_type": ContentType.COMMIT.value,
+                "commit_hash": commit_hash,
+                "last_valid_commit": commit_hash,
+                "chunk_index": idx,
+                "total_chunks": len(chunks),
+            }
+            self._upsert(doc_id, chunk, metadata)
 
     def add_issue_entry(
         self,
@@ -194,14 +241,21 @@ class VectorKBClient:
         issue_id: str,
         issue_text: str,
     ) -> None:
-        """Add or update an Issue entry."""
-        doc_id = f"issue_{repo}_{issue_id}"
-        metadata = {
-            "repo": repo,
-            "issue_id": issue_id,
-            "content_type": ContentType.ISSUE.value,
-        }
-        self._upsert(doc_id, issue_text, metadata)
+        """Add or update an Issue entry, chunking long issue descriptions semantically."""
+        chunks = split_markdown_text(issue_text, chunk_size=800, chunk_overlap=80)
+        if not chunks:
+            chunks = [issue_text]
+
+        for idx, chunk in enumerate(chunks):
+            doc_id = f"issue_{repo}_{issue_id}" if len(chunks) == 1 else f"issue_{repo}_{issue_id}_chunk_{idx}"
+            metadata = {
+                "repo": repo,
+                "issue_id": issue_id,
+                "content_type": ContentType.ISSUE.value,
+                "chunk_index": idx,
+                "total_chunks": len(chunks),
+            }
+            self._upsert(doc_id, chunk, metadata)
 
     # ── Lifecycle methods ──────────────────────────────────────────────────────
 

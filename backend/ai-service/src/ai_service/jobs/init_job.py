@@ -9,6 +9,8 @@ from ai_service.graph.client import Neo4jClient
 from ai_service.graph.schema import ensure_schema
 from ai_service.graph.writer import upsert_symbols, upsert_call_edges, upsert_import_edges
 from ai_service.vector.client import VectorKBClient
+from ai_service.vector.cache import VectorCacheManager
+from ai_service.vector.cleaner import clean_code_symbol, filter_repetitive_boilerplate
 from ai_service.parsing.parser import CodeParser
 
 logger = logging.getLogger(__name__)
@@ -46,8 +48,12 @@ async def run_init_job(
     parse_results: Optional[List[ParseResult]] = None,
     client: Optional[Neo4jClient] = None,
     vector_client: Optional[VectorKBClient] = None,
+    extraction_mode: str = "fast",
 ) -> InitResult:
-    """Flow 1 — Repository Initialization job: parse AST and ingest dual Knowledge Base into Neo4j and ChromaDB."""
+    """Flow 1 — Repository Initialization job: parse AST and ingest dual Knowledge Base into Neo4j and Vector KB.
+    
+    Includes commit-hash caching, tiered chunk cleaning, and boilerplate deduplication.
+    """
     start_time = time.time()
 
     commit_hash = branch or "HEAD"
@@ -59,6 +65,24 @@ async def run_init_job(
             repo.close()
         except Exception as e:
             logger.warning(f"Could not extract HEAD commit hash from repo_dir '{repo_dir}': {e}")
+
+    # Check Vector Store Cache before doing expensive ingestion
+    cache_mgr = VectorCacheManager()
+    cached_manifest = cache_mgr.is_cached(
+        repo_id=repo_id,
+        branch=branch,
+        commit_hash=commit_hash,
+        extraction_mode=extraction_mode,
+        min_entries=5,
+    )
+    if cached_manifest:
+        return InitResult(
+            status="CACHED",
+            symbols_count=cached_manifest.get("symbols_count", 0),
+            edges_count=cached_manifest.get("edges_count", 0),
+            vector_entries_count=cached_manifest.get("vector_entries_count", 0),
+            duration_seconds=0.01,
+        )
 
     if client is None:
         client = Neo4jClient()
@@ -84,7 +108,6 @@ async def run_init_job(
             parser = CodeParser()
             parse_results = parser.parse_directory(Path(repo_dir))
 
-
         total_symbols = 0
         total_edges = 0
         total_vector_entries = 0
@@ -100,16 +123,24 @@ async def run_init_job(
             total_symbols += len(pr.symbols)
 
             if pr.symbols:
-                for sym in pr.symbols:
+                # Apply repetitive pattern detection and boilerplate deduplication
+                filtered_symbols = filter_repetitive_boilerplate(pr.symbols)
+
+                for sym in filtered_symbols:
+                    # Apply smart chunk cleaning and script-aware filtering
+                    cleaned_sym = clean_code_symbol(sym)
+                    if cleaned_sym is None:
+                        continue
+
                     vector_entries.append({
                         "repo": repo_id,
                         "branch": branch,
-                        "file_path": sym.file_path,
-                        "symbol": sym.name,
-                        "start_line": sym.start_line,
-                        "signature": sym.signature,
-                        "description": sym.docstring or f"Symbol {sym.name} ({sym.kind}) in {sym.file_path}",
-                        "code_body": sym.code_body,
+                        "file_path": cleaned_sym.file_path,
+                        "symbol": cleaned_sym.name,
+                        "start_line": cleaned_sym.start_line,
+                        "signature": cleaned_sym.signature,
+                        "description": cleaned_sym.docstring or f"Symbol {cleaned_sym.name} ({cleaned_sym.kind}) in {cleaned_sym.file_path}",
+                        "code_body": cleaned_sym.code_body,
                         "commit_hash": commit_hash,
                     })
             else:
@@ -131,9 +162,10 @@ async def run_init_job(
             i_count = await upsert_import_edges(client, repo_id=repo_id, branch=branch, imports=pr.imports)
             total_edges += (c_count + i_count)
 
-        # Dual-write into Vector KB in batch
+        # Dual-write into Vector KB in batch with resilience
         if vector_entries:
-            vector_client.add_code_entries_batch(vector_entries)
+            batch_res = vector_client.add_code_entries_batch(vector_entries)
+            logger.info(f"Vector batch upsert completed: {batch_res}")
         total_vector_entries = len(vector_entries)
 
         # Run import resolution pass to connect relative imports to actual File and Symbol nodes
@@ -141,6 +173,21 @@ async def run_init_job(
         await resolve_repo_imports(client, repo_id=repo_id, branch=branch)
 
         duration = round(time.time() - start_time, 3)
+
+        # Save cache manifest for future fast lookups
+        cache_mgr.save_manifest(
+            repo_id=repo_id,
+            branch=branch,
+            commit_hash=commit_hash,
+            extraction_mode=extraction_mode,
+            manifest_data={
+                "symbols_count": total_symbols,
+                "edges_count": total_edges,
+                "vector_entries_count": total_vector_entries,
+                "duration_seconds": duration,
+            },
+        )
+
         return InitResult(
             status="SUCCESS",
             symbols_count=total_symbols,
