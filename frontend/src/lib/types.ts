@@ -101,6 +101,41 @@ export interface IngestRepoResult {
 }
 
 
+export interface AIServiceConfig {
+  vector_db: string;
+  embedder: string;
+  models: {
+    gemini_models: string[];
+    groq_models: string[];
+    primary_orchestrator: string;
+    worker_model: string;
+  };
+  storage: {
+    qdrant_collection?: string;
+    pinecone_index?: string;
+    supabase_table?: string;
+    chroma_persist_dir?: string;
+  };
+}
+
+export interface PromptInfo {
+  key: string;
+  title: string;
+  description: string;
+  prompt: string;
+  default_prompt: string;
+  is_customized: boolean;
+}
+
+export interface PromptsResponse {
+  prompts: PromptInfo[];
+}
+
+export interface PromptUpdateResponse {
+  status: string;
+  prompt: PromptInfo;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;

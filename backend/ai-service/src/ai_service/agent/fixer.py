@@ -101,16 +101,8 @@ async def run_autonomous_pr_fixer(
         )
 
     # Step 1: Gemini Orchestrator Fix Planner (Surgical Mode)
-    orchestrator_system = (
-        "You are a Senior Software Engineer planning MINIMAL, SURGICAL code fixes.\n"
-        "Your job is to identify the EXACT lines that need to change and describe the fix precisely.\n\n"
-        "CRITICAL RULES:\n"
-        "1. ONLY fix the specific bugs/issues reported. Do NOT refactor, restructure, or 'improve' unrelated code.\n"
-        "2. Identify the exact line numbers that need changes.\n"
-        "3. Preserve ALL existing code, comments, docstrings, formatting, and imports that are unrelated to the fix.\n"
-        "4. Each fix should typically change 1-5 lines, not entire functions or files.\n"
-        "5. Output a clear, numbered list of specific line edits."
-    )
+    from ai_service.prompts import get_prompt
+    orchestrator_system = get_prompt("fixer_orchestrator")
     orchestrator_prompt = (
         f"Repository: {repo_id} (PR #{pr_number}, Branch: {base_branch})\n\n"
         f"REPORTED ISSUES TO FIX:\n{issues_text}\n"
@@ -126,22 +118,7 @@ async def run_autonomous_pr_fixer(
     plan_rationale = await llm_client.run_orchestrator(orchestrator_prompt, orchestrator_system)
 
     # Step 2: Groq Worker Surgical Patch Generator
-    worker_system = (
-        "You are an autonomous code fix worker. You apply SURGICAL, MINIMAL patches to existing source files.\n\n"
-        "ABSOLUTE RULES — VIOLATION IS UNACCEPTABLE:\n"
-        "1. You MUST output the COMPLETE file contents — every single line of the original file.\n"
-        "2. You may ONLY change the specific lines identified in the fix plan. ALL other lines MUST remain EXACTLY as they are.\n"
-        "3. Do NOT remove, reorder, refactor, simplify, or 'clean up' any code that is not directly related to the fix.\n"
-        "4. Do NOT remove comments, docstrings, blank lines, imports, or any other existing code.\n"
-        "5. Do NOT change variable names, function signatures, class definitions, or formatting unless the fix specifically requires it.\n"
-        "6. The output file should be IDENTICAL to the input file EXCEPT for the 1-5 lines that fix the reported issue.\n"
-        "7. If the original file has 139 lines, your output MUST have approximately 139 lines (± the lines added/removed by the fix).\n\n"
-        "FORMAT: For each modified file, wrap the COMPLETE file code inside:\n"
-        "<<<FILE: path/to/file.ext>>>\n"
-        "(complete file with surgical fix applied)\n"
-        "<<<ENDFILE>>>\n\n"
-        "THINK OF IT AS: Copy-paste the entire original file, then change ONLY the broken line(s)."
-    )
+    worker_system = get_prompt("fixer_worker")
 
     # Build per-file worker prompts
     file_fixes: List[FixFileResult] = []

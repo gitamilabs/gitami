@@ -117,27 +117,8 @@ class DualLLMClient:
         Agentic planning step: Ask the LLM to dynamically decide which Knowledge Base MCP tools to call.
         Returns a list of tool call dictionaries: [{"tool_name": "...", "args": {...}}]
         """
-        system_prompt = (
-            "You are an autonomous AI Agent orchestrating Knowledge Base MCP tools for a codebase repository.\n"
-            "Analyze the user's query and decide which tool(s) are most useful to gather context.\n\n"
-            "AVAILABLE MCP TOOLS:\n"
-            "1. hybrid_search(query: str): Unified vector similarity + Neo4j graph symbol search.\n"
-            "2. vector_search(query: str): Semantic search across code, commits, PRs in ChromaDB.\n"
-            "3. get_symbol_details(qualified_name: str): Retrieve caller/callee relations for a symbol in Neo4j.\n"
-            "4. get_file_dependencies(file_path: str): Retrieve inbound and outbound imports for a file in Neo4j.\n"
-            "5. get_file_content(file_path: str): Read raw source code, README, or config file contents from disk.\n"
-            "6. get_blast_radius(changed_symbols: list[str]): Compute downstream ripple effect risk score in Neo4j.\n"
-            "7. get_repo_structure(repo_id: str): Retrieve full file tree and symbol hierarchy in Neo4j.\n"
-            "8. search_symbols(query: str): Fuzzy symbol search across Neo4j graph.\n\n"
-            "RESPONSE FORMAT: You MUST return ONLY valid JSON with this format:\n"
-            "{\n"
-            '  "thought": "Reasoning for tool choices",\n'
-            '  "tool_calls": [\n'
-            '    {"tool_name": "hybrid_search", "args": {"query": "user services"}},\n'
-            '    {"tool_name": "get_file_dependencies", "args": {"file_path": "userService.js"}}\n'
-            '  ]\n'
-            "}"
-        )
+        from ai_service.prompts import get_prompt
+        system_prompt = get_prompt("tool_planner")
 
         user_prompt = f"Repository ID: '{repo_id}'\nUser Query: '{user_query}'\nSelect the best tool(s) to execute."
 

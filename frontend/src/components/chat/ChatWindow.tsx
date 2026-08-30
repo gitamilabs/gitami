@@ -28,11 +28,17 @@ export const ChatWindow: React.FC = () => {
     stopStreaming,
     clearMessages,
     error,
+    aiConfig,
+    fetchAIConfig,
   } = useChatStore();
 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    fetchAIConfig();
+  }, [fetchAIConfig]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -58,6 +64,14 @@ export const ChatWindow: React.FC = () => {
     }
   };
 
+  const modelLabel = aiConfig
+    ? `${aiConfig.models.primary_orchestrator} + ${aiConfig.models.worker_model}`
+    : "Gemini 2.0 Flash + Groq 70B";
+
+  const vectorDbLabel = aiConfig?.vector_db
+    ? aiConfig.vector_db.replace("_", " ").toUpperCase()
+    : "Vector DB";
+
   const starterCategories = [
     {
       category: "Blast Radius & Ripple Risk",
@@ -79,7 +93,7 @@ export const ChatWindow: React.FC = () => {
       category: "Vector KB & Architecture",
       icon: <Database className="w-3.5 h-3.5 text-cyan-400" />,
       prompts: [
-        "How does the dual-KB (Neo4j AST + ChromaDB vector embeddings) architecture work?",
+        `How does the dual-KB (Neo4j AST + ${vectorDbLabel} vector embeddings) architecture work?`,
         "Explain how the FastMCP server tools interface with the ReAct agent loop",
       ],
     },
@@ -95,8 +109,8 @@ export const ChatWindow: React.FC = () => {
 
         <div className="flex items-center gap-2.5">
           <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
-            <span>Gemini 2.0 Flash + Groq 70B</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+            <span className="truncate max-w-[320px]" title={modelLabel}>{modelLabel}</span>
           </div>
 
           <Button
@@ -226,7 +240,7 @@ export const ChatWindow: React.FC = () => {
             <kbd className="bg-slate-800/80 px-1.5 py-0.5 rounded text-[10px] text-slate-400">Shift+Enter</kbd> for newline
           </span>
           <span className="hidden sm:inline-block">
-            FastMCP • Tree-sitter AST • Neo4j • ChromaDB
+            FastMCP • Tree-sitter AST • Neo4j • {vectorDbLabel}
           </span>
         </div>
       </div>

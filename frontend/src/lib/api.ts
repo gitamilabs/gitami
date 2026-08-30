@@ -14,6 +14,10 @@ import {
   PRReviewData,
   PRIssueItem,
   ConnectedRepository,
+  AIServiceConfig,
+  PromptInfo,
+  PromptsResponse,
+  PromptUpdateResponse,
 } from "./types";
 
 const API_BASE_URL =
@@ -237,6 +241,63 @@ export const aiApi = {
     const res = await fetch(`${AI_SERVICE_BASE_URL}/api/health`);
     if (!res.ok) {
       throw new Error(`AI Service health check failed (${res.status})`);
+    }
+    return res.json();
+  },
+
+  getConfig: async (): Promise<AIServiceConfig> => {
+    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/config`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || "Failed to fetch AI service configuration");
+    }
+    return res.json();
+  },
+
+  listPrompts: async (): Promise<PromptsResponse> => {
+    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/prompts`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || "Failed to fetch AI system prompts");
+    }
+    return res.json();
+  },
+
+  getPrompt: async (key: string): Promise<PromptInfo> => {
+    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/prompts/${key}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || `Failed to fetch prompt '${key}'`);
+    }
+    return res.json();
+  },
+
+  updatePrompt: async (key: string, text: string): Promise<PromptUpdateResponse> => {
+    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/prompts/${key}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || `Failed to update prompt '${key}'`);
+    }
+    return res.json();
+  },
+
+  resetPrompt: async (key: string): Promise<PromptUpdateResponse> => {
+    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/prompts/${key}/reset`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || `Failed to reset prompt '${key}'`);
     }
     return res.json();
   },

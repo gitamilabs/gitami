@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Citation, ToolStep, SSEEvent } from "../lib/types";
+import { Citation, ToolStep, SSEEvent, AIServiceConfig } from "../lib/types";
 import { aiApi } from "../lib/api";
 
 export interface DisplayMessage {
@@ -26,15 +26,16 @@ interface ChatState {
   currentLatency: number;
   error: string | null;
   abortController: AbortController | null;
+  aiConfig: AIServiceConfig | null;
 
   setSelectedRepo: (repo: string) => void;
   setSelectedBranch: (branch: string) => void;
   clearMessages: () => void;
   sendMessage: (text: string) => Promise<void>;
   stopStreaming: () => void;
+  fetchAIConfig: () => Promise<void>;
 }
 
-//hardcoded repo selection and such # needs to be fixed
 export const useChatStore = create<ChatState>((set, get) => ({
   selectedRepo: "",
   selectedBranch: "main",
@@ -43,7 +44,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       id: "welcome-msg",
       role: "assistant",
       content:
-        "Hello! I am your **Sentinel Autonomous Codebase Intelligence Assistant**. I can trace functions across repositories, run AST call graph traversals in Neo4j, calculate ripple blast radius, and retrieve semantic vector passages from ChromaDB. Ask me anything about your codebase!",
+        "Hello! I am your **Sentinel Autonomous Codebase Intelligence Assistant**. I can trace functions across repositories, run AST call graph traversals in Neo4j, calculate ripple blast radius, and retrieve semantic vector passages. Ask me anything about your codebase!",
       timestamp: new Date().toISOString(),
     },
   ],
@@ -55,6 +56,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   currentLatency: 0,
   error: null,
   abortController: null,
+  aiConfig: null,
+
+  fetchAIConfig: async () => {
+    try {
+      const cfg = await aiApi.getConfig();
+      set({ aiConfig: cfg });
+    } catch (e) {
+      console.warn("Could not fetch AI service config:", e);
+    }
+  },
 
   setSelectedRepo: (repo: string) => set({ selectedRepo: repo }),
   setSelectedBranch: (branch: string) => set({ selectedBranch: branch }),

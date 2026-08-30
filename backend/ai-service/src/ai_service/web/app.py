@@ -132,10 +132,76 @@ class IngestRequest(BaseModel):
     extraction_mode: Optional[str] = "fast"
 
 
+class PromptUpdateRequest(BaseModel):
+    text: str
+
+
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok", "service": "ai-service-kb"}
+
+
+@app.get("/api/config")
+async def get_system_config():
+    """Get active system configuration including Vector DB, Embedder, and Model lists."""
+    from ai_service.config import settings
+    from ai_service.agent.llm_client import GEMINI_MODELS, GROQ_MODELS
+    return {
+        "vector_db": settings.vector_db,
+        "embedder": settings.embedder,
+        "models": {
+            "gemini_models": GEMINI_MODELS,
+            "groq_models": GROQ_MODELS,
+            "primary_orchestrator": GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-3.6-flash",
+            "worker_model": GROQ_MODELS[0] if GROQ_MODELS else "openai/gpt-oss-120b",
+        },
+        "storage": {
+            "qdrant_collection": settings.qdrant_collection,
+            "pinecone_index": settings.pinecone_index,
+            "supabase_table": settings.supabase_table,
+            "chroma_persist_dir": settings.chroma_persist_dir,
+        },
+    }
+
+
+@app.get("/api/prompts")
+async def list_all_prompts():
+    """List all AI system prompts with descriptions, current text, and customization status."""
+    from ai_service.prompts import list_prompts
+    return {"prompts": list_prompts()}
+
+
+@app.get("/api/prompts/{key}")
+async def get_single_prompt(key: str):
+    """Get full details of a specific AI system prompt."""
+    from ai_service.prompts import get_prompt_info
+    info = get_prompt_info(key)
+    if not info:
+        raise HTTPException(status_code=404, detail=f"Prompt '{key}' not found.")
+    return info
+
+
+@app.put("/api/prompts/{key}")
+async def update_single_prompt(key: str, body: PromptUpdateRequest):
+    """Update and persist an AI system prompt."""
+    from ai_service.prompts import update_prompt
+    if not body.text or not body.text.strip():
+        raise HTTPException(status_code=400, detail="Prompt text cannot be empty.")
+    result = update_prompt(key, body.text)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Prompt '{key}' not found or could not be updated.")
+    return {"status": "success", "prompt": result}
+
+
+@app.post("/api/prompts/{key}/reset")
+async def reset_single_prompt(key: str):
+    """Reset an AI system prompt to its default original text."""
+    from ai_service.prompts import reset_prompt
+    result = reset_prompt(key)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Prompt '{key}' not found or could not be reset.")
+    return {"status": "success", "prompt": result}
 
 
 @app.get("/api/repos")
@@ -432,12 +498,8 @@ async def _compress_retrieved_context(
     if len(raw_context) < 1500:
         return raw_context
 
-    compress_system_prompt = (
-        "You are an expert context compression model for a codebase RAG pipeline. "
-        "Summarize and condense the retrieved code and graph passages to extract only the facts relevant to the user query. "
-        "CRITICAL RULE: You MUST strictly preserve all bracketed citation references (e.g. [1], [2]) and file paths associated with each fact. "
-        "Keep the summary dense, technical, and under 500 words."
-    )
+    from ai_service.prompts import get_prompt
+    compress_system_prompt = get_prompt("context_compressor")
     compress_prompt = (
         f"User Query: {user_query}\n\n"
         f"Retrieved Code & Graph Context to Compress:\n{raw_context[:4000]}"
@@ -536,12 +598,8 @@ async def agent_chat_query(req: ChatRequest):
     # Step 4: LLM Synthesis with Gemini / Groq Orchestrator
     t_synth_start = time.perf_counter()
 
-    system_prompt = (
-        "You are an expert Codebase AI Assistant for a software repository Knowledge Base. "
-        "Answer the user's question accurately using the provided code snippets and knowledge graph tool output context. "
-        "IMPORTANT: You MUST cite your sources in your answer using bracketed numbers like [1], [2] matching the provided reference IDs. "
-        "Format your answer cleanly with Markdown, including clear headings, bullet points, and code blocks where appropriate."
-    )
+    from ai_service.prompts import get_prompt
+    system_prompt = get_prompt("chat_synthesis")
 
     prompt = (
         f"Repository: {req.repo_id} (branch: {req.branch or 'main'})\n"

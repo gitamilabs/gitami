@@ -3,7 +3,7 @@ import json
 import logging
 import asyncio
 from typing import AsyncGenerator, List, Dict, Any, Optional
-from ai_service.agent.prompts import REACT_AGENT_SYSTEM_PROMPT
+from ai_service.prompts import get_prompt
 from ai_service.agent.llm_client import DualLLMClient
 from ai_service.mcp.tools import execute_tool_by_name
 
@@ -88,7 +88,10 @@ class AutonomousAgentLoop:
             # Call LLM for reasoning turn
             llm_response_text = ""
             try:
-                llm_response_text = await self._call_llm_json(prompt=prompt, system_prompt=REACT_AGENT_SYSTEM_PROMPT)
+                llm_response_text = await self._call_llm_json(
+                    prompt=prompt,
+                    system_prompt=get_prompt("react_agent"),
+                )
             except Exception as e:
                 logger.warning(f"LLM reasoning turn error: {e}")
                 yield format_sse({
@@ -205,7 +208,7 @@ class AutonomousAgentLoop:
         )
         final_answer = await self.llm_client.run_orchestrator(
             prompt=synth_prompt,
-            system_prompt="Synthesize an accurate codebase answer using bracketed citations [1], [2].",
+            system_prompt=get_prompt("chat_synthesis", "Synthesize an accurate codebase answer using bracketed citations [1], [2]."),
         )
         yield format_sse({"type": "answer_delta", "delta": final_answer})
         yield format_sse({"type": "citations", "citations": citations})

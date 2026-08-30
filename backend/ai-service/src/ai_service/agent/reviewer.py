@@ -13,9 +13,8 @@ from ai_service.analysis.conventions import check_conventions, check_diff_conven
 from ai_service.analysis.decision import DecisionResult, Verdict, Suggestion
 from ai_service.agent.diff_parser import parse_git_diff, extract_changed_symbols, DiffHunk
 from ai_service.agent.llm_client import DualLLMClient
+from ai_service.prompts import get_prompt
 from ai_service.agent.prompts import (
-    SYSTEM_ORCHESTRATOR_PROMPT,
-    SYSTEM_WORKER_PROMPT,
     build_orchestrator_prompt,
 )
 
@@ -74,31 +73,7 @@ async def run_agentic_pr_review(
     ]
 
     # 4. Invoke Groq Worker Node for parallel file diff inspection
-    worker_system = (
-        "You are an Elite Senior Security & Quality Assurance Code Inspector powered by Groq.\n"
-        "Analyze the provided Git diff line-by-line for subtle code bugs, syntax mistakes, and runtime flaws.\n\n"
-        "YOU MUST CRITICALLY FLAG:\n"
-        "1. Invalid Method or Property Calls: (e.g. changing `.size` to `.length()`, using `.size()` on a JS/TS array, `.length` on a Python list/set, calling non-existent methods).\n"
-        "2. Renamed Functions / Variable Mismatches: (e.g. changing a function name or variable identifier without updating all call sites or calling wrong name).\n"
-        "3. Incorrect Signatures & Arguments: (passing wrong parameters, missing required arguments).\n"
-        "4. Logical Errors & Runtime Crashes: (null pointer / undefined access, type error, off-by-one error, bad boundary condition).\n"
-        "5. Security Vulnerabilities & Misconfigurations.\n\n"
-        "DO NOT BE OVERLY PASSIVE OR OVERLOOK CODE FLAWS. Inspect every single added and deleted line carefully.\n"
-        "Output ONLY valid JSON strictly adhering to this schema:\n"
-        "{\n"
-        '  "issues": [\n'
-        '    {\n'
-        '      "title": "Short descriptive bug title",\n'
-        '      "description": "Exact detailed explanation of why this code change will fail or cause runtime errors",\n'
-        '      "category": "bug" | "security" | "logical_error" | "performance",\n'
-        '      "severity": "error" | "warning" | "info",\n'
-        '      "file_path": "path/to/file.ext",\n'
-        '      "line": 42,\n'
-        '      "suggested_fix": "Recommended fix code replacement"\n'
-        "    }\n"
-        "  ]\n"
-        "}"
-    )
+    worker_system = get_prompt("pr_reviewer_worker")
 
     worker_prompt = (
         f"Target Repo: '{repo_id}' (branch: '{branch}')\n"
@@ -146,7 +121,7 @@ async def run_agentic_pr_review(
         convention_violations=violations_dicts,
         semantic_context=semantic_json,
     )
-    orchestrator_response = await llm_client.run_orchestrator(orch_prompt, SYSTEM_ORCHESTRATOR_PROMPT)
+    orchestrator_response = await llm_client.run_orchestrator(orch_prompt, get_prompt("pr_orchestrator"))
 
     # 6. Formulate final suggestions and decision verdict
     suggestions: List[Suggestion] = []
