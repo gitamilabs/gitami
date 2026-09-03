@@ -18,7 +18,10 @@ import {
   Share2,
   Database,
   Terminal,
+  FileText,
+  Loader2,
 } from "lucide-react";
+import { aiApi } from "../../lib/api";
 
 export const ChatWindow: React.FC = () => {
   const {
@@ -30,7 +33,12 @@ export const ChatWindow: React.FC = () => {
     error,
     aiConfig,
     fetchAIConfig,
+    selectedRepo,
+    selectedBranch,
+    addAssistantMessage,
   } = useChatStore();
+
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -61,6 +69,20 @@ export const ChatWindow: React.FC = () => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    if (!selectedRepo) return;
+    setIsGeneratingReport(true);
+    try {
+      addAssistantMessage("Generating Graphify Architecture Report...");
+      const res = await aiApi.getGraphReport(selectedRepo, selectedBranch);
+      addAssistantMessage(res.report_markdown);
+    } catch (err: any) {
+      addAssistantMessage(`Error generating report: ${err.message}`);
+    } finally {
+      setIsGeneratingReport(false);
     }
   };
 
@@ -122,6 +144,24 @@ export const ChatWindow: React.FC = () => {
             title="Clear Chat History"
           >
             Clear
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleGenerateReport}
+            disabled={!selectedRepo || isGeneratingReport}
+            leftIcon={
+              isGeneratingReport ? (
+                <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+              ) : (
+                <FileText className="w-3.5 h-3.5 text-indigo-400" />
+              )
+            }
+            className="text-xs text-indigo-200 hover:text-white hover:bg-indigo-500/20 rounded-xl border border-indigo-500/20"
+            title="Generate Graphify Report"
+          >
+            Graph Report
           </Button>
         </div>
       </div>

@@ -883,4 +883,55 @@ async def generic_github_webhook(request: Request):
         return {"received": True, "error": str(e)}
 
 
+@app.get("/api/graph-report/{repo_id:path}")
+async def get_graph_report(repo_id: str, branch: str = "main"):
+    """
+    Generates and returns the Graphify architectural report (GRAPH_REPORT.md).
+    Runs community clustering, god node detection, and import cycle analysis.
+    """
+    graph_client = Neo4jClient()
+    try:
+        await graph_client.connect()
+        from ai_service.graph.reader import get_entire_graph
+        from ai_service.analysis.graph_analysis import (
+            build_networkx_graph, cluster_graph, find_god_nodes, 
+            find_surprising_connections, find_import_cycles
+        )
+        from ai_service.analysis.report import generate_graph_report
+        import tempfile
+        
+        graph_data = await get_entire_graph(graph_client, repo_id=repo_id, branch=branch)
+        G = build_networkx_graph(graph_data)
+        
+        communities = cluster_graph(G)
+        god_nodes = find_god_nodes(G)
+        surprising = find_surprising_connections(G, communities)
+        cycles = find_import_cycles(G)
+        
+        tmp_dir = Path(tempfile.gettempdir()) / "graphify_reports" / repo_id.replace("/", "_")
+        md_path = generate_graph_report(
+            repo_id=repo_id,
+            nodes=graph_data["nodes"],
+            edges=graph_data["edges"],
+            communities=communities,
+            god_nodes=god_nodes,
+            surprising=surprising,
+            cycles=cycles,
+            out_dir=tmp_dir
+        )
+        
+        if md_path.exists():
+            with open(md_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            return {"status": "success", "repo_id": repo_id, "report_markdown": content}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to generate report file.")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            await graph_client.close()
+        except Exception:
+            pass
 

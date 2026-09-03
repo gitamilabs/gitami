@@ -32,6 +32,7 @@ interface ChatState {
   setSelectedBranch: (branch: string) => void;
   clearMessages: () => void;
   sendMessage: (text: string) => Promise<void>;
+  addAssistantMessage: (content: string) => void;
   stopStreaming: () => void;
   fetchAIConfig: () => Promise<void>;
 }
@@ -79,6 +80,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeAnswerDelta: "",
       error: null,
     }),
+
+  addAssistantMessage: (content: string) => {
+    const newMsg: DisplayMessage = {
+      id: `assistant-${Date.now()}`,
+      role: "assistant",
+      content: content,
+      timestamp: new Date().toISOString(),
+      isStreaming: false,
+    };
+    set((state) => ({ messages: [...state.messages, newMsg] }));
+  },
 
   stopStreaming: () => {
     const { abortController } = get();

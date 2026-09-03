@@ -408,6 +408,15 @@ export const aiApi = {
       }
     }
   },
+
+  getGraphReport: async (repoId: string, branch: string = "main"): Promise<{ status: string; repo_id: string; report_markdown: string }> => {
+    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/graph-report/${encodeURIComponent(repoId)}?branch=${encodeURIComponent(branch)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.error || "Failed to generate graph report");
+    }
+    return res.json();
+  },
 };
 
 // ==========================================

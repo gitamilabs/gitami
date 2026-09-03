@@ -167,5 +167,54 @@ def reset(repo_id: str, branch: Optional[str]):
     asyncio.run(_run())
 
 
+@main.command()
+@click.option("--repo-id", required=True, help="Target repository ID to analyze.")
+@click.option("--branch", default="main", help="Target branch name.")
+@click.option("--out-dir", default="graphify-out", help="Output directory for the reports.")
+def analyze(repo_id: str, branch: str, out_dir: str):
+    """Run Graphify architectural analysis (God nodes, communities, cycles) and generate report."""
+    async def _run():
+        graph_client = Neo4jClient()
+        await graph_client.connect()
+        try:
+            from ai_service.graph.reader import get_entire_graph
+            from ai_service.analysis.graph_analysis import (
+                build_networkx_graph, cluster_graph, find_god_nodes, 
+                find_surprising_connections, find_import_cycles
+            )
+            from ai_service.analysis.report import generate_graph_report
+            
+            click.echo(f"Fetching graph from Neo4j for {repo_id}...")
+            graph_data = await get_entire_graph(graph_client, repo_id=repo_id, branch=branch)
+            click.echo(f"Building NetworkX graph with {len(graph_data['nodes'])} nodes and {len(graph_data['edges'])} edges...")
+            G = build_networkx_graph(graph_data)
+            
+            click.echo("Running Louvain community detection...")
+            communities = cluster_graph(G)
+            click.echo("Detecting God Nodes...")
+            god_nodes = find_god_nodes(G)
+            click.echo("Finding surprising connections...")
+            surprising = find_surprising_connections(G, communities)
+            click.echo("Finding import cycles...")
+            cycles = find_import_cycles(G)
+            
+            click.echo(f"Generating report in {out_dir}...")
+            md_path = generate_graph_report(
+                repo_id=repo_id,
+                nodes=graph_data["nodes"],
+                edges=graph_data["edges"],
+                communities=communities,
+                god_nodes=god_nodes,
+                surprising=surprising,
+                cycles=cycles,
+                out_dir=out_dir
+            )
+            click.echo(f"Successfully generated architectural report at: {md_path.resolve()}")
+            
+        finally:
+            await graph_client.close()
+
+    asyncio.run(_run())
+
 if __name__ == "__main__":
     main()
