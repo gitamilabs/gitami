@@ -9,6 +9,7 @@ import { AddProjectModal } from "../../../components/repositories/AddProjectModa
 import { IngestModal } from "../../../components/repositories/IngestModal";
 import { githubApi } from "../../../lib/api";
 import { ConnectedRepository } from "../../../lib/types";
+import { ProjectsSkeleton } from "../../../components/ui/PageSkeletons";
 import {
   Search,
   Plus,
@@ -505,7 +506,7 @@ function ProjectCard({ project }: { project: ProjectRow }) {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center font-mono text-xs text-zinc-500">Loading Projects...</div>}>
+    <Suspense fallback={<ProjectsSkeleton />}>
       <ProjectsContent />
     </Suspense>
   );

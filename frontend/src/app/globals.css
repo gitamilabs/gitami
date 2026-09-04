@@ -304,3 +304,48 @@
 .prose-custom tr:nth-child(even) td {
   background: rgba(255, 255, 255, 0.02);
 }
+
+/* ==========================================================================
+   Global Animations & Loaders
+   ========================================================================== */
+
+@keyframes sentinel-pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.3;
+  }
+}
+
+@keyframes sentinel-scan {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+.animate-sentinel-ring {
+  animation: sentinel-pulse-ring 2.4s ease-in-out infinite;
+}
+
+.animate-sentinel-scan {
+  animation: sentinel-scan 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Top Route Progress Bar Glow */
+.route-progress-bar {
+  background: linear-gradient(90deg, #6366f1 0%, #38bdf8 50%, #818cf8 100%);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.75), 0 0 4px rgba(56, 189, 248, 0.9);
+}

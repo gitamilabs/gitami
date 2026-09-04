@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "../components/layout/Navbar";
+import { RouteProgressBar } from "../components/ui/RouteProgressBar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,6 +37,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} dark`}
     >
       <body className="min-h-screen bg-black text-zinc-100 antialiased selection:bg-zinc-800 selection:text-white font-sans">
+        <RouteProgressBar />
         <div className="fixed inset-0 bg-dot-grid pointer-events-none opacity-40 -z-10" />
         <Navbar />
         <main>{children}</main>

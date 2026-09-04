@@ -4,6 +4,7 @@ import React, { useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChatWindow } from "../../../components/chat/ChatWindow";
 import { useChatStore } from "../../../store/chatStore";
+import { ChatSkeleton } from "../../../components/ui/PageSkeletons";
 
 function ChatContent() {
   const searchParams = useSearchParams();
@@ -26,7 +27,7 @@ function ChatContent() {
 
 export default function ChatPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center font-mono text-xs text-zinc-500">Loading AI Agent Chat...</div>}>
+    <Suspense fallback={<ChatSkeleton />}>
       <ChatContent />
     </Suspense>
   );

@@ -8,6 +8,7 @@ import { PRReviewCard } from "../../../components/pr/PRReviewCard";
 import { PRIssueChecklist } from "../../../components/pr/PRIssueChecklist";
 import { PRData } from "../../../lib/types";
 import { prApi } from "../../../lib/api";
+import { PRSkeleton } from "../../../components/ui/PageSkeletons";
 import { useAuthStore } from "../../../store/authStore";
 import { useRepoStore } from "../../../store/repoStore";
 import {
@@ -348,7 +349,7 @@ function PRReviewContent() {
 
 export default function PRReviewPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center font-mono text-xs text-zinc-500">Loading PR Reviews...</div>}>
+    <Suspense fallback={<PRSkeleton />}>
       <PRReviewContent />
     </Suspense>
   );

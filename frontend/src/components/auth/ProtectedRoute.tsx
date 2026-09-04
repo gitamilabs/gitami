@@ -3,7 +3,8 @@
 import React, { useEffect } from "react";
 import { useAuthStore } from "../../store/authStore";
 import { Button } from "../ui/Button";
-import { Github, ShieldAlert, Loader2 } from "lucide-react";
+import { PageLoader } from "../ui/PageLoader";
+import { Github, ShieldAlert } from "lucide-react";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -20,9 +21,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
   if (!isInitialized || isLoading) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center gap-3">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-        <p className="text-sm text-slate-400 font-mono">Authenticating session with Sentinel...</p>
+      <div className="min-h-[70vh] flex flex-col items-center justify-center">
+        <PageLoader
+          label="Authenticating Sentinel Session..."
+          sublabel="Verifying cryptographically signed session & permissions"
+        />
       </div>
     );
   }
