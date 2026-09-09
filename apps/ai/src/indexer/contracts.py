@@ -10,6 +10,8 @@ class IndexJobType(str, Enum):
     PUSH = "PUSH"
     MANUAL = "MANUAL"
     REINDEX = "REINDEX"
+    INCREMENTAL = "INCREMENTAL"
+    FULL_REINDEX = "FULL_REINDEX"
 
 
 class IndexJobStatus(str, Enum):
@@ -29,7 +31,7 @@ class IndexStateStatus(str, Enum):
 
 # Valid state transitions for IndexJob
 VALID_TRANSITIONS = {
-    IndexJobStatus.QUEUED: {IndexJobStatus.RUNNING, IndexJobStatus.CANCELLED},
+    IndexJobStatus.QUEUED: {IndexJobStatus.RUNNING, IndexJobStatus.FAILED, IndexJobStatus.CANCELLED},
     IndexJobStatus.RUNNING: {IndexJobStatus.COMPLETED, IndexJobStatus.FAILED, IndexJobStatus.CANCELLED},
     IndexJobStatus.COMPLETED: set(),
     IndexJobStatus.FAILED: set(),
@@ -45,6 +47,48 @@ class DiscoveredFile(BaseModel):
     sha256: str
 
 
+class ChangedFileType(str, Enum):
+    ADDED = "ADDED"
+    MODIFIED = "MODIFIED"
+    DELETED = "DELETED"
+    RENAMED = "RENAMED"
+
+
+class ChangedFile(BaseModel):
+    """Represents a single changed file between two git commits."""
+    path: str
+    change_type: ChangedFileType
+    old_path: Optional[str] = None
+    language: str = "unknown"
+
+
+class DiffResult(BaseModel):
+    """Typed outcome of comparing a base commit and target commit."""
+    base_commit_sha: str
+    target_commit_sha: str
+    is_ancestor: bool = True
+    changed_files: List[ChangedFile] = Field(default_factory=list)
+    change_percentage: float = 0.0
+    is_safe_incremental: bool = True
+    fallback_reason: Optional[str] = None
+
+    @property
+    def added(self) -> List[ChangedFile]:
+        return [f for f in self.changed_files if f.change_type == ChangedFileType.ADDED]
+
+    @property
+    def modified(self) -> List[ChangedFile]:
+        return [f for f in self.changed_files if f.change_type == ChangedFileType.MODIFIED]
+
+    @property
+    def deleted(self) -> List[ChangedFile]:
+        return [f for f in self.changed_files if f.change_type == ChangedFileType.DELETED]
+
+    @property
+    def renamed(self) -> List[ChangedFile]:
+        return [f for f in self.changed_files if f.change_type == ChangedFileType.RENAMED]
+
+
 class IndexingStats(BaseModel):
     """Fine-grained statistics captured across the indexing pipeline."""
     files_discovered: int = 0
@@ -55,6 +99,19 @@ class IndexingStats(BaseModel):
     relationships_created: int = 0
     duration_seconds: float = 0.0
     details: Dict[str, Any] = Field(default_factory=dict)
+
+
+class IncrementalIndexingStats(IndexingStats):
+    """Fine-grained statistics captured specifically during incremental indexing."""
+    base_commit_sha: Optional[str] = None
+    target_commit_sha: Optional[str] = None
+    files_added: int = 0
+    files_modified: int = 0
+    files_deleted: int = 0
+    files_renamed: int = 0
+    files_affected: int = 0
+    entities_reconciled: int = 0
+    relationships_reconciled: int = 0
 
 
 class ValidationReport(BaseModel):
@@ -112,9 +169,35 @@ class RepositoryIndexState(BaseModel):
     repository_id: str
     branch: str = "main"
     indexed_commit_sha: str
+    previous_commit_sha: Optional[str] = None
     index_version: str = "v1"
     schema_version: str = "v1"
     parser_version: str = "1.0.0"
     status: IndexStateStatus = IndexStateStatus.INITIALIZING
+    generation: int = 1
     stats: Dict[str, Any] = Field(default_factory=dict)
+    indexing_error: Optional[str] = None
+    last_successful_index_at: Optional[datetime] = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def advance_to(
+        self,
+        new_commit_sha: str,
+        stats: Optional[Dict[str, Any]] = None,
+        schema_version: str = "v1",
+        parser_version: str = "1.0.0",
+    ) -> None:
+        """Atomically roll forward repository state to new target commit."""
+        now = datetime.now(timezone.utc)
+        self.previous_commit_sha = self.indexed_commit_sha
+        self.indexed_commit_sha = new_commit_sha
+        self.generation += 1
+        self.schema_version = schema_version
+        self.parser_version = parser_version
+        self.status = IndexStateStatus.READY
+        self.indexing_error = None
+        self.last_successful_index_at = now
+        self.updated_at = now
+        if stats is not None:
+            self.stats = stats
+

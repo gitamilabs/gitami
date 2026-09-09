@@ -45,7 +45,25 @@ class FileDiscovery:
         self.ignored_extensions = ignored_extensions or IGNORED_EXTENSIONS
         self.max_file_size_bytes = max_file_size_bytes
 
+    def is_indexable_path(self, rel_path: str) -> bool:
+        """Check if a relative file path matches indexing criteria (not in ignored dirs or extensions)."""
+        norm = rel_path.replace("\\", "/").lstrip("/")
+        parts = norm.split("/")
+        if any(part in self.ignored_dirs for part in parts[:-1]):
+            return False
+        suffix = Path(norm).suffix.lower()
+        if not suffix or suffix in self.ignored_extensions:
+            return False
+        return True
+
+    def get_language_for_path(self, rel_path: str) -> str:
+        """Infer canonical language string from file path suffix."""
+        suffix = Path(rel_path).suffix.lower()
+        lang_tuple = LanguageRegistry.get_language_and_extractor(suffix)
+        return lang_tuple[2] if lang_tuple else (suffix[1:] if suffix else "text")
+
     def discover_files(self, snapshot: RepositorySnapshot) -> Tuple[List[DiscoveredFile], int]:
+
         """
         Scan snapshot files, filter noise, compute sha256 hashes.
         

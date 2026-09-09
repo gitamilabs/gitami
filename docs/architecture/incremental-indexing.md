@@ -1,8 +1,9 @@
 # Incremental Repository Indexing
 
-> **Status:** Architecture Design Document  
+> **Status:** Architecture Design Document (Superseded by [incremental-indexing-v1.md](incremental-indexing-v1.md))  
 > **Date:** September 2026  
 > **Scope:** Precision incremental re-indexing pipeline for git commits, delta graph updates, vector synchronization, and failure recovery.
+
 
 ---
 
