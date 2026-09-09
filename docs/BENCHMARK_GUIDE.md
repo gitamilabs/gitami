@@ -92,7 +92,7 @@ The framework integrates two complementary benchmarks:
 
 Ensure your environment is configured before executing benchmarks:
 
-1. **Configure `.env`** in `backend/ai-service/.env`:
+1. **Configure `.env`** in `apps/ai/.env`:
    ```env
    # Neo4j Graph Database
    NEO4J_URI=bolt://localhost:7687
@@ -180,7 +180,7 @@ python -m ai_service.cli benchmark run `
 
 ## 6. Output & Reports
 
-Benchmark results are automatically saved to `backend/ai-service/benchmark_results/`:
+Benchmark results are automatically saved to `apps/ai/benchmark_results/`:
 
 ### 1. Markdown Report (`benchmark_report_YYYYMMDD_HHMMSS.md`)
 Human-readable summary containing:
@@ -285,7 +285,7 @@ python -m ai_service.cli benchmark cleanup --purge-repos
 
 ## 9. Running Automated Tests
 
-The benchmarking framework includes a comprehensive test suite in `backend/ai-service/tests/test_benchmark.py`:
+The benchmarking framework includes a comprehensive test suite in `apps/ai/tests/unit/test_benchmark.py`:
 
 ```powershell
 python -m pytest tests/test_benchmark.py -v

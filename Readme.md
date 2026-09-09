@@ -1,111 +1,115 @@
-# Knowledge-Base-Backed Code Review Service
+# Gitami
 
-A knowledge-base-backed code review platform featuring vector & graph knowledge base indexing, agentic PR evaluation, and interactive visualizer.
+An AI-powered software maintenance and intelligence platform featuring structural code graph indexing, semantic knowledge storage, and autonomous multi-modal review agents.
+
+---
+
+## 🏗️ Repository Architecture
+
+Gitami is structured as a clean, minimal monorepo:
+
+```
+gitami/
+├── apps/
+│   ├── web/                # Next.js frontend (React 19, TailwindCSS)
+│   ├── api/                # Bun / Hono control plane API & GitHub integrations
+│   └── ai/                 # Python AI intelligence service (FastAPI, Neo4j, UV)
+├── tests/
+│   └── e2e/                # End-to-end browser test suite (Selenium + Pytest)
+├── docs/
+│   └── architecture/       # System and V1 indexing architecture specifications
+├── docker-compose.yml       # Local infrastructure (Neo4j Community & PostgreSQL)
+├── package.json            # Monorepo root workspace configuration
+└── turbo.json              # Turborepo task pipeline configuration
+```
 
 ---
 
 ## 🛠️ Prerequisites
 
-Make sure you have the following installed:
-- **Docker Desktop** (for Neo4j Graph Database)
-- **Bun** runtime (`>= 1.0`)
+- **Docker Desktop** (for local Neo4j & PostgreSQL)
+- **Bun** runtime (`>= 1.2`)
 - **UV** Python package manager (`>= 0.1.0`)
-- **Node.js** (`>= 18.0`, optional if using Bun for Next.js frontend)
+- **Node.js** (`>= 18.0`)
 
 ---
 
-## 🚀 Server Startup Guide
+## 🚀 Quick Start Guide
 
-To start the full system, run the commands below for each service in separate terminal windows.
-
-### 1. Neo4j Graph Database (Docker)
-Starts the Neo4j Graph database container for graph knowledge storage.
+### 1. Infrastructure Services (Docker)
+Start Neo4j and PostgreSQL from the repository root:
 
 ```bash
-cd backend/ai-service
 docker compose up -d
 ```
-> **Access:** Neo4j Browser will be available at [http://localhost:7474](http://localhost:7474) (Default user: `neo4j`, password: `s3cureP@ssword`).
+- **Neo4j Browser:** [http://localhost:7474](http://localhost:7474) (`neo4j` / `gitamipassword`)
+- **PostgreSQL:** `localhost:5432` (`gitami` / `gitamipassword`)
 
----
-
-### 2. Python AI Service (FastAPI Server)
-Runs the Python backend serving the Chat API, Knowledge Base query engine, and Agent Tool Visualizer endpoint.
+### 2. TypeScript Applications (`apps/web`, `apps/api`)
+Install dependencies and run tasks across the monorepo via Turborepo:
 
 ```bash
-# 1. Navigate to the AI service directory
-cd backend/ai-service
+# Install all workspace dependencies
+bun install
 
-# 2. Setup environment variables (if not already done)
+# Typecheck all TypeScript projects
+bun run typecheck
+
+# Build web & api production bundles
+bun run build
+
+# Start development servers
+bun run dev
+```
+- **Web App:** [http://localhost:3000](http://localhost:3000)
+- **Control Plane API:** [http://localhost:5000](http://localhost:5000)
+
+### 3. Python AI Intelligence Service (`apps/ai`)
+The AI service is independently managed with UV:
+
+```bash
+cd apps/ai
+
+# Configure environment
 cp .env.example .env
-# Edit .env to add your GEMINI_API_KEY / GROQ_API_KEY
+# Fill in GEMINI_API_KEY, GROQ_API_KEY, and NEO4J credentials
 
-# 3. Start the HTTP FastAPI server
+# Start FastAPI server
 uv run ai-service serve
 ```
-> **Access:** HTTP API running at [http://127.0.0.1:8000](http://127.0.0.1:8000)
-
-*(Optional MCP Server mode: `uv run ai-service mcp`)*
+- **AI Service API:** [http://127.0.0.1:8000](http://127.0.0.1:8000)
 
 ---
 
-### 3. API Service (Bun Backend)
-Runs the Bun control plane API service responsible for GitHub App integrations and workflow management.
+## 💻 AI Indexing CLI
+
+The canonical indexing pipeline is executed directly from `apps/ai`:
 
 ```bash
-# 1. Navigate to the API service directory
-cd backend/api-service
+cd apps/ai
 
-# 2. Install dependencies (first time only)
-bun install
+# Run canonical V1 repository indexing against an explicit commit
+uv run ai-service index --repo-id <owner/repo> --commit HEAD --repo-dir /path/to/repo
 
-# 3. Start the API service server
-bun run index.ts
+# Validate indexing with dry-run
+uv run ai-service index --repo-id <owner/repo> --commit HEAD --repo-dir /path/to/repo --validate-only
+
+# Run pull request evaluation
+uv run ai-service eval-pr --repo-id <owner/repo> --repo-dir /path/to/repo --base-ref main --head-ref pr-branch
 ```
 
 ---
 
-### 4. Frontend (Next.js App)
-Runs the Web UI interface for PR review analysis, citation view, and thinking block tool visualizer.
+## 🧪 Testing
 
+### AI Service Unit & Integration Tests
 ```bash
-# 1. Navigate to the frontend directory
-cd frontend
-
-# 2. Install dependencies (first time only)
-bun install
-
-# 3. Start the Next.js dev server
-bun dev
-```
-> **Access:** Web interface available at [http://localhost:3000](http://localhost:3000)
-
----
-
-## 💻 CLI Commands (AI Service)
-
-The AI service includes a CLI for repository initialization and PR evaluation:
-
-```bash
-cd backend/ai-service
-
-# Initialize & Index a repository (Vector DB + Graph DB)
-uv run ai-service init --repo-id my-repo --repo-dir /path/to/repo --branch main
-
-# Evaluate a Pull Request
-uv run ai-service eval-pr --repo-id my-repo --repo-dir /path/to/repo --base-ref main --head-ref feature-branch
-
-# Generate HTML visualizer for Knowledge Base graph
-uv run ai-service visualize --repo-dir /path/to/repo --output kb_graph.html
+cd apps/ai
+uv run pytest tests/unit/
+uv run pytest tests/integration/
 ```
 
----
-
-## 🏗️ Architecture Overview
-
-| Service | Stack | Port / Protocol | Role |
-|---|---|---|---|
-| **Frontend** | Next.js 16, React 19, TailwindCSS | `http://localhost:3000` | User Web Interface |
-| **API Service** | Bun, TypeScript | API Control Plane | GitHub App Auth & Control Plane |
-| **AI Service** | FastAPI, Python (UV), Gemini / Groq | `http://localhost:8000` | Code Analysis, RAG & Agent Reviewer |
-| **Graph DB** | Neo4j Community | `bolt://localhost:7687` | Code Structural Graph KB |
+### End-to-End Tests
+```bash
+python tests/e2e/run_tests.py
+```

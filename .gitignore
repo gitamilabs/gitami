@@ -1,19 +1,46 @@
-# Default ignored files
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Testing & Cache
+.pytest_cache/
+.turbo/
+.coverage
+htmlcov/
+
+# Frameworks
+.next/
+out/
+
+# Environment Variables
+.env
+.env.*
+.env.local
+!.env.example
+
+# Databases & local storage
+chroma_db/
+dataSources/
+*.local.xml
+
+# IDE & OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
 /shelf/
 /workspace.xml
-# Editor-based HTTP Client requests
 /httpRequests/
-# Ignored default folder with query files
 /queries/
-# Datasource local storage ignored files
-/dataSources/
-/dataSources.local.xml
-.env
-chroma_db/
-__pycache__
-.idea
-.vercel
-.env*
 
+# Deployment & AI Agent workspace
+.vercel
 AGENTS.md
 .agents

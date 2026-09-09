@@ -1,0 +1,33 @@
+{
+  "name": "@gitami/api",
+  "version": "0.1.0",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "build": "bun build src/index.ts --outdir ./dist --target bun",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun src/db/migrate.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.13.1",
+    "jose": "^6.2.8",
+    "postgres": "^3.4.9",
+    "vercel": "^58.9.5",
+    "ws": "^8.21.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/ws": "^8.18.1",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5"
+  }
+}
