@@ -1,0 +1,317 @@
+{
+  "metadata": {
+    "datasets": [
+      "martian",
+      "vulngym"
+    ],
+    "sample_size": 3,
+    "cleanup_kb": true,
+    "repos_dir": "D:\\gitami-benchmark-repos",
+    "total_duration_seconds": 194.16,
+    "generated_at": "2026-09-09T08:32:01.149874+00:00"
+  },
+  "aggregate": {
+    "total_cases": 3,
+    "total_ground_truth": 13,
+    "total_predicted": 14,
+    "true_positives": 2,
+    "false_positives": 12,
+    "false_negatives": 11,
+    "precision": 0.1429,
+    "recall": 0.1538,
+    "f1_score": 0.1481,
+    "mean_duration_seconds": 58.2,
+    "category_breakdown": {
+      "convention": {
+        "detected": 0,
+        "total": 4,
+        "recall": 0.0
+      },
+      "bug": {
+        "detected": 2,
+        "total": 8,
+        "recall": 0.25
+      },
+      "performance": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      }
+    },
+    "severity_detection_rates": {
+      "info": 0.0,
+      "error": 0.4,
+      "warning": 0.0
+    }
+  },
+  "cases": [
+    {
+      "case_id": "martian_cal_dot_com_1",
+      "dataset": "martian",
+      "tp": 1,
+      "fp": 2,
+      "fn": 1,
+      "precision": 0.3333,
+      "recall": 0.5,
+      "f1_score": 0.4,
+      "duration_seconds": 47.878,
+      "matched_count": 1,
+      "matched_issues": [
+        {
+          "predicted_title": "Changed getCalendar to async without updating callers",
+          "predicted_file": "packages/app-store/_utils/getCalendar.ts",
+          "predicted_line": 8,
+          "gt_title": "The code uses forEach with async callbacks, which causes asynchronous operations...",
+          "gt_file": "packages/app-store/_utils/getCalendar.ts",
+          "gt_line": 9,
+          "match_score": 0.926
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "0bc1fda8-d5f5-48ba-a235-5e7915e59d97",
+          "title": "Dynamic imports in appStore produce Promises that may be used synchronously",
+          "description": "`appStore` now maps each calendar/video integration to `import('./module')`, which returns a Promise. Other parts of the codebase (e.g., services that access `appStore[...].lib`) likely expect the module object synchronously. Accessing properties on a Promise will result in `undefined` and cause runtime errors such as `Cannot read property 'lib' of undefined`.",
+          "category": "bug",
+          "severity": "error",
+          "file_path": "packages/app-store/index.ts",
+          "line": 12,
+          "suggested_fix": "Either keep static imports (e.g., `import * as applecalendar from \"./applecalendar\"`) or change all consumers to `await appStore[key]` before accessing module members. If lazy loading is desired, expose a helper like `async function getAppModule(name) { return await appStore[name]; }` and use it consistently."
+        },
+        {
+          "id": "ce04df12-e861-4097-b6ab-5d60ec340aa9",
+          "title": "Async callback used with Array.forEach leads to unawaited promises",
+          "description": "In `vital/lib/reschedule.ts` the loop was changed to `bookingRefsFiltered.forEach(async (bookingRef) => { ... })`. The `async` callback returns a Promise that `forEach` does not await, so any asynchronous operations inside the callback (e.g., network calls, DB updates) will run in the background. Errors thrown inside the async callback will not be caught by the surrounding `try/catch`, potentially causing silent failures and race conditions.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/vital/lib/reschedule.ts",
+          "line": 122,
+          "suggested_fix": "Replace the `forEach` with a `for...of` loop and `await` each async operation, e:\n```ts\nfor (const bookingRef of bookingRefsFiltered) {\n  if (bookingRef.uid) {\n    // await any async calls here\n  }\n}\n```"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Consider adding try-catch around the await to handle import failures gracefully",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "convention",
+          "severity": "info"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_2",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 6,
+      "fn": 5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 69.073,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [
+        {
+          "id": "1e2cc8e6-c82e-4c68-a40f-88a0403b4795",
+          "title": "[RULE-006] Style & Convention Violation",
+          "description": "Debug console statement left in code",
+          "category": "convention",
+          "severity": "warning",
+          "file_path": "apps/web/pages/api/auth/two-factor/totp/disable.ts",
+          "line": 50,
+          "suggested_fix": "Follow project conventions for RULE-006"
+        },
+        {
+          "id": "0c942ebe-f764-4131-af5c-4a4a94d81b3f",
+          "title": "[RULE-008] Style & Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 12,
+          "suggested_fix": "Follow project conventions for RULE-008"
+        },
+        {
+          "id": "16a505c1-cf80-4da1-b1d4-ccce14cd45df",
+          "title": "[RULE-008] Style & Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 50,
+          "suggested_fix": "Follow project conventions for RULE-008"
+        },
+        {
+          "id": "4e6f97be-1548-4abf-8af5-dbc7b2bcfc12",
+          "title": "[RULE-008] Style & Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 117,
+          "suggested_fix": "Follow project conventions for RULE-008"
+        },
+        {
+          "id": "fe4b2b37-0de8-4344-a2c3-5cf56d898759",
+          "title": "[RULE-008] Style & Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 122,
+          "suggested_fix": "Follow project conventions for RULE-008"
+        },
+        {
+          "id": "5d858fe6-a5e4-4e6b-859f-83d2a537c123",
+          "title": "[RULE-006] Style & Convention Violation",
+          "description": "Debug console statement left in code",
+          "category": "convention",
+          "severity": "warning",
+          "file_path": "packages/features/auth/lib/next-auth-options.ts",
+          "line": 133,
+          "suggested_fix": "Follow project conventions for RULE-006"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The exported function TwoFactor handles backup codes and is in BackupCode.tsx. I...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Error message mentions 'backup code login' but this is a disable endpoint, not l...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Backup code validation is case-sensitive due to the use of indexOf(). This cause...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "bug",
+          "severity": "warning"
+        },
+        {
+          "title": "Because backupCodes are decrypted and mutated in memory before being written bac...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "bug",
+          "severity": "error"
+        },
+        {
+          "title": "Object URL for backup codes is not revoked on component unmount, leading to a po...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "performance",
+          "severity": "info"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_3",
+      "dataset": "martian",
+      "tp": 1,
+      "fp": 4,
+      "fn": 5,
+      "precision": 0.2,
+      "recall": 0.1667,
+      "f1_score": 0.1818,
+      "duration_seconds": 57.644,
+      "matched_count": 1,
+      "matched_issues": [
+        {
+          "predicted_title": "Potential type mismatch for `destinationCalendar` in booking reminder",
+          "predicted_file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "predicted_line": 106,
+          "gt_title": "A null reference occurs in GoogleCalendarService.createEvent() and updateEvent()...",
+          "gt_file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "gt_line": 107,
+          "match_score": 0.725
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "1bef456b-d296-4c3f-a08a-f34b83a5087d",
+          "title": "Method signature change breaks existing callers",
+          "description": "The `createEvent` method in `packages/app-store/googlecalendar/lib/CalendarService.ts` was changed from `createEvent(calEventRaw: CalendarEvent)` to `createEvent(calEventRaw: CalendarEvent, credentialId: number)`. All existing call sites (including those defined by the `Calendar` interface) are not updated to pass the new `credentialId` argument, causing a TypeScript compilation error and runtime failures where the method is invoked without the required parameter.",
+          "category": "bug",
+          "severity": "error",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 84,
+          "suggested_fix": "Restore the original signature or update all call sites to provide the `credentialId` argument. For example:\n```ts\nasync createEvent(calEventRaw: CalendarEvent, credentialId: number): Promise<NewCalendarEventType> {\n  // implementation\n}\n```\nAnd ensure every invocation includes the credential ID, e.g., `calendarService.createEvent(event, user.credentialId);`"
+        },
+        {
+          "id": "cd884bf0-4c0f-4e0e-85f0-c6eb1d25b306",
+          "title": "Inconsistent handling of empty `destinationCalendar` in test fixture",
+          "description": "The e2e test `apps/web/playwright/webhook.e2e.ts` changed `destinationCalendar` from `null` to an empty array `[]`. If the production code distinguishes between `null` (no calendar) and an empty array (explicitly provided but empty), this change may alter conditional logic, causing the test to pass while the real application behaves differently, potentially masking bugs related to calendar handling.",
+          "category": "logical_error",
+          "severity": "warning",
+          "file_path": "apps/web/playwright/webhook.e2e.ts",
+          "line": 246,
+          "suggested_fix": "Confirm that the application treats `null` and `[]` equivalently. If not, revert to `null` or adjust the test expectations accordingly."
+        },
+        {
+          "id": "8f86bf6d-2cc8-483d-bd9c-0a86d1e60f29",
+          "title": "[RULE-008] Style & Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "packages/core/CalendarManager.ts",
+          "line": 230,
+          "suggested_fix": "Follow project conventions for RULE-008"
+        },
+        {
+          "id": "85f8da66-ad90-41c4-b94d-f9fe020909f0",
+          "title": "[RULE-008] Style & Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "packages/core/CalendarManager.ts",
+          "line": 250,
+          "suggested_fix": "Follow project conventions for RULE-008"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The optional chaining on mainHostDestinationCalendar?.integration is redundant s...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Logic error: when externalCalendarId is provided, you're searching for a calenda...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "error"
+        },
+        {
+          "title": "Logic inversion in organization creation: The slug property is now conditionally...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "warning"
+        },
+        {
+          "title": "The Calendar interface now requires createEvent(event, credentialId), but some i...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "info"
+        },
+        {
+          "title": "The `credential` may be undefined when passed to `updateEvent` if `reference.cre...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    }
+  ]
+}

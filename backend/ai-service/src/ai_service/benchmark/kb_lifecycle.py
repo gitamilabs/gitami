@@ -142,7 +142,7 @@ async def purge_all_benchmark_data(
             f"MATCH (n) WHERE n.repo_id STARTS WITH $prefix "
             f"DETACH DELETE n RETURN count(n) AS cnt"
         )
-        records = await graph_client.execute_read(query, {"prefix": prefix})
+        records = await graph_client.execute_query(query, {"prefix": prefix})
         if records:
             purged_nodes = records[0].get("cnt", 0)
         logger.info(f"[BenchmarkKB] Purged {purged_nodes} Neo4j node(s) matching prefix '{prefix}'.")

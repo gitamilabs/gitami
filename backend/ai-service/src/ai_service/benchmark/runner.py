@@ -196,6 +196,59 @@ class BenchmarkRunner:
                 f"Recall={score.recall*100:.1f}%, F1={score.f1_score:.3f}"
             )
 
+            # Live checkpoint: continuously update latest report files on disk after each test case
+            try:
+                running_agg = self.scorer.aggregate_scores(case_scores)
+                running_meta = {
+                    "datasets": target_datasets,
+                    "sample_size": self.config.sample_size,
+                    "completed_cases": len(case_scores),
+                    "total_cases": len(all_cases),
+                    "status": "in_progress",
+                    "cleanup_kb": self.config.cleanup_kb,
+                    "repos_dir": str(self.config.repos_dir),
+                    "elapsed_seconds": round(time.time() - start_time, 2),
+                }
+                BenchmarkReportGenerator.generate_json(
+                    running_agg,
+                    case_scores,
+                    running_meta,
+                    self.config.results_dir / "benchmark_report_latest.json",
+                )
+                BenchmarkReportGenerator.generate_markdown(
+                    running_agg,
+                    case_scores,
+                    running_meta,
+                    self.config.results_dir / "benchmark_report_latest.md",
+                )
+            except Exception as ce:
+                logger.debug(f"Failed to update running checkpoint: {ce}")
+
+            # Check if current dataset just completed its cases
+            current_ds_name = case.dataset_name
+            is_last_case_of_dataset = (
+                idx == len(all_cases) or all_cases[idx].dataset_name != current_ds_name
+            )
+            if is_last_case_of_dataset:
+                ds_scores = [s for s in case_scores if s.dataset_name == current_ds_name]
+                if ds_scores:
+                    ds_agg = self.scorer.aggregate_scores(ds_scores)
+                    ds_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    ds_md = self.config.results_dir / f"benchmark_report_{current_ds_name}_{ds_ts}.md"
+                    ds_json = self.config.results_dir / f"benchmark_report_{current_ds_name}_{ds_ts}.json"
+                    ds_meta = {
+                        "dataset": current_ds_name,
+                        "completed_cases": len(ds_scores),
+                        "status": "completed",
+                        "cleanup_kb": self.config.cleanup_kb,
+                    }
+                    BenchmarkReportGenerator.generate_markdown(ds_agg, ds_scores, ds_meta, ds_md)
+                    BenchmarkReportGenerator.generate_json(ds_agg, ds_scores, ds_meta, ds_json)
+                    logger.info(
+                        f"\n🎉 Saved dedicated benchmark report for '{current_ds_name}': "
+                        f"{ds_md.name} (Cases: {len(ds_scores)}, F1: {ds_agg.f1_score:.4f})"
+                    )
+
         # 3. Aggregate metrics across all test cases
         aggregate = self.scorer.aggregate_scores(case_scores)
         total_duration = round(time.time() - start_time, 2)
@@ -207,7 +260,7 @@ class BenchmarkRunner:
             f"\nF1 Score: {aggregate.f1_score:.4f}"
         )
 
-        # 4. Generate JSON and Markdown reports
+        # 4. Generate timestamped JSON and Markdown final reports
         timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         md_file = self.config.results_dir / f"benchmark_report_{timestamp_str}.md"
         json_file = self.config.results_dir / f"benchmark_report_{timestamp_str}.json"
@@ -218,6 +271,7 @@ class BenchmarkRunner:
             "cleanup_kb": self.config.cleanup_kb,
             "repos_dir": str(self.config.repos_dir),
             "total_duration_seconds": total_duration,
+            "status": "completed",
         }
 
         BenchmarkReportGenerator.generate_markdown(aggregate, case_scores, meta, md_file)
