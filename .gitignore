@@ -17,3 +17,5 @@ __pycache__
 
 AGENTS.md
 .agents
+benchmark_repos/
+benchmark_results/

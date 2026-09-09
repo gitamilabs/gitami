@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # ── Groq ──────────────────────────────────────────────────────────────────
     groq_api_key: str = ""
 
+    # ── Joern CPG Sidecar ─────────────────────────────────────────────────────
+    joern_url: str = "http://localhost:8088"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

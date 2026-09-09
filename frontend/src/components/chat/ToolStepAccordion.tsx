@@ -17,6 +17,9 @@ import {
   Sparkles,
   Copy,
   Check,
+  ShieldAlert,
+  ShieldCheck,
+  GitBranch,
 } from "lucide-react";
 
 interface ToolStepAccordionProps {
@@ -43,6 +46,12 @@ export const ToolStepAccordion: React.FC<ToolStepAccordionProps> = ({ step }) =>
         return <FileCode className="w-3.5 h-3.5 text-emerald-400" />;
       case "get_repo_structure":
         return <FileCode className="w-3.5 h-3.5 text-amber-400" />;
+      case "cpg_dataflow":
+        return <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />;
+      case "cpg_reachable_guards":
+        return <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />;
+      case "cpg_callers_with_args":
+        return <GitBranch className="w-3.5 h-3.5 text-sky-400" />;
       default:
         return <Search className="w-3.5 h-3.5 text-slate-400" />;
     }

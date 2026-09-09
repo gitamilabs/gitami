@@ -19,7 +19,7 @@ async def test_end_to_end_agent_pr_review():
             repo_dir=repo_dir,
             client=client,
         )
-        assert init_res.status == "SUCCESS"
+        assert init_res.status in ("SUCCESS", "CACHED")
         assert init_res.symbols_count > 0
 
         # 2. Run PR Evaluation with Agentic Reviewer

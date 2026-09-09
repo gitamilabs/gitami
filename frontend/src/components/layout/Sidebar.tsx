@@ -14,6 +14,7 @@ import {
   LogOut,
   Plus,
   ExternalLink,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
 import { AddProjectModal } from "../repositories/AddProjectModal";
@@ -23,6 +24,7 @@ const navItems = [
   { name: "Projects", href: "/dashboard", icon: FolderGit2, exact: true },
   { name: "PR Reviews", href: "/prs", icon: GitPullRequest, badge: "Agent" },
   { name: "Codebase Chat", href: "/chat", icon: Bot, badge: "ReAct" },
+  { name: "VulAgent Benchmark", href: "/benchmark", icon: ShieldCheck, badge: "VulAgentRL" },
   { name: "Activity Logs", href: "/activity", icon: Activity },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

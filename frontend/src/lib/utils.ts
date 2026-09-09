@@ -42,6 +42,12 @@ export function getToolBadgeStyle(toolName: string): { bg: string; text: string;
       return { bg: "bg-emerald-950/60", text: "text-emerald-400", border: "border-emerald-800/60" };
     case "get_repo_structure":
       return { bg: "bg-amber-950/60", text: "text-amber-400", border: "border-amber-800/60" };
+    case "cpg_dataflow":
+      return { bg: "bg-rose-950/60", text: "text-rose-400", border: "border-rose-800/60" };
+    case "cpg_reachable_guards":
+      return { bg: "bg-amber-950/60", text: "text-amber-400", border: "border-amber-800/60" };
+    case "cpg_callers_with_args":
+      return { bg: "bg-sky-950/60", text: "text-sky-400", border: "border-sky-800/60" };
     default:
       return { bg: "bg-slate-800", text: "text-slate-300", border: "border-slate-700" };
   }

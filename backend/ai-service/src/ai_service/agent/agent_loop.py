@@ -262,6 +262,9 @@ class AutonomousAgentLoop:
             "get_blast_radius": "Neo4j Blast Radius Ripple Analysis",
             "get_repo_structure": "Neo4j Repository File Hierarchy",
             "search_symbols": "Neo4j Fuzzy Symbol Search",
+            "cpg_dataflow": "Joern CPG Interprocedural Taint Tracking",
+            "cpg_reachable_guards": "Joern CPG Reachable Guards & Sanitizer Check",
+            "cpg_callers_with_args": "Joern CPG Call Sites & Argument Tracing",
         }
         return titles.get(tool_name, tool_name.replace("_", " ").title())
 

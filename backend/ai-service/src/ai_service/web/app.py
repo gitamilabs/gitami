@@ -935,3 +935,63 @@ async def get_graph_report(repo_id: str, branch: str = "main"):
         except Exception:
             pass
 
+
+class CpgQueryRequest(BaseModel):
+    repo_id: str = "demo-repo"
+    query_type: str = "dataflow"  # "dataflow", "guards", or "callers"
+    source_pattern: Optional[str] = "req.body"
+    sink_pattern: Optional[str] = "query"
+    symbol_name: Optional[str] = "search_users"
+
+
+@app.post("/api/cpg/query")
+async def cpg_query_endpoint(req: CpgQueryRequest):
+    """Interactive Joern CPG query execution endpoint for frontend UI visualization."""
+    from ai_service.mcp.tools import (
+        tool_cpg_dataflow,
+        tool_cpg_reachable_guards,
+        tool_cpg_callers_with_args,
+    )
+    try:
+        if req.query_type == "dataflow":
+            res_str = await tool_cpg_dataflow(
+                repo_id=req.repo_id,
+                source_pattern=req.source_pattern or "input",
+                sink_pattern=req.sink_pattern or "query",
+            )
+        elif req.query_type == "guards":
+            res_str = await tool_cpg_reachable_guards(
+                repo_id=req.repo_id,
+                symbol_name=req.symbol_name or "query",
+            )
+        elif req.query_type == "callers":
+            res_str = await tool_cpg_callers_with_args(
+                repo_id=req.repo_id,
+                symbol_name=req.symbol_name or "query",
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported query_type '{req.query_type}'")
+
+        return JSONResponse(content=json.loads(res_str))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/benchmark/report")
+async def get_benchmark_report_endpoint():
+    """Retrieve VulAgentRL Benchmark comparative results for Python & MERN."""
+    report_file = Path(__file__).parents[3] / "benchmark_report.json"
+    if report_file.exists():
+        try:
+            return JSONResponse(content=json.loads(report_file.read_text(encoding="utf-8")))
+        except Exception:
+            pass
+
+    # If no cached file on disk, run evaluator in simulated mode
+    from ai_service.benchmark.evaluator import BenchmarkEvaluator
+    from ai_service.benchmark.dataset import BENCHMARK_CASES
+    evaluator = BenchmarkEvaluator(simulated=True)
+    results = await evaluator.run_benchmark(cases=BENCHMARK_CASES, mode="both")
+    return JSONResponse(content=results)
+
+

@@ -40,8 +40,8 @@ def benchmark_group():
 @click.option(
     "--repos-dir",
     type=click.Path(),
-    default=r"D:\gitami-benchmark-repos",
-    help="Disk directory for benchmark repositories.",
+    default=None,
+    help="Disk directory for benchmark repositories (defaults to ./benchmark_repos).",
 )
 @click.option(
     "--results-dir",
@@ -63,7 +63,7 @@ def benchmark_group():
 def run_benchmark(
     dataset: str,
     sample: Optional[int],
-    repos_dir: str,
+    repos_dir: Optional[str],
     results_dir: str,
     cleanup: bool,
     language: tuple,
@@ -71,13 +71,17 @@ def run_benchmark(
     """Execute benchmark evaluation across selected dataset suites."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
+    cfg_kwargs = {}
+    if repos_dir:
+        cfg_kwargs["repos_dir"] = Path(repos_dir)
+
     cfg = BenchmarkConfig(
-        repos_dir=Path(repos_dir),
         results_dir=Path(results_dir),
         sample_size=sample,
         cleanup_kb=cleanup,
         datasets=["martian", "vulngym"] if dataset.lower() == "all" else [dataset.lower()],
         languages=list(language) if language else None,
+        **cfg_kwargs,
     )
 
     async def _exec():
@@ -130,7 +134,11 @@ def compare_runs(baseline: str, candidate: str, output: Optional[str]):
     c_path = Path(candidate)
     report_md = compare_benchmark_runs(b_path, c_path)
 
-    click.echo("\n" + report_md)
+    try:
+        click.echo("\n" + report_md)
+    except UnicodeEncodeError:
+        safe_md = report_md.encode("ascii", errors="replace").decode("ascii")
+        click.echo("\n" + safe_md)
 
     if output:
         out_file = Path(output)
@@ -154,10 +162,10 @@ def compare_runs(baseline: str, candidate: str, output: Optional[str]):
 @click.option(
     "--repos-dir",
     type=click.Path(),
-    default=r"D:\gitami-benchmark-repos",
-    help="Disk directory for benchmark repositories.",
+    default=None,
+    help="Disk directory for benchmark repositories (defaults to ./benchmark_repos).",
 )
-def cleanup_benchmark(prefix: str, purge_repos: bool, repos_dir: str):
+def cleanup_benchmark(prefix: str, purge_repos: bool, repos_dir: Optional[str]):
     """Purge all orphaned benchmark data from Neo4j, Vector DB, and disk."""
     async def _exec():
         graph_client = Neo4jClient()
@@ -176,7 +184,7 @@ def cleanup_benchmark(prefix: str, purge_repos: bool, repos_dir: str):
             click.echo("Successfully purged matching vector records from Vector DB.")
 
             if purge_repos:
-                r_path = Path(repos_dir)
+                r_path = Path(repos_dir) if repos_dir else BenchmarkConfig().repos_dir
                 if r_path.exists():
                     import shutil
                     click.echo(f"Deleting benchmark repositories from: {r_path.resolve()}...")

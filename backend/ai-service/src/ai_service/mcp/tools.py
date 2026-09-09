@@ -327,6 +327,16 @@ async def execute_tool_by_name(
             return await tool_search_symbols(
                 graph_client, repo_id=repo_id, query_str=query, branch=branch
             )
+        elif tool_name in ("cpg_dataflow", "tool_cpg_dataflow"):
+            src = tool_args.get("source_pattern") or tool_args.get("source") or ""
+            snk = tool_args.get("sink_pattern") or tool_args.get("sink") or ""
+            return await tool_cpg_dataflow(repo_id=repo_id, source_pattern=src, sink_pattern=snk)
+        elif tool_name in ("cpg_reachable_guards", "tool_cpg_reachable_guards"):
+            sym = tool_args.get("symbol_name") or tool_args.get("symbol") or ""
+            return await tool_cpg_reachable_guards(repo_id=repo_id, symbol_name=sym)
+        elif tool_name in ("cpg_callers_with_args", "tool_cpg_callers_with_args"):
+            sym = tool_args.get("symbol_name") or tool_args.get("symbol") or ""
+            return await tool_cpg_callers_with_args(repo_id=repo_id, symbol_name=sym)
         else:
             # Fallback to hybrid search if tool name is unknown
             query = tool_args.get("query", str(tool_args))
@@ -335,5 +345,26 @@ async def execute_tool_by_name(
             )
     except Exception as e:
         return json.dumps({"error": f"Failed to execute tool '{tool_name}': {str(e)}"})
+
+
+async def tool_cpg_dataflow(repo_id: str, source_pattern: str, sink_pattern: str) -> str:
+    """Trace dataflow / taint reachability between source and sink using Joern CPG."""
+    from ai_service.cpg.client import joern_client
+    res = joern_client.check_dataflow(source_pattern=source_pattern, sink_pattern=sink_pattern, repo_id=repo_id)
+    return json.dumps(res, indent=2)
+
+
+async def tool_cpg_reachable_guards(repo_id: str, symbol_name: str) -> str:
+    """Retrieve conditional guard checks dominating a symbol or sink using Joern CPG."""
+    from ai_service.cpg.client import joern_client
+    res = joern_client.get_reachable_guards(symbol_name=symbol_name, repo_id=repo_id)
+    return json.dumps(res, indent=2)
+
+
+async def tool_cpg_callers_with_args(repo_id: str, symbol_name: str) -> str:
+    """Retrieve callers and argument expressions for a given target symbol across the CPG."""
+    from ai_service.cpg.client import joern_client
+    res = joern_client.get_callers_with_args(symbol_name=symbol_name, repo_id=repo_id)
+    return json.dumps(res, indent=2)
 
 

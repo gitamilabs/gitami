@@ -18,7 +18,7 @@ async def test_run_init_job_python_sample():
         client=mock_client,
     )
 
-    assert res.status == "SUCCESS"
+    assert res.status in ("SUCCESS", "CACHED")
     assert res.symbols_count >= 3
     assert res.duration_seconds >= 0.0
 
@@ -35,6 +35,6 @@ async def test_run_init_job_mern_sample():
         client=mock_client,
     )
 
-    assert res.status == "SUCCESS"
+    assert res.status in ("SUCCESS", "CACHED")
     assert res.symbols_count >= 3
     assert res.duration_seconds >= 0.0

@@ -6,16 +6,21 @@ from pathlib import Path
 from typing import List, Optional
 
 
+def _default_repos_dir() -> Path:
+    custom = os.environ.get("BENCHMARK_REPOS_DIR")
+    if custom:
+        return Path(custom)
+    if os.path.exists("D:\\"):
+        return Path(r"D:\gitami-benchmark-repos")
+    return Path("./benchmark_repos")
+
+
 @dataclass
 class BenchmarkConfig:
     """Benchmark execution configuration."""
 
     # Storage for cloned benchmark repositories (can be deleted independently)
-    repos_dir: Path = field(
-        default_factory=lambda: Path(
-            os.environ.get("BENCHMARK_REPOS_DIR", r"D:\gitami-benchmark-repos")
-        )
-    )
+    repos_dir: Path = field(default_factory=_default_repos_dir)
 
     # Output directory for Markdown and JSON evaluation reports
     results_dir: Path = field(
