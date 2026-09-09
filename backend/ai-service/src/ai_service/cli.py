@@ -216,5 +216,11 @@ def analyze(repo_id: str, branch: str, out_dir: str):
 
     asyncio.run(_run())
 
+
+# Register Benchmark Subsystem Commands
+from ai_service.benchmark.cli import benchmark_group
+main.add_command(benchmark_group)
+
+
 if __name__ == "__main__":
     main()
