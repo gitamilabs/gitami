@@ -455,8 +455,14 @@ export default function SettingsPage() {
                         <Bot className="w-4 h-4" />
                         <span>Primary LLM Orchestrator</span>
                       </div>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                        Google GenAI
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                        (aiConfig.models.llm_provider === "ollama" || aiConfig.llm_provider === "ollama" || aiConfig.models.primary_orchestrator.includes("coder") || aiConfig.models.primary_orchestrator.includes("deepseek") || aiConfig.models.primary_orchestrator.includes("llama"))
+                          ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                          : "bg-indigo-500/10 text-indigo-300 border-indigo-500/20"
+                      }`}>
+                        {(aiConfig.models.llm_provider === "ollama" || aiConfig.llm_provider === "ollama" || aiConfig.models.primary_orchestrator.includes("coder") || aiConfig.models.primary_orchestrator.includes("deepseek") || aiConfig.models.primary_orchestrator.includes("llama"))
+                          ? "Ollama Local AI"
+                          : "Google GenAI"}
                       </span>
                     </div>
                     <p className="text-base font-mono font-bold text-white truncate">
@@ -465,7 +471,10 @@ export default function SettingsPage() {
                     <div className="text-[11px] text-zinc-500 space-y-1">
                       <p>Fallback Candidate Models:</p>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {aiConfig.models.gemini_models.slice(0, 4).map((m) => (
+                        {(aiConfig.models.ollama_models && aiConfig.models.ollama_models.length > 0
+                          ? aiConfig.models.ollama_models.slice(0, 5)
+                          : aiConfig.models.gemini_models.slice(0, 4)
+                        ).map((m) => (
                           <span key={m} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
                             {m}
                           </span>

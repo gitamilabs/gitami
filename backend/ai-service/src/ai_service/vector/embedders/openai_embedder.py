@@ -1,8 +1,8 @@
-﻿"""OpenAI embedding model implementation using the openai SDK."""
-from typing import List
+from typing import List, Dict, Any
+from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 
 
-class OpenAIEmbedder:
+class OpenAIEmbedder(EmbeddingFunction):
     """
     Embedding function using OpenAI's text-embedding-3-* models.
     Raises ValueError at construction if api_key is missing.
@@ -21,6 +21,12 @@ class OpenAIEmbedder:
         self._client = OpenAI(api_key=api_key)
         self.model = model
         self.dimension: int = 3072 if "large" in model else 1536
+
+    def name(self) -> str:
+        return "openai"
+
+    def get_config(self) -> Dict[str, Any]:
+        return {"model": self.model}
 
     def __call__(self, input: List[str]) -> List[List[float]]:
         if not input:

@@ -5,10 +5,18 @@ class Settings(BaseSettings):
     """Application settings loaded from environment or .env file."""
 
     # ── Selector keys ─────────────────────────────────────────────────────────
+    # LLM_PROVIDER: ollama | gemini | groq
+    llm_provider: str = "ollama"
     # VECTOR_DB: chroma_local | chroma_cloud | qdrant | pinecone | supabase | memory
     vector_db: str = "chroma_cloud"
-    # EMBEDDER: gemini | openai | fastembed
+    # EMBEDDER: gemini | openai | fastembed | ollama
     embedder: str = "gemini"
+
+    # ── Ollama Local LLM ──────────────────────────────────────────────────────
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen2.5-coder:32b"
+    ollama_timeout: float = 60.0
+    ollama_embedding_model: str = "nomic-embed-text"
 
     # ── ChromaDB ──────────────────────────────────────────────────────────────
     chroma_persist_dir: str = "./chroma_db"

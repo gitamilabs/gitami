@@ -173,7 +173,7 @@ export const PRReviewCard: React.FC<PRReviewCardProps> = ({
         {review.agentRationale && (
           <div className="bg-slate-950/40 rounded-xl p-4 border border-slate-800/40">
             <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5 font-mono">
-              <Cpu className="w-3.5 h-3.5 text-indigo-400" /> Gemini ReAct Orchestrator Rationale
+              <Cpu className="w-3.5 h-3.5 text-emerald-400" /> ReAct Orchestrator Rationale (Ollama / Local LLM)
             </h4>
             <div className="text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto pr-2 custom-scrollbar">
               {review.agentRationale}

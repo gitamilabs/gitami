@@ -146,15 +146,29 @@ async def health_check():
 async def get_system_config():
     """Get active system configuration including Vector DB, Embedder, and Model lists."""
     from ai_service.config import settings
-    from ai_service.agent.llm_client import GEMINI_MODELS, GROQ_MODELS
+    from ai_service.agent.llm_client import GEMINI_MODELS, GROQ_MODELS, OLLAMA_MODELS, DualLLMClient
+    
+    active_client = DualLLMClient()
+    discovered_ollama = await active_client.get_available_ollama_models()
+    effective_ollama_models = discovered_ollama if discovered_ollama else OLLAMA_MODELS
+    primary_model = settings.ollama_model if settings.llm_provider == "ollama" else (GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-3.6-flash")
+
     return {
         "vector_db": settings.vector_db,
         "embedder": settings.embedder,
+        "llm_provider": settings.llm_provider,
         "models": {
+            "llm_provider": settings.llm_provider,
+            "ollama_models": effective_ollama_models,
             "gemini_models": GEMINI_MODELS,
             "groq_models": GROQ_MODELS,
-            "primary_orchestrator": GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-3.6-flash",
+            "primary_orchestrator": primary_model,
             "worker_model": GROQ_MODELS[0] if GROQ_MODELS else "openai/gpt-oss-120b",
+        },
+        "ollama": {
+            "base_url": settings.ollama_base_url,
+            "active_model": settings.ollama_model,
+            "available_models": discovered_ollama,
         },
         "storage": {
             "qdrant_collection": settings.qdrant_collection,
@@ -631,14 +645,25 @@ async def agent_chat_query(req: ChatRequest):
     synthesis_response = await llm_client.run_orchestrator(prompt, system_prompt)
     t_synth_latency = (time.perf_counter() - t_synth_start) * 1000.0
 
+    orch_title = (
+        f"Ollama Local LLM Orchestrator ({llm_client.ollama_model})"
+        if llm_client.provider == "ollama" or (llm_client.has_ollama and not llm_client.has_gemini)
+        else "Google Gemini Dual-LLM Orchestrator"
+    )
+    orch_model = (
+        llm_client.ollama_model
+        if llm_client.provider == "ollama" or (llm_client.has_ollama and not llm_client.has_gemini)
+        else "gemini-3.6-flash"
+    )
+
     tool_steps.append(
         ToolStep(
             id=f"step_{len(tool_steps)+1}_llm_synthesis",
             tool_name="dual_llm_synthesis",
-            title="Google Gemini Dual-LLM Orchestrator",
+            title=orch_title,
             status="completed",
             latency_ms=round(t_synth_latency, 2),
-            args={"model": "gemini-3.6-flash", "citations_count": len(citations)},
+            args={"model": orch_model, "citations_count": len(citations)},
             summary="Synthesized Knowledge Base context into a cited response.",
             raw_output={"response_length": len(synthesis_response)},
         )

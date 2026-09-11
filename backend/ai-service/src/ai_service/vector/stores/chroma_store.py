@@ -22,7 +22,15 @@ class ChromaStore:
         self._embedder = embedder
 
         # ── Choose client ─────────────────────────────────────────────────────
-        if settings.chroma_api_key and settings.chroma_tenant and settings.chroma_database:
+        is_cloud = (
+            getattr(settings, "vector_db", "").lower().strip() == "chroma_cloud"
+            and settings.chroma_api_key
+            and settings.chroma_tenant
+            and settings.chroma_database
+            and not settings.chroma_api_key.startswith("your_")
+            and not settings.chroma_tenant.startswith("your_")
+        )
+        if is_cloud:
             logger.info("ChromaStore: using CloudClient (tenant=%s)", settings.chroma_tenant)
             self._client = chromadb.CloudClient(
                 tenant=settings.chroma_tenant,

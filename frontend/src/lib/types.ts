@@ -104,11 +104,19 @@ export interface IngestRepoResult {
 export interface AIServiceConfig {
   vector_db: string;
   embedder: string;
+  llm_provider?: string;
   models: {
+    llm_provider?: string;
+    ollama_models?: string[];
     gemini_models: string[];
     groq_models: string[];
     primary_orchestrator: string;
     worker_model: string;
+  };
+  ollama?: {
+    base_url?: string;
+    active_model?: string;
+    available_models?: string[];
   };
   storage: {
     qdrant_collection?: string;

@@ -217,24 +217,18 @@ class AutonomousAgentLoop:
         yield format_sse({"type": "done", "total_latency_ms": total_latency})
 
     async def _call_llm_json(self, prompt: str, system_prompt: str) -> str:
-        """Helper to invoke LLM with JSON format expectation."""
-        if self.llm_client.has_gemini:
-            res = await self.llm_client._call_gemini(prompt, system_prompt, temperature=0.1, json_mode=True)
-            if res:
-                return res
-
-        if self.llm_client.has_groq:
-            res = await self.llm_client._call_groq(prompt, system_prompt, temperature=0.1, json_mode=True)
-            if res:
-                return res
-
-        return ""
+        """Helper to invoke LLM with JSON format expectation using priority-ordered clients."""
+        return await self.llm_client.call_json(prompt, system_prompt, temperature=0.1)
 
     def _parse_llm_json(self, text: str) -> Dict[str, Any]:
         if not text:
             return {"action": "call_tool", "tool_name": "hybrid_search", "thought": "Executing default hybrid search..."}
         try:
             clean = text.strip()
+            # Strip reasoning tags from thinking models like DeepSeek-R1
+            import re
+            clean = re.sub(r"<think>.*?</think>", "", clean, flags=re.DOTALL).strip()
+
             if "```json" in clean:
                 clean = clean.split("```json")[1].split("```")[0]
             elif "```" in clean:

@@ -160,14 +160,14 @@ async def run_agentic_pr_review(
     except Exception as e:
         logger.warning(f"Worker JSON parse notice: {e}")
 
-    # 5b. Fallback: If candidate_issues is empty and Gemini is available, run direct inspection
-    if not candidate_issues and llm_client.has_gemini:
+    # 5b. Fallback: If candidate_issues is empty, run direct inspection via active LLM (Ollama/Groq/Gemini)
+    if not candidate_issues:
         try:
-            gem_raw = await llm_client._call_gemini(
-                worker_prompt, worker_system, temperature=0.2, json_mode=True
+            worker_fallback_raw = await llm_client.call_json(
+                worker_prompt, worker_system, temperature=0.2
             )
-            if gem_raw:
-                gem_clean = re.sub(r"<think>.*?</think>", "", gem_raw, flags=re.DOTALL).strip()
+            if worker_fallback_raw:
+                gem_clean = re.sub(r"<think>.*?</think>", "", worker_fallback_raw, flags=re.DOTALL).strip()
                 json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", gem_clean, re.DOTALL)
                 if not json_match:
                     json_match = re.search(r"(\{\s*\"issues\"\s*:\s*\[.*?\]\s*\})", gem_clean, re.DOTALL)
@@ -187,9 +187,9 @@ async def run_agentic_pr_review(
                             "suggested_fix": item.get("suggested_fix", ""),
                         })
         except Exception as ge:
-            logger.warning(f"Fallback Gemini worker inspection notice: {ge}")
+            logger.warning(f"Fallback worker inspection notice: {ge}")
 
-    # 6. Invoke Google Gemini Orchestrator for RAG synthesis & 5-Step Falsification
+    # 6. Invoke Primary Orchestrator (Ollama / Dual-LLM) for RAG synthesis & 5-Step Falsification
     orch_prompt = build_orchestrator_prompt(
         repo_id=repo_id,
         branch=branch,
