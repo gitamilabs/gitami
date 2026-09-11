@@ -129,7 +129,14 @@ def check_diff_conventions(raw_diff_text: str) -> List[ConventionViolation]:
 
         if line.startswith("+") and not line.startswith("+++"):
             code_content = line[1:]
+            is_test_file = any(
+                t in current_file.lower()
+                for t in ("/test/", "/tests/", ".test.", ".spec.", "playwright", "/e2e/", "__tests__", "test_", "_test")
+            )
             for rule_id, pattern, severity, message in patterns:
+                # Skip debug statements and TODO markers in test/mock files
+                if is_test_file and rule_id in ("RULE-006", "RULE-007", "RULE-008"):
+                    continue
                 if re.search(pattern, code_content):
                     violations.append(
                         ConventionViolation(

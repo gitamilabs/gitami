@@ -103,10 +103,13 @@ class VectorKBClient:
             "branch": branch,
             "file_path": file_path,
             "symbol": symbol,
+            "symbol_name": symbol,
             "content_type": ContentType.CODE.value,
             "commit_hash": commit_hash,
             "last_valid_commit": commit_hash,
         }
+        if start_line is not None:
+            metadata["start_line"] = int(start_line)
         self._upsert(doc_id, document, metadata)
 
     def add_code_entries_batch(self, entries: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -138,10 +141,15 @@ class VectorKBClient:
                 "branch": item["branch"],
                 "file_path": item["file_path"],
                 "symbol": item["symbol"],
+                "symbol_name": item["symbol"],
                 "content_type": ContentType.CODE.value,
                 "commit_hash": item["commit_hash"],
                 "last_valid_commit": item["commit_hash"],
             }
+            if item.get("start_line") is not None:
+                metadata["start_line"] = int(item["start_line"])
+            if item.get("end_line") is not None:
+                metadata["end_line"] = int(item["end_line"])
             unique_map[doc_id] = (document, metadata)
 
         doc_ids = list(unique_map.keys())

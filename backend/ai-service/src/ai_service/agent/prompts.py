@@ -29,6 +29,9 @@ SYSTEM_ORCHESTRATOR_PROMPT = _DEFAULT_PR_ORCH
 SYSTEM_WORKER_PROMPT = _DEFAULT_PR_WORKER
 
 
+import json
+
+
 def build_orchestrator_prompt(
     repo_id: str,
     branch: str,
@@ -38,7 +41,16 @@ def build_orchestrator_prompt(
     diff_text: str,
     convention_violations: list[dict],
     semantic_context: str = "",
+    cpg_context: str = "",
+    candidate_issues: list[dict] = None,
 ) -> str:
+    cpg_section = f"\nJoern CPG Structural Control-Flow & Call Site Analysis:\n{cpg_context}\n" if cpg_context else ""
+    candidate_section = (
+        f"\nCandidate Issues from Deep Code Inspector (Worker Node):\n{json.dumps(candidate_issues or [], indent=2)}\n"
+        if candidate_issues
+        else ""
+    )
+
     return f"""
 Target Repository: {repo_id} (branch: {branch})
 
@@ -53,15 +65,15 @@ Knowledge Base Blast Radius Impact (Graph DB):
 
 Semantic Similarity Context (Vector DB):
 {semantic_context}
-
-Convention Violations:
+{cpg_section}
+Static Convention Violations:
 {convention_violations}
-
+{candidate_section}
 Git Patch / Diff Content:
 {diff_text}
 
-Analyze the above change and provide:
-1. Final Verdict: ACCEPT or SUGGEST
-2. Summary rationale explaining blast radius & code impact
-3. Line-level suggestion comments for maintaining team code quality.
+Instructions:
+1. Apply the 5-step Falsification Protocol: Verify or falsify the candidate issues using the diff context and Joern CPG reachable guards/callers.
+2. Provide your review analysis (Verdict, Risk Assessment, Summary, Review Comments).
+3. Conclude with a strict JSON block ```json {{"confirmed_issues": [...]}} ``` containing ONLY the verified, surviving defects.
 """

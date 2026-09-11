@@ -1,22 +1,28 @@
+import asyncio
 import json
-import uuid
 import logging
+import re
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 from ai_service.graph.client import Neo4jClient
 from ai_service.vector.client import VectorKBClient
-from ai_service.mcp.tools import tool_get_blast_radius, tool_get_file_dependencies, tool_vector_search
+from ai_service.mcp.tools import (
+    tool_get_blast_radius,
+    tool_get_file_dependencies,
+    tool_vector_search,
+    tool_cpg_reachable_guards,
+    tool_cpg_callers_with_args,
+)
 from ai_service.analysis.blast_radius import compute_blast_radius
 from ai_service.analysis.conventions import check_conventions, check_diff_conventions, ConventionViolation
 from ai_service.analysis.decision import DecisionResult, Verdict, Suggestion
 from ai_service.agent.diff_parser import parse_git_diff, extract_changed_symbols, DiffHunk
 from ai_service.agent.llm_client import DualLLMClient
 from ai_service.prompts import get_prompt
-from ai_service.agent.prompts import (
-    build_orchestrator_prompt,
-)
+from ai_service.agent.prompts import build_orchestrator_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +34,43 @@ class AgentReviewResult:
     diff_hunks_count: int
     llm_orchestrator_used: bool
     issues: List[Dict[str, Any]] = field(default_factory=list)
+
+
+async def _run_cpg_analysis(repo_id: str, syms: List[str]) -> str:
+    """Retrieve Joern CPG control-flow guards and callers for changed symbols concurrently."""
+    if not syms:
+        return "No changed symbols identified for CPG analysis."
+
+    target_syms = syms[:5]
+
+    async def _safe_guard(sym: str) -> Dict[str, Any]:
+        try:
+            res = await tool_cpg_reachable_guards(repo_id=repo_id, symbol_name=sym)
+            return json.loads(res) if isinstance(res, str) and res.strip().startswith("{") else {"raw": res}
+        except Exception as e:
+            return {"symbol": sym, "error": str(e)}
+
+    async def _safe_callers(sym: str) -> Dict[str, Any]:
+        try:
+            res = await tool_cpg_callers_with_args(repo_id=repo_id, symbol_name=sym)
+            return json.loads(res) if isinstance(res, str) and res.strip().startswith("{") else {"raw": res}
+        except Exception as e:
+            return {"symbol": sym, "error": str(e)}
+
+    guard_tasks = [_safe_guard(s) for s in target_syms]
+    caller_tasks = [_safe_callers(s) for s in target_syms]
+
+    all_cpg = await asyncio.gather(*guard_tasks, *caller_tasks, return_exceptions=True)
+    guards_res = all_cpg[: len(target_syms)]
+    callers_res = all_cpg[len(target_syms) :]
+
+    cpg_entries = []
+    for i, s in enumerate(target_syms):
+        g = guards_res[i] if not isinstance(guards_res[i], Exception) else str(guards_res[i])
+        c = callers_res[i] if not isinstance(callers_res[i], Exception) else str(callers_res[i])
+        cpg_entries.append({"symbol": s, "reachable_guards": g, "callers_with_args": c})
+
+    return json.dumps(cpg_entries, indent=2)
 
 
 async def run_agentic_pr_review(
@@ -54,15 +97,7 @@ async def run_agentic_pr_review(
     if not changed_symbols:
         changed_symbols = extract_changed_symbols(hunks, raw_diff_text)
 
-    # 2. Query Knowledge Base via FastMCP tools
-    blast_json = await tool_get_blast_radius(client, repo_id=repo_id, changed_symbols=changed_symbols, branch=branch)
-    blast_data = json.loads(blast_json)
-
-    # 2b. Retrieve semantic context from Vector KB (non-blocking)
-    diff_query = raw_diff_text[:400] if raw_diff_text else repo_id
-    semantic_json = await tool_vector_search(vector_client, query_text=diff_query, repo_id=repo_id, n_results=3)
-
-    # 3. Static convention and diff checks
+    # 2. Static convention and diff checks
     ast_violations = check_conventions(symbols)
     diff_violations = check_diff_conventions(raw_diff_text)
     all_violations = ast_violations + diff_violations
@@ -72,37 +107,52 @@ async def run_agentic_pr_review(
         for v in all_violations
     ]
 
-    # 4. Invoke Groq Worker Node for parallel file diff inspection
+    # 3. Formulate prompts and queries
+    diff_query = raw_diff_text[:2000] if raw_diff_text else repo_id
     worker_system = get_prompt("pr_reviewer_worker")
-
     worker_prompt = (
         f"Target Repo: '{repo_id}' (branch: '{branch}')\n"
+        f"Changed Files: {changed_files}\n"
         f"Modified Symbols: {changed_symbols}\n"
-        f"Analyze the following pull request diff for bugs, invalid method calls, and errors:\n\n{raw_diff_text[:5000]}"
+        f"Systematically inspect EVERY file listed in Changed Files ({changed_files}) for runtime bugs, unhandled promise rejections, missing try-catch error handling around dynamic imports or API calls, and logic flaws:\n\n{raw_diff_text[:12000]}"
     )
-    worker_raw = await llm_client.run_worker(worker_prompt, worker_system)
 
-    structured_issues: List[Dict[str, Any]] = []
+    # 4. Concurrent execution of Neo4j Blast Radius, Vector Search, Joern CPG, and Groq Worker
+    blast_task = tool_get_blast_radius(client, repo_id=repo_id, changed_symbols=changed_symbols, branch=branch)
+    vector_task = tool_vector_search(vector_client, query_text=diff_query, repo_id=repo_id, n_results=3)
+    cpg_task = _run_cpg_analysis(repo_id=repo_id, syms=changed_symbols)
+    worker_task = llm_client.run_worker(worker_prompt, worker_system)
 
-    # Parse JSON from Groq worker
+    results = await asyncio.gather(blast_task, vector_task, cpg_task, worker_task, return_exceptions=True)
+
+    blast_json = results[0] if isinstance(results[0], str) else json.dumps({"risk_score": 0.0, "total_affected": 0})
+    semantic_json = results[1] if isinstance(results[1], str) else "[]"
+    cpg_context = results[2] if isinstance(results[2], str) else "CPG analysis unavailable."
+    worker_raw = results[3] if isinstance(results[3], str) else "{}"
+
     try:
-        clean_json = worker_raw.strip()
-        if clean_json.startswith("```json"):
-            clean_json = clean_json[7:]
-        if clean_json.startswith("```"):
-            clean_json = clean_json[3:]
-        if clean_json.endswith("```"):
-            clean_json = clean_json[:-3]
-        worker_parsed = json.loads(clean_json.strip())
+        blast_data = json.loads(blast_json)
+    except Exception:
+        blast_data = {"risk_score": 0.0, "total_affected": 0}
+
+    # 5. Parse candidate issues from worker node
+    candidate_issues: List[Dict[str, Any]] = []
+    try:
+        clean_json = re.sub(r"<think>.*?</think>", "", worker_raw, flags=re.DOTALL).strip()
+        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean_json, re.DOTALL)
+        if not json_match:
+            json_match = re.search(r"(\{\s*\"issues\"\s*:\s*\[.*?\]\s*\})", clean_json, re.DOTALL)
+        raw_to_parse = json_match.group(1) if json_match else clean_json
+        worker_parsed = json.loads(raw_to_parse.strip())
         w_issues = worker_parsed.get("issues", [])
         if isinstance(w_issues, list):
             for item in w_issues:
-                structured_issues.append({
+                candidate_issues.append({
                     "id": str(uuid.uuid4()),
                     "title": item.get("title", "Code Issue Detected"),
                     "description": item.get("description", "Potential flaw found during deep diff analysis."),
                     "category": item.get("category", "bug"),
-                    "severity": item.get("severity", "error" if "invalid" in item.get("title", "").lower() or "error" in item.get("title", "").lower() else "warning"),
+                    "severity": item.get("severity", "warning"),
                     "file_path": item.get("file_path", changed_files[0] if changed_files else "codebase"),
                     "line": item.get("line", 1),
                     "suggested_fix": item.get("suggested_fix", ""),
@@ -110,34 +160,110 @@ async def run_agentic_pr_review(
     except Exception as e:
         logger.warning(f"Worker JSON parse notice: {e}")
 
-    # 5. Invoke Google Gemini Orchestrator for RAG synthesis & architectural evaluation
+    # 5b. Fallback: If candidate_issues is empty and Gemini is available, run direct inspection
+    if not candidate_issues and llm_client.has_gemini:
+        try:
+            gem_raw = await llm_client._call_gemini(
+                worker_prompt, worker_system, temperature=0.2, json_mode=True
+            )
+            if gem_raw:
+                gem_clean = re.sub(r"<think>.*?</think>", "", gem_raw, flags=re.DOTALL).strip()
+                json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", gem_clean, re.DOTALL)
+                if not json_match:
+                    json_match = re.search(r"(\{\s*\"issues\"\s*:\s*\[.*?\]\s*\})", gem_clean, re.DOTALL)
+                raw_to_parse = json_match.group(1) if json_match else gem_clean
+                gem_parsed = json.loads(raw_to_parse.strip())
+                g_issues = gem_parsed.get("issues", [])
+                if isinstance(g_issues, list):
+                    for item in g_issues:
+                        candidate_issues.append({
+                            "id": str(uuid.uuid4()),
+                            "title": item.get("title", "Code Issue Detected"),
+                            "description": item.get("description", "Potential flaw found during deep diff analysis."),
+                            "category": item.get("category", "bug"),
+                            "severity": item.get("severity", "warning"),
+                            "file_path": item.get("file_path", changed_files[0] if changed_files else "codebase"),
+                            "line": item.get("line", 1),
+                            "suggested_fix": item.get("suggested_fix", ""),
+                        })
+        except Exception as ge:
+            logger.warning(f"Fallback Gemini worker inspection notice: {ge}")
+
+    # 6. Invoke Google Gemini Orchestrator for RAG synthesis & 5-Step Falsification
     orch_prompt = build_orchestrator_prompt(
         repo_id=repo_id,
         branch=branch,
         changed_files=changed_files,
         changed_symbols=changed_symbols,
         blast_radius_json=blast_json,
-        diff_text=raw_diff_text,
+        diff_text=raw_diff_text[:16000],
         convention_violations=violations_dicts,
         semantic_context=semantic_json,
+        cpg_context=cpg_context,
+        candidate_issues=candidate_issues,
     )
     orchestrator_response = await llm_client.run_orchestrator(orch_prompt, get_prompt("pr_orchestrator"))
 
-    # 6. Formulate final suggestions and decision verdict
-    suggestions: List[Suggestion] = []
+    # 7. Extract confirmed issues surviving falsification & merge candidate issues
+    structured_issues: List[Dict[str, Any]] = []
+    seen_issue_keys = set()
+    orchestrator_confirmed = None
 
-    # Add convention violations to issues list
+    try:
+        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", orchestrator_response, re.DOTALL)
+        if not json_match:
+            json_match = re.search(r"(\{\s*\"confirmed_issues\"\s*:\s*\[.*?\]\s*\})", orchestrator_response, re.DOTALL)
+        if json_match:
+            parsed_orch = json.loads(json_match.group(1))
+            if "confirmed_issues" in parsed_orch and isinstance(parsed_orch["confirmed_issues"], list):
+                orchestrator_confirmed = parsed_orch["confirmed_issues"]
+    except Exception as e:
+        logger.debug(f"Orchestrator confirmed issues parse notice: {e}")
+
+    # Add candidate issues from worker node
+    for item in candidate_issues:
+        key = (item.get("file_path", ""), item.get("line", 0), item.get("title", ""))
+        if key not in seen_issue_keys:
+            seen_issue_keys.add(key)
+            structured_issues.append(item)
+
+    # Merge any confirmed issues uniquely identified by orchestrator
+    if orchestrator_confirmed and len(orchestrator_confirmed) > 0:
+        for item in orchestrator_confirmed:
+            f = item.get("file_path", changed_files[0] if changed_files else "codebase")
+            l = item.get("line", 1)
+            t = item.get("title", "Code Issue Detected")
+            key = (f, l, t)
+            if key not in seen_issue_keys:
+                seen_issue_keys.add(key)
+                structured_issues.append({
+                    "id": str(uuid.uuid4()),
+                    "title": t,
+                    "description": item.get("description", "Issue verified by orchestrator."),
+                    "category": item.get("category", "bug"),
+                    "severity": item.get("severity", "warning"),
+                    "file_path": f,
+                    "line": l,
+                    "suggested_fix": item.get("suggested_fix", ""),
+                })
+
+    # Add critical convention violations to structured_issues (style suggestions stay in suggestions)
     for v in all_violations:
-        structured_issues.append({
-            "id": str(uuid.uuid4()),
-            "title": f"[{v.rule_id}] Style & Convention Violation",
-            "description": v.message,
-            "category": "convention",
-            "severity": v.severity,
-            "file_path": v.file_path,
-            "line": v.line,
-            "suggested_fix": f"Follow project conventions for {v.rule_id}",
-        })
+        if v.severity == "error":
+            structured_issues.append({
+                "id": str(uuid.uuid4()),
+                "title": f"[{v.rule_id}] Style & Convention Violation",
+                "description": v.message,
+                "category": "convention",
+                "severity": v.severity,
+                "file_path": v.file_path,
+                "line": v.line,
+                "suggested_fix": f"Follow project conventions for {v.rule_id}",
+            })
+
+    # Suggestions list for non-blocking code quality feedback
+    suggestions: List[Suggestion] = []
+    for v in all_violations:
         suggestions.append(
             Suggestion(
                 file_path=v.file_path,
@@ -148,10 +274,8 @@ async def run_agentic_pr_review(
             )
         )
 
-    # Calculate composite risk score (Neo4j blast radius + Issue severity score)
-    base_blast_risk = blast_data.get("risk_score", 0.0)
-    total_affected = blast_data.get("total_affected", 0)
-
+    # 8. Composite risk score and final verdict
+    base_blast_risk = blast_data.get("risk_score", 0.0) if isinstance(blast_data, dict) else 0.0
     issue_severity_score = 0.0
     for issue in structured_issues:
         sev = str(issue.get("severity", "warning")).lower()
@@ -164,26 +288,13 @@ async def run_agentic_pr_review(
 
     composite_risk_score = round(min(10.0, max(base_blast_risk, issue_severity_score)), 2)
 
-    if base_blast_risk > 5.0:
-        affected_names = [a.get("qualified_name") for a in blast_data.get("affected_symbols", [])[:3]]
-        primary_file = changed_files[0] if changed_files else "codebase"
-        structured_issues.append({
-            "id": str(uuid.uuid4()),
-            "title": f"High Blast Radius Ripple Effect (Risk Score: {base_blast_risk})",
-            "description": f"This change affects {total_affected} downstream symbols: {', '.join(affected_names)}",
-            "category": "blast_radius",
-            "severity": "error" if base_blast_risk > 7.0 else "warning",
-            "file_path": primary_file,
-            "line": 1,
-            "suggested_fix": "Verify downstream call sites and run integration tests for affected dependencies.",
-        })
-
-    # Determine verdict: SUGGEST if actionable issues/suggestions or high risk, else ACCEPT
     has_errors = any(i.get("severity") == "error" for i in structured_issues)
-    has_actionable_issues = any(i.get("severity") in ("error", "warning") for i in structured_issues) or len(suggestions) > 0
+    has_actionable_issues = any(i.get("severity") in ("error", "warning") for i in structured_issues)
     is_high_risk = composite_risk_score > 5.0
 
     verdict: Verdict = "SUGGEST" if (is_high_risk or has_errors or has_actionable_issues) else "ACCEPT"
+    if "verdict: accept" in orchestrator_response.lower() and not has_errors and composite_risk_score <= 5.0 and len(structured_issues) == 0:
+        verdict = "ACCEPT"
 
     summary_text = (
         f"Agentic Review Verdict: {verdict}. Composite Risk Score: {composite_risk_score}/10.0. "

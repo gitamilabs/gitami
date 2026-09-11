@@ -40,10 +40,14 @@ class UnifiedKB:
         Returns a dictionary combining both vector and graph hits.
         """
         # 1. Vector similarity search
+        where_filter: Dict[str, Any] = {"repo": repo_id}
+        if branch:
+            where_filter["branch"] = branch
+
         vector_res = self.vector.query(
             query_texts=[query_text],
             n_results=n_results,
-            where={"repo": repo_id},
+            where=where_filter,
         )
 
         vector_hits = []
@@ -58,21 +62,33 @@ class UnifiedKB:
         stop_words = {
             'use', 'the', 'graph', 'mcp', 'to', 'locate', 'me', 'which', 'nodes', 'noddes',
             'will', 'directly', 'be', 'affected', 'from', 'editing', 'find', 'show', 'get',
-            'what', 'how', 'does', 'in', 'of', 'for', 'a', 'an', 'and', 'or', 'with', 'is', 'it'
+            'what', 'how', 'does', 'in', 'of', 'for', 'a', 'an', 'and', 'or', 'with', 'is', 'it',
+            'at', 'by', 'on', 'this', 'that', 'these', 'those', 'where', 'when', 'why', 'who',
+            'can', 'could', 'should', 'would', 'all', 'any', 'each', 'every', 'both', 'few', 'more'
         }
-        words = re.findall(r'[a-zA-Z0-9_-]+', query_text.lower())
-        tokens = [w for w in words if w not in stop_words and len(w) > 2]
-        if len(tokens) >= 2:
-            tokens.append("".join(tokens))
-            tokens.append(tokens[0] + tokens[1].capitalize())
+
+        # Expand camelCase and split snake_case / path separators
+        expanded = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', query_text)
+        cleaned = re.sub(r'[_.\-/\\:]+', ' ', expanded)
+
+        raw_words = [w.lower() for w in re.findall(r'[a-zA-Z0-9]+', query_text)]
+        expanded_words = [w.lower() for w in re.findall(r'[a-zA-Z0-9]+', cleaned)]
+        all_words = list(dict.fromkeys(raw_words + expanded_words))
+
+        tokens = [w for w in all_words if w not in stop_words and len(w) > 2]
+        if 2 <= len(tokens) <= 4:
+            tokens.append("".join(tokens[:2]))
 
         if not tokens:
             tokens = [query_text.lower()]
 
-        # Query Cypher for symbols matching any token
+        # Query Cypher for symbols matching any token, ranked by number of matched tokens
         graph_query = """
-        MATCH (s:Symbol {repo_id: $repo_id})
-        WHERE ANY(t IN $tokens WHERE toLower(s.name) CONTAINS t OR toLower(s.qualified_name) CONTAINS t)
+        MATCH (s:Symbol)
+        WHERE s.repo_id = $repo_id AND ($branch = "" OR s.branch = $branch)
+          AND ANY(t IN $tokens WHERE toLower(s.name) CONTAINS t OR toLower(s.qualified_name) CONTAINS t)
+        WITH s, [t IN $tokens WHERE toLower(s.name) CONTAINS t OR toLower(s.qualified_name) CONTAINS t] AS matched_tokens
+        ORDER BY size(matched_tokens) DESC, size(s.name) ASC
         RETURN properties(s) AS symbol
         LIMIT $limit
         """
@@ -80,21 +96,24 @@ class UnifiedKB:
         try:
             graph_recs = await self.graph.execute_query(
                 graph_query,
-                {"repo_id": repo_id, "tokens": tokens, "limit": n_results},
+                {"repo_id": repo_id, "branch": branch or "", "tokens": tokens, "limit": n_results},
             )
             graph_hits = [r["symbol"] for r in graph_recs if "symbol" in r]
 
             # If symbol hits are fewer than limit, search File nodes
             if len(graph_hits) < n_results:
                 file_query = """
-                MATCH (f:File {repo_id: $repo_id})
-                WHERE ANY(t IN $tokens WHERE toLower(f.file_path) CONTAINS t)
+                MATCH (f:File)
+                WHERE f.repo_id = $repo_id AND ($branch = "" OR f.branch = $branch)
+                  AND ANY(t IN $tokens WHERE toLower(f.file_path) CONTAINS t)
+                WITH f, [t IN $tokens WHERE toLower(f.file_path) CONTAINS t] AS matched_tokens
+                ORDER BY size(matched_tokens) DESC
                 RETURN {name: f.file_path, qualified_name: f.file_path, kind: "file", file_path: f.file_path, language: f.language} AS symbol
                 LIMIT $limit
                 """
                 file_recs = await self.graph.execute_query(
                     file_query,
-                    {"repo_id": repo_id, "tokens": tokens, "limit": n_results - len(graph_hits)},
+                    {"repo_id": repo_id, "branch": branch or "", "tokens": tokens, "limit": n_results - len(graph_hits)},
                 )
                 file_hits = [r["symbol"] for r in file_recs if "symbol" in r]
                 graph_hits.extend(file_hits)

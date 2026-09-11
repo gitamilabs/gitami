@@ -245,9 +245,13 @@ class BenchmarkRunner:
                     BenchmarkReportGenerator.generate_markdown(ds_agg, ds_scores, ds_meta, ds_md)
                     BenchmarkReportGenerator.generate_json(ds_agg, ds_scores, ds_meta, ds_json)
                     logger.info(
-                        f"\n🎉 Saved dedicated benchmark report for '{current_ds_name}': "
+                        f"\n[REPORT] Saved dedicated benchmark report for '{current_ds_name}': "
                         f"{ds_md.name} (Cases: {len(ds_scores)}, F1: {ds_agg.f1_score:.4f})"
                     )
+
+            # Rate-limit throttle between test cases to protect LLM RPM / TPM quotas
+            if idx < len(all_cases):
+                await asyncio.sleep(8.0)
 
         # 3. Aggregate metrics across all test cases
         aggregate = self.scorer.aggregate_scores(case_scores)

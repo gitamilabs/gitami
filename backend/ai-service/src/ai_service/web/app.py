@@ -311,31 +311,20 @@ async def agent_chat_stream(req: ChatRequest):
     1. Agent runs iterative ReAct reasoning loop.
     2. Streams thoughts, tool calls, tool responses, answer text deltas, and citations.
     """
-    graph_client = Neo4jClient()
-    try:
-        await graph_client.connect()
-    except Exception:
-        pass
-
-    vector_client = VectorKBClient()
+    graph_client = await get_shared_graph_client()
+    vector_client = get_shared_vector_client()
     llm_client = DualLLMClient()
     agent_loop = AutonomousAgentLoop(llm_client=llm_client)
 
     async def event_generator():
-        try:
-            async for event in agent_loop.run_stream(
-                user_query=req.message,
-                repo_id=req.repo_id,
-                branch=req.branch or "main",
-                graph_client=graph_client,
-                vector_client=vector_client,
-            ):
-                yield event
-        finally:
-            try:
-                await graph_client.close()
-            except Exception:
-                pass
+        async for event in agent_loop.run_stream(
+            user_query=req.message,
+            repo_id=req.repo_id,
+            branch=req.branch or "main",
+            graph_client=graph_client,
+            vector_client=vector_client,
+        ):
+            yield event
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -369,19 +358,19 @@ async def _execute_single_tool(
                 meta = hit.get("metadata", {})
                 text = hit.get("text", "")
                 file_path = meta.get("file_path", meta.get("repo", "codebase"))
-                sym_name = meta.get("symbol_name") or meta.get("name")
+                sym_name = meta.get("symbol") or meta.get("symbol_name") or meta.get("name")
                 start_l = meta.get("start_line")
                 end_l = meta.get("end_line")
-                line_str = f"{start_l}-{end_l}" if start_l and end_l else None
+                line_str = f"{start_l}-{end_l}" if start_l and end_l else (str(start_l) if start_l else None)
 
                 local_cits_data.append({
                     "file_path": file_path,
                     "symbol": sym_name,
                     "lines": line_str,
-                    "snippet": text[:300] + ("..." if len(text) > 300 else ""),
+                    "snippet": text[:500] + ("..." if len(text) > 500 else ""),
                     "source_type": "vector",
-                    "distance": round(hit.get("distance", 0.0), 4) if hit.get("distance") else None,
-                    "full_text": text[:600],
+                    "distance": round(hit.get("distance", 0.0), 4) if hit.get("distance") is not None else None,
+                    "full_text": text[:1200],
                 })
 
         elif t_name == "hybrid_search":
@@ -393,14 +382,42 @@ async def _execute_single_tool(
             g_hits = t_raw.get("graph_hits", [])
             t_summary = f"Retrieved {len(vec_hits)} vector hits and {len(g_hits)} Neo4j graph symbol hits."
 
+            seen_cits = set()
+            for v in vec_hits:
+                meta = v.get("metadata", {})
+                text = v.get("document", "")
+                file_path = meta.get("file_path", meta.get("repo", "codebase"))
+                sym_name = meta.get("symbol") or meta.get("symbol_name") or meta.get("name")
+                start_l = meta.get("start_line")
+                end_l = meta.get("end_line")
+                line_str = f"{start_l}-{end_l}" if start_l and end_l else (str(start_l) if start_l else None)
+                cit_key = f"{file_path}:{sym_name or ''}:{line_str or ''}"
+                seen_cits.add(cit_key)
+                local_cits_data.append({
+                    "file_path": file_path,
+                    "symbol": sym_name,
+                    "lines": line_str,
+                    "snippet": text[:500] + ("..." if len(text) > 500 else ""),
+                    "source_type": "vector",
+                    "distance": round(v.get("distance", 0.0), 4) if v.get("distance") is not None else None,
+                    "full_text": text[:1200],
+                })
+
             for g in g_hits:
                 if isinstance(g, dict):
                     f_p = g.get("file_path", g.get("name", "knowledge-graph"))
                     s_n = g.get("name") or g.get("qualified_name")
+                    g_start = g.get("start_line")
+                    g_end = g.get("end_line")
+                    g_lines = f"{g_start}-{g_end}" if g_start and g_end else (str(g_start) if g_start else None)
+                    cit_key = f"{f_p}:{s_n or ''}:{g_lines or ''}"
+                    if cit_key in seen_cits:
+                        continue
+                    seen_cits.add(cit_key)
                     local_cits_data.append({
                         "file_path": f_p,
                         "symbol": s_n,
-                        "lines": f"{g.get('start_line', '')}-{g.get('end_line', '')}" if g.get('start_line') else None,
+                        "lines": g_lines,
                         "snippet": f"Neo4j {g.get('kind', 'symbol')} Node: {s_n}\nDocstring: {g.get('docstring', 'None')}",
                         "source_type": "graph",
                         "distance": None,
@@ -495,7 +512,7 @@ async def _compress_retrieved_context(
         return "No specific vector passages retrieved."
 
     raw_context = "\n\n".join(context_chunks)
-    if len(raw_context) < 1500:
+    if len(raw_context) < 3500:
         return raw_context
 
     from ai_service.prompts import get_prompt
@@ -505,8 +522,15 @@ async def _compress_retrieved_context(
         f"Retrieved Code & Graph Context to Compress:\n{raw_context[:4000]}"
     )
     try:
-        compressed = await llm_client.run_orchestrator(compress_prompt, compress_system_prompt)
-        if compressed and len(compressed.strip()) > 0:
+        compressed = None
+        if hasattr(llm_client, "run_fast") and callable(getattr(llm_client, "run_fast")):
+            try:
+                compressed = await llm_client.run_fast(compress_prompt, compress_system_prompt)
+            except TypeError:
+                compressed = None
+        if not compressed:
+            compressed = await llm_client.run_orchestrator(compress_prompt, compress_system_prompt)
+        if compressed and isinstance(compressed, str) and len(compressed.strip()) > 0:
             return compressed.strip()
     except Exception as e:
         pass
@@ -532,23 +556,16 @@ async def agent_chat_query(req: ChatRequest):
     citation_id_counter = 1
     context_chunks = []
 
-    graph_client = Neo4jClient()
-    try:
-        await graph_client.connect()
-    except Exception:
-        pass
-
-    vector_client = VectorKBClient()
+    graph_client = await get_shared_graph_client()
+    vector_client = get_shared_vector_client()
     llm_client = DualLLMClient()
 
     # Step 1: Agent plans dynamic tool calls
     planned_calls = await llm_client.plan_tool_calls(user_query=req.message, repo_id=req.repo_id)
 
-    # Ensure vector search and hybrid search are included if no tools planned
-    has_vector_or_hybrid = any(c.get("tool_name") in ["hybrid_search", "vector_search"] for c in planned_calls)
-    if not has_vector_or_hybrid:
-        planned_calls.insert(0, {"tool_name": "vector_search", "args": {"query": req.message}})
-        planned_calls.insert(1, {"tool_name": "hybrid_search", "args": {"query": req.message}})
+    # If no tools were planned, default to hybrid_search
+    if not planned_calls:
+        planned_calls = [{"tool_name": "hybrid_search", "args": {"query": req.message}}]
 
     # Step 2: Parallel execution of all planned tools (zero sequential bottleneck)
     tasks = [

@@ -125,10 +125,15 @@ class BenchmarkEvaluator:
             f"Return JSON strictly formatted as:\n"
             f'{{"is_vulnerable": bool, "cwe": "CWE-XX", "confidence": float, "rationale": "..."}}'
         )
+        system_prompt = "You are a specialized code reviewer assessing git diffs for security vulnerabilities. Output ONLY valid JSON."
         try:
-            resp = await self.llm_client.run_worker(prompt)
-            clean = resp.strip().strip("```json").strip("```").strip()
-            data = json.loads(clean)
+            resp = await self.llm_client.run_worker(prompt, system_prompt)
+            clean = resp.strip()
+            if "```json" in clean:
+                clean = clean.split("```json")[1].split("```")[0]
+            elif "```" in clean:
+                clean = clean.split("```")[1].split("```")[0]
+            data = json.loads(clean.strip())
             return CaseReviewOutput(
                 is_vulnerable=bool(data.get("is_vulnerable", False)),
                 cwe=data.get("cwe", "NONE"),
@@ -137,9 +142,16 @@ class BenchmarkEvaluator:
                 falsification_attempt="N/A (Diff-only baseline does not query graph)",
                 rationale=data.get("rationale", "Baseline review"),
             )
-        except Exception:
-            # Fallback
-            return await self.evaluate_single_diff_baseline(case, diff_text)
+        except Exception as e:
+            logger.warning(f"Baseline review failed for case {case.case_id}: {e}")
+            return CaseReviewOutput(
+                is_vulnerable=False,
+                cwe="NONE",
+                confidence=0.0,
+                evidence_nodes=[case.target_file],
+                falsification_attempt="N/A",
+                rationale=f"Evaluation skipped due to error: {e}",
+            )
 
     async def evaluate_single_diff_agentic(
         self,
@@ -185,10 +197,15 @@ class BenchmarkEvaluator:
             f'{{"is_vulnerable": bool, "cwe": "CWE-XX", "confidence": float, "evidence_nodes": ["..."], '
             f'"falsification_attempt": "...", "rationale": "..."}}'
         )
+        system_prompt = "You are the GitAmi CPG & Graph-Grounded Security Reviewer enforcing the 5-step falsification protocol. Output ONLY valid JSON."
         try:
-            resp = await self.llm_client.run_orchestrator(prompt)
-            clean = resp.strip().strip("```json").strip("```").strip()
-            data = json.loads(clean)
+            resp = await self.llm_client.run_orchestrator(prompt, system_prompt)
+            clean = resp.strip()
+            if "```json" in clean:
+                clean = clean.split("```json")[1].split("```")[0]
+            elif "```" in clean:
+                clean = clean.split("```")[1].split("```")[0]
+            data = json.loads(clean.strip())
             return CaseReviewOutput(
                 is_vulnerable=bool(data.get("is_vulnerable", False)),
                 cwe=data.get("cwe", "NONE"),
@@ -197,8 +214,16 @@ class BenchmarkEvaluator:
                 falsification_attempt=data.get("falsification_attempt", "Graph falsification evaluated."),
                 rationale=data.get("rationale", "Agentic review"),
             )
-        except Exception:
-            return await self.evaluate_single_diff_agentic(case, diff_text, is_vulnerable_version)
+        except Exception as e:
+            logger.warning(f"Agentic review failed for case {case.case_id}: {e}")
+            return CaseReviewOutput(
+                is_vulnerable=False,
+                cwe="NONE",
+                confidence=0.0,
+                evidence_nodes=[case.target_file],
+                falsification_attempt="Error during falsification evaluation",
+                rationale=f"Evaluation skipped due to error: {e}",
+            )
 
     async def run_benchmark(
         self,

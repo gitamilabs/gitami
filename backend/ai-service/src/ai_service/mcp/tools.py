@@ -182,8 +182,12 @@ async def tool_vector_search(
     if res and res.get("documents") and len(res["documents"]) > 0 and res["documents"][0]:
         docs = res["documents"][0]
         metas = res["metadatas"][0] if res.get("metadatas") else [{}] * len(docs)
-        for doc, meta in zip(docs, metas):
-            hits.append({"metadata": meta, "text": doc})
+        dists = res.get("distances")[0] if res.get("distances") and len(res["distances"]) > 0 else [None] * len(docs)
+        for doc, meta, dist in zip(docs, metas, dists):
+            hit_item = {"metadata": meta, "text": doc}
+            if dist is not None:
+                hit_item["distance"] = dist
+            hits.append(hit_item)
 
     return json.dumps({"query": query_text, "results": hits}, indent=2)
 

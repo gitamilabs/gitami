@@ -15,6 +15,15 @@ def _default_repos_dir() -> Path:
     return Path("./benchmark_repos")
 
 
+def _default_results_dir() -> Path:
+    custom = os.environ.get("BENCHMARK_RESULTS_DIR")
+    if custom:
+        return Path(custom)
+    if Path("backend/ai-service/benchmark_results").exists():
+        return Path("backend/ai-service/benchmark_results")
+    return Path("./benchmark_results")
+
+
 @dataclass
 class BenchmarkConfig:
     """Benchmark execution configuration."""
@@ -23,11 +32,7 @@ class BenchmarkConfig:
     repos_dir: Path = field(default_factory=_default_repos_dir)
 
     # Output directory for Markdown and JSON evaluation reports
-    results_dir: Path = field(
-        default_factory=lambda: Path(
-            os.environ.get("BENCHMARK_RESULTS_DIR", "./benchmark_results")
-        )
-    )
+    results_dir: Path = field(default_factory=_default_results_dir)
 
     # Subsample test cases (e.g. 3 or 5 for quick testing, None for full suite)
     sample_size: Optional[int] = None

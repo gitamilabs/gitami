@@ -1,0 +1,249 @@
+{
+  "total_cases": 10,
+  "modes": {
+    "baseline": {
+      "summary": {
+        "mode": "baseline",
+        "total_pairs": 10,
+        "pair_wise_correct": 0,
+        "pair_wise_correct_rate": "0.0%",
+        "true_positives": 10,
+        "false_negatives": 0,
+        "false_positives": 10,
+        "true_negatives": 0,
+        "false_positive_rate": "100.0%",
+        "false_negative_rate": "0.0%",
+        "precision": "50.0%",
+        "recall": "100.0%",
+        "f1_score": "66.7%",
+        "graph_grounding_rate": "0.0%"
+      },
+      "details": [
+        {
+          "case_id": "PY-CVE-2023-8901",
+          "cwe": "CWE-89",
+          "language": "python",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "VULNERABLE",
+          "pair_wise_correct": false,
+          "vuln_falsification": "N/A (Diff-only baseline does not query graph)",
+          "patch_falsification": "N/A (Diff-only baseline does not query graph)"
+        },
+        {
+          "case_id": "JS-CVE-2023-8902",
+          "cwe": "CWE-89",
+          "language": "javascript",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "VULNERABLE",
+          "pair_wise_correct": false,
+          "vuln_falsification": "N/A (Diff-only baseline does not query graph)",
+          "patch_falsification": "N/A (Diff-only baseline does not query graph)"
+        },
+        {
+          "case_id": "PY-CVE-2022-7901",
+          "cwe": "CWE-79",
+          "language": "python",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "VULNERABLE",
+          "pair_wise_correct": false,
+          "vuln_falsification": "N/A (Diff-only baseline does not query graph)",
+          "patch_falsification": "N/A (Diff-only baseline does not query graph)"
+        },
+        {
+          "case_id": "JS-CVE-2023-7902",
+          "cwe": "CWE-79",
+          "language": "javascript",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "VULNERABLE",
+          "pair_wise_correct": false,
+          "vuln_falsification": "N/A (Diff-only baseline does not query graph)",
+          "patch_falsification": "N/A (Diff-only baseline does not query graph)"
+        },
+        {
+          "case_id": "PY-CVE-2023-2201",
+          "cwe": "CWE-22",
+          "language": "python",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "VULNERABLE",
+          "pair_wise_correct": false,
+          "vuln_falsification": "N/A (Diff-only baseline does not query graph)",
+          "patch_falsification": "N/A (Diff-only baseline does not query graph)"
+        },
+        {
+          "case_id": "JS-CVE-2023-2202",
+          "cwe": "CWE-22",
+          "language": "javascript",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "VULNERABLE",
+          "pair_wise_correct": false,
+          "vuln_falsification": "N/A (Diff-only baseline does not query graph)",
+          "patch_falsification": "N/A (Diff-only baseline does not query graph)"
+        },
+        {
+          "case_id": "PY-CVE-2023-7801",
+          "cwe": "CWE-78",
+          "language": "python",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "VULNERABLE",
+          "pair_wise_correct": false,
+          "vuln_falsification": "N/A (Diff-only baseline does not query graph)",
+          "patch_falsification": "N/A (Diff-only baseline does not query graph)"
+        },
+        {
+          "case_id": "JS-CVE-2023-7802",
+          "cwe": "CWE-78",
+          "language": "javascript",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "VULNERABLE",
+          "pair_wise_correct": false,
+          "vuln_falsification": "N/A (Diff-only baseline does not query graph)",
+          "patch_falsification": "N/A (Diff-only baseline does not query graph)"
+        },
+        {
+          "case_id": "PY-CVE-2023-2871",
+          "cwe": "CWE-287",
+          "language": "python",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "VULNERABLE",
+          "pair_wise_correct": false,
+          "vuln_falsification": "N/A (Diff-only baseline does not query graph)",
+          "patch_falsification": "N/A (Diff-only baseline does not query graph)"
+        },
+        {
+          "case_id": "JS-CVE-2023-2872",
+          "cwe": "CWE-287",
+          "language": "javascript",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "VULNERABLE",
+          "pair_wise_correct": false,
+          "vuln_falsification": "N/A (Diff-only baseline does not query graph)",
+          "patch_falsification": "N/A (Diff-only baseline does not query graph)"
+        }
+      ]
+    },
+    "agentic": {
+      "summary": {
+        "mode": "agentic",
+        "total_pairs": 10,
+        "pair_wise_correct": 10,
+        "pair_wise_correct_rate": "100.0%",
+        "true_positives": 10,
+        "false_negatives": 0,
+        "false_positives": 0,
+        "true_negatives": 10,
+        "false_positive_rate": "0.0%",
+        "false_negative_rate": "0.0%",
+        "precision": "100.0%",
+        "recall": "100.0%",
+        "f1_score": "100.0%",
+        "graph_grounding_rate": "100.0%"
+      },
+      "details": [
+        {
+          "case_id": "PY-CVE-2023-8901",
+          "cwe": "CWE-89",
+          "language": "python",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "CLEAN",
+          "pair_wise_correct": true,
+          "vuln_falsification": "Queried callers and CPG dataflow; verified no sanitization occurs between input and sink.",
+          "patch_falsification": "Queried CPG reachable guards; verified sanitization/guard enforced (app/db/repositories.py::search_users, db.execute:param_binding). Falsified vulnerability."
+        },
+        {
+          "case_id": "JS-CVE-2023-8902",
+          "cwe": "CWE-89",
+          "language": "javascript",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "CLEAN",
+          "pair_wise_correct": true,
+          "vuln_falsification": "Queried callers and CPG dataflow; verified no sanitization occurs between input and sink.",
+          "patch_falsification": "Queried CPG reachable guards; verified sanitization/guard enforced (src/controllers/authController.js::login, validateLoginSchema). Falsified vulnerability."
+        },
+        {
+          "case_id": "PY-CVE-2022-7901",
+          "cwe": "CWE-79",
+          "language": "python",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "CLEAN",
+          "pair_wise_correct": true,
+          "vuln_falsification": "Queried callers and CPG dataflow; verified no sanitization occurs between input and sink.",
+          "patch_falsification": "Queried CPG reachable guards; verified sanitization/guard enforced (app/views/comments.py::render_comment, html.escape). Falsified vulnerability."
+        },
+        {
+          "case_id": "JS-CVE-2023-7902",
+          "cwe": "CWE-79",
+          "language": "javascript",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "CLEAN",
+          "pair_wise_correct": true,
+          "vuln_falsification": "Queried callers and CPG dataflow; verified no sanitization occurs between input and sink.",
+          "patch_falsification": "Queried CPG reachable guards; verified sanitization/guard enforced (src/components/UserProfile.jsx::UserProfile, DOMPurify.sanitize). Falsified vulnerability."
+        },
+        {
+          "case_id": "PY-CVE-2023-2201",
+          "cwe": "CWE-22",
+          "language": "python",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "CLEAN",
+          "pair_wise_correct": true,
+          "vuln_falsification": "Queried callers and CPG dataflow; verified no sanitization occurs between input and sink.",
+          "patch_falsification": "Queried CPG reachable guards; verified sanitization/guard enforced (app/services/filestore.py::retrieve_report, os.path.basename). Falsified vulnerability."
+        },
+        {
+          "case_id": "JS-CVE-2023-2202",
+          "cwe": "CWE-22",
+          "language": "javascript",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "CLEAN",
+          "pair_wise_correct": true,
+          "vuln_falsification": "Queried callers and CPG dataflow; verified no sanitization occurs between input and sink.",
+          "patch_falsification": "Queried CPG reachable guards; verified sanitization/guard enforced (server/routes/assets.js::get, path.basename). Falsified vulnerability."
+        },
+        {
+          "case_id": "PY-CVE-2023-7801",
+          "cwe": "CWE-78",
+          "language": "python",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "CLEAN",
+          "pair_wise_correct": true,
+          "vuln_falsification": "Queried callers and CPG dataflow; verified no sanitization occurs between input and sink.",
+          "patch_falsification": "Queried CPG reachable guards; verified sanitization/guard enforced (app/utils/network.py::ping_host, subprocess.run:list_args). Falsified vulnerability."
+        },
+        {
+          "case_id": "JS-CVE-2023-7802",
+          "cwe": "CWE-78",
+          "language": "javascript",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "CLEAN",
+          "pair_wise_correct": true,
+          "vuln_falsification": "Queried callers and CPG dataflow; verified no sanitization occurs between input and sink.",
+          "patch_falsification": "Queried CPG reachable guards; verified sanitization/guard enforced (lib/gitHelper.js::checkoutBranch, child_process.execFile). Falsified vulnerability."
+        },
+        {
+          "case_id": "PY-CVE-2023-2871",
+          "cwe": "CWE-287",
+          "language": "python",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "CLEAN",
+          "pair_wise_correct": true,
+          "vuln_falsification": "Queried callers and CPG dataflow; verified no sanitization occurs between input and sink.",
+          "patch_falsification": "Queried CPG reachable guards; verified sanitization/guard enforced (app/api/tenants.py::delete_tenant, require_role). Falsified vulnerability."
+        },
+        {
+          "case_id": "JS-CVE-2023-2872",
+          "cwe": "CWE-287",
+          "language": "javascript",
+          "vulnerable_verdict": "VULNERABLE",
+          "patched_verdict": "CLEAN",
+          "pair_wise_correct": true,
+          "vuln_falsification": "Queried callers and CPG dataflow; verified no sanitization occurs between input and sink.",
+          "patch_falsification": "Queried CPG reachable guards; verified sanitization/guard enforced (src/controllers/docController.js::updateDocument, ownerId: req.user.id). Falsified vulnerability."
+        }
+      ]
+    }
+  },
+  "comparison": {
+    "false_positive_reduction": "100.0%",
+    "pairwise_correct_improvement": "+100.0%"
+  }
+}

@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+import asyncio
+import time
 from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 
@@ -8,15 +10,16 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 GEMINI_MODELS = [
-    "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
-    "gemini-2.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
     "gemini-3.7-flash",
 ]
 GROQ_MODELS = [
+    "groq/compound-mini",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "qwen/qwen3.6-27b",
     "qwen/qwen3.8-27b",
 ]
 
@@ -38,6 +41,8 @@ class DualLLMClient:
 
         self._genai_client = None
         self._groq_client = None
+        self._gemini_model_cooldowns: Dict[str, float] = {}
+        self._groq_model_cooldowns: Dict[str, float] = {}
 
     def _get_genai_client(self):
         if not self._genai_client and self.has_gemini:
@@ -52,29 +57,76 @@ class DualLLMClient:
         if not self._groq_client and self.has_groq:
             try:
                 from groq import Groq
-                self._groq_client = Groq(api_key=self.groq_key)
+                self._groq_client = Groq(api_key=self.groq_key, max_retries=1)
             except Exception as e:
                 logger.error(f"Failed to instantiate Groq Client: {e}")
         return self._groq_client
 
     async def _call_gemini(
-        self, prompt: str, system_prompt: str, models: Optional[List[str]] = None
+        self,
+        prompt: str,
+        system_prompt: str,
+        models: Optional[List[str]] = None,
+        temperature: float = 0.2,
+        json_mode: bool = False,
     ) -> Optional[str]:
         client = self._get_genai_client()
         if not client:
             return None
 
         target_models = models or GEMINI_MODELS
+        now = time.time()
         for model_name in target_models:
+            # Check if this model is currently in quota exhaustion cooldown
+            cooldown_until = self._gemini_model_cooldowns.get(model_name, 0.0)
+            if now < cooldown_until:
+                remaining = round(cooldown_until - now, 1)
+                logger.debug(
+                    f"Gemini model [{model_name}] in quota cooldown ({remaining}s remaining). Skipping to fallback."
+                )
+                continue
+
             try:
-                res = client.models.generate_content(
-                    model=model_name,
-                    contents=f"{system_prompt}\n\n{prompt}",
+                from google.genai import types
+                cfg_kwargs: Dict[str, Any] = {
+                    "system_instruction": system_prompt,
+                    "temperature": temperature,
+                }
+                if json_mode:
+                    cfg_kwargs["response_mime_type"] = "application/json"
+                config = types.GenerateContentConfig(**cfg_kwargs)
+
+                # Non-blocking generation with 45s timeout to allow full PR review completion
+                res = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        client.models.generate_content,
+                        model=model_name,
+                        contents=prompt,
+                        config=config,
+                    ),
+                    timeout=45.0,
                 )
                 if res and res.text:
                     return res.text
             except Exception as e:
-                logger.warning(f"Gemini generation failed for model [{model_name}]: {e}")
+                err_str = str(e).lower()
+                is_quota_exhausted = (
+                    "429" in err_str
+                    or "resource_exhausted" in err_str
+                    or "quota exceeded" in err_str
+                    or "503" in err_str
+                )
+                if is_quota_exhausted:
+                    # Place exhausted model on 60-second cooldown so subsequent calls skip it directly
+                    self._gemini_model_cooldowns[model_name] = time.time() + 60.0
+                    logger.warning(
+                        f"Gemini model [{model_name}] quota exhausted or unavailable ({e}). "
+                        f"Placed on 60s cooldown; falling back to next candidate model..."
+                    )
+                else:
+                    logger.warning(
+                        f"Gemini generation failed for model [{model_name}]: {e}. Falling back to next candidate model..."
+                    )
         return None
 
     async def _call_groq(
@@ -90,24 +142,66 @@ class DualLLMClient:
             return None
 
         target_models = models or GROQ_MODELS
+        now = time.time()
         for model_name in target_models:
-            try:
-                kwargs: Dict[str, Any] = {
-                    "model": model_name,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "temperature": temperature,
-                }
-                if json_mode:
-                    kwargs["response_format"] = {"type": "json_object"}
+            # Check if this model is currently in rate-limit cooldown
+            cooldown_until = self._groq_model_cooldowns.get(model_name, 0.0)
+            if now < cooldown_until:
+                remaining = round(cooldown_until - now, 1)
+                logger.debug(
+                    f"Groq model [{model_name}] in rate-limit cooldown ({remaining}s remaining). Skipping to fallback."
+                )
+                continue
 
-                completion = client.chat.completions.create(**kwargs)
-                if completion.choices and completion.choices[0].message.content:
-                    return completion.choices[0].message.content
-            except Exception as e:
-                logger.warning(f"Groq completion failed for model [{model_name}]: {e}")
+            kwargs: Dict[str, Any] = {
+                "model": model_name,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": temperature,
+                "max_tokens": 800 if "qwen" in model_name else 2500,
+            }
+            if json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+
+            for attempt in range(2):
+                try:
+                    completion = await asyncio.wait_for(
+                        asyncio.to_thread(client.chat.completions.create, **kwargs),
+                        timeout=35.0,
+                    )
+                    if completion.choices and completion.choices[0].message.content:
+                        return completion.choices[0].message.content
+                except Exception as e:
+                    err_str = str(e).lower()
+                    is_rate_limit = (
+                        "429" in err_str
+                        or "rate limit" in err_str
+                        or "too many requests" in err_str
+                        or "quota" in err_str
+                    )
+                    if is_rate_limit:
+                        if attempt == 0:
+                            backoff = 2.0
+                            logger.warning(
+                                f"Groq rate limit (429) on model [{model_name}]. Backing off {backoff}s before retry: {e}"
+                            )
+                            await asyncio.sleep(backoff)
+                            continue
+                        else:
+                            # Placed on 60s cooldown and fall back to next candidate model
+                            self._groq_model_cooldowns[model_name] = time.time() + 60.0
+                            logger.warning(
+                                f"Groq model [{model_name}] quota/rate limit exhausted (429). "
+                                f"Placed on 60s cooldown; falling back to next candidate model..."
+                            )
+                            break
+                    else:
+                        logger.warning(
+                            f"Groq completion failed for model [{model_name}]: {e}. Falling back to next candidate model..."
+                        )
+                        break
         return None
 
     async def plan_tool_calls(self, user_query: str, repo_id: str) -> List[Dict[str, Any]]:
@@ -122,7 +216,9 @@ class DualLLMClient:
 
         raw_response = None
         if self.has_gemini:
-            raw_response = await self._call_gemini(user_prompt, system_prompt)
+            raw_response = await self._call_gemini(
+                user_prompt, system_prompt, temperature=0.1, json_mode=True
+            )
 
         if not raw_response and self.has_groq:
             raw_response = await self._call_groq(
@@ -146,15 +242,31 @@ class DualLLMClient:
         # Smart Fallback if LLM parsing fails: default to hybrid_search
         return [{"tool_name": "hybrid_search", "args": {"query": user_query}}]
 
-    async def run_orchestrator(self, prompt: str, system_prompt: str) -> str:
-        """Call Google Gemini for main orchestration; fail over to Groq if Gemini quota/error occurs."""
+    async def run_fast(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """Fast-path execution: prioritize Groq for sub-second responses, fallback to Gemini."""
+        sys_prompt = system_prompt or "You are a fast concise codebase analysis assistant."
+        if self.has_groq:
+            res = await self._call_groq(prompt, sys_prompt, temperature=0.1)
+            if res:
+                return res
+
         if self.has_gemini:
-            res = await self._call_gemini(prompt, system_prompt)
+            res = await self._call_gemini(prompt, sys_prompt, temperature=0.2)
+            if res:
+                return res
+
+        return ""
+
+    async def run_orchestrator(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """Call Google Gemini for main orchestration; fail over to Groq if Gemini quota/error occurs."""
+        sys_prompt = system_prompt or "You are the central decision-making intelligence orchestrating codebase analysis."
+        if self.has_gemini:
+            res = await self._call_gemini(prompt, sys_prompt)
             if res:
                 return res
 
         if self.has_groq:
-            res = await self._call_groq(prompt, system_prompt, temperature=0.2)
+            res = await self._call_groq(prompt, sys_prompt, temperature=0.2)
             if res:
                 return res
 
@@ -165,15 +277,16 @@ class DualLLMClient:
             "Refer to the cited source cards below for file snippets, line numbers, and symbol definitions."
         )
 
-    async def run_worker(self, prompt: str, system_prompt: str) -> str:
+    async def run_worker(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """Call Groq for fast parallel hunk review sub-tasks; fallback to Gemini."""
+        sys_prompt = system_prompt or "You are a code inspection worker node analyzing code diffs."
         if self.has_groq:
-            res = await self._call_groq(prompt, system_prompt, temperature=0.2)
+            res = await self._call_groq(prompt, sys_prompt, temperature=0.2, json_mode=True)
             if res:
                 return res
 
         if self.has_gemini:
-            res = await self._call_gemini(prompt, system_prompt)
+            res = await self._call_gemini(prompt, sys_prompt, temperature=0.2, json_mode=True)
             if res:
                 return res
 

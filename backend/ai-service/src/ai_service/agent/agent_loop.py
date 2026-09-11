@@ -39,7 +39,7 @@ class AutonomousAgentLoop:
         graph_client: Any,
         vector_client: Any,
         history: Optional[List[Dict[str, str]]] = None,
-        max_steps: int = 5,
+        max_steps: int = 4,
     ) -> AsyncGenerator[str, None]:
         """
         Runs the ReAct loop and yields Server-Sent Events (SSE) formatted strings.
@@ -68,7 +68,7 @@ class AutonomousAgentLoop:
                 history_str = "\n\n### PREVIOUS TOOL OBSERVATIONS & RETRIEVED CODE PASSAGES IN THIS REASONING LOOP:\n"
                 for obs in observations:
                     age = step_idx - obs["step"]
-                    max_chars = max(800, 2500 // (age + 1))
+                    max_chars = max(600, 1800 // (age + 1))
                     history_str += (
                         f"Step {obs['step']}:\n"
                         f"- Thought: {obs['thought']}\n"
@@ -219,7 +219,7 @@ class AutonomousAgentLoop:
     async def _call_llm_json(self, prompt: str, system_prompt: str) -> str:
         """Helper to invoke LLM with JSON format expectation."""
         if self.llm_client.has_gemini:
-            res = await self.llm_client._call_gemini(prompt, system_prompt)
+            res = await self.llm_client._call_gemini(prompt, system_prompt, temperature=0.1, json_mode=True)
             if res:
                 return res
 
@@ -231,8 +231,6 @@ class AutonomousAgentLoop:
         return ""
 
     def _parse_llm_json(self, text: str) -> Dict[str, Any]:
-        if not text:
-            return {"action": "call_tool", "tool_name": "hybrid_search", "thought": "Executing default hybrid search..."}
         if not text:
             return {"action": "call_tool", "tool_name": "hybrid_search", "thought": "Executing default hybrid search..."}
         try:
@@ -279,12 +277,16 @@ class AutonomousAgentLoop:
             for h in hits:
                 meta = h.get("metadata", {})
                 text = h.get("text", "")
+                sym = meta.get("symbol") or meta.get("symbol_name") or meta.get("name")
+                start_l = meta.get("start_line")
+                end_l = meta.get("end_line")
+                line_str = f"{start_l}-{end_l}" if start_l and end_l else (str(start_l) if start_l else None)
                 citations.append({
                     "id": c_id,
                     "file_path": meta.get("file_path", "codebase"),
-                    "symbol": meta.get("symbol_name") or meta.get("name"),
-                    "lines": f"{meta.get('start_line', '')}-{meta.get('end_line', '')}" if meta.get("start_line") else None,
-                    "snippet": text[:300] + ("..." if len(text) > 300 else ""),
+                    "symbol": sym,
+                    "lines": line_str,
+                    "snippet": text[:500] + ("..." if len(text) > 500 else ""),
                     "source_type": "vector",
                 })
                 c_id += 1
@@ -300,7 +302,7 @@ class AutonomousAgentLoop:
                     "file_path": f_path,
                     "symbol": None,
                     "lines": f"1-{lines_cnt}",
-                    "snippet": content[:350] + ("..." if len(content) > 350 else ""),
+                    "snippet": content[:500] + ("..." if len(content) > 500 else ""),
                     "source_type": "disk",
                 })
             return f"Read {lines_cnt} line(s) of '{f_path}' directly from repository disk.", citations
@@ -308,14 +310,45 @@ class AutonomousAgentLoop:
         elif tool_name == "hybrid_search":
             vec_hits = parsed_raw.get("vector_hits", [])
             g_hits = parsed_raw.get("graph_hits", [])
+            seen_cits = set()
+
+            for v in vec_hits:
+                meta = v.get("metadata", {})
+                text = v.get("document", "")
+                sym = meta.get("symbol") or meta.get("symbol_name") or meta.get("name")
+                f_path = meta.get("file_path", "codebase")
+                start_l = meta.get("start_line")
+                end_l = meta.get("end_line")
+                line_str = f"{start_l}-{end_l}" if start_l and end_l else (str(start_l) if start_l else None)
+                cit_key = f"{f_path}:{sym or ''}:{line_str or ''}"
+                seen_cits.add(cit_key)
+                citations.append({
+                    "id": c_id,
+                    "file_path": f_path,
+                    "symbol": sym,
+                    "lines": line_str,
+                    "snippet": text[:500] + ("..." if len(text) > 500 else ""),
+                    "source_type": "vector",
+                })
+                c_id += 1
+
             for g in g_hits:
                 if isinstance(g, dict):
+                    f_p = g.get("file_path", g.get("name", "knowledge-graph"))
+                    s_n = g.get("name") or g.get("qualified_name")
+                    g_start = g.get("start_line")
+                    g_end = g.get("end_line")
+                    g_lines = f"{g_start}-{g_end}" if g_start and g_end else (str(g_start) if g_start else None)
+                    cit_key = f"{f_p}:{s_n or ''}:{g_lines or ''}"
+                    if cit_key in seen_cits:
+                        continue
+                    seen_cits.add(cit_key)
                     citations.append({
                         "id": c_id,
-                        "file_path": g.get("file_path", g.get("name", "knowledge-graph")),
-                        "symbol": g.get("name") or g.get("qualified_name"),
-                        "lines": f"{g.get('start_line', '')}-{g.get('end_line', '')}" if g.get("start_line") else None,
-                        "snippet": f"Neo4j Symbol: {g.get('name')}\nDocstring: {g.get('docstring', 'None')}",
+                        "file_path": f_p,
+                        "symbol": s_n,
+                        "lines": g_lines,
+                        "snippet": f"Neo4j Symbol: {s_n}\nDocstring: {g.get('docstring', 'None')}",
                         "source_type": "graph",
                     })
                     c_id += 1
