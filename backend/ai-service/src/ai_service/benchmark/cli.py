@@ -90,7 +90,7 @@ def run_benchmark(
         res = await runner.run(dataset_name=target_ds)
 
         click.echo("\n" + "=" * 60)
-        click.echo("🎉 BENCHMARK RUN COMPLETED")
+        click.echo("[SUCCESS] BENCHMARK RUN COMPLETED")
         click.echo("=" * 60)
         click.echo(f"Total Cases Evaluated: {res.aggregate_score.total_cases}")
         click.echo(f"Precision:            {res.aggregate_score.precision * 100:.1f}%")
@@ -98,9 +98,9 @@ def run_benchmark(
         click.echo(f"F1 Score:             {res.aggregate_score.f1_score:.4f}")
         click.echo(f"Mean Latency:         {res.aggregate_score.mean_duration_seconds:.2f}s per case")
         if res.markdown_report_path:
-            click.echo(f"\n📄 Markdown Report:    {res.markdown_report_path.resolve()}")
+            click.echo(f"\n[Report] Markdown: {res.markdown_report_path.resolve()}")
         if res.json_report_path:
-            click.echo(f"📊 JSON Report:        {res.json_report_path.resolve()}")
+            click.echo(f"[Report] JSON:     {res.json_report_path.resolve()}")
         click.echo("=" * 60)
 
     asyncio.run(_exec())

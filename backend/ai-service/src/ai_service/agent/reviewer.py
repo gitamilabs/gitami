@@ -36,6 +36,95 @@ class AgentReviewResult:
     issues: List[Dict[str, Any]] = field(default_factory=list)
 
 
+def format_cpg_security_summary(
+    target_syms: List[str],
+    guards_res: List[Any],
+    callers_res: List[Any],
+) -> str:
+    """
+    Format Joern CPG control-flow and caller analysis into a structured security briefing.
+    Classifies guards into strong sanitizers vs weak/presence checks and enforces a
+    zero-false-negative defensive posture for LLM orchestrator reasoning.
+    """
+    if not target_syms:
+        return "No changed symbols identified for CPG analysis."
+
+    SANITIZER_KEYWORDS = (
+        "sanitize", "sanitise", "escape", "clean", "param", "prepared",
+        "dompurify", "basename", "int(", "float(", "number(", "typeof",
+        "isinstance", "zod", "joi", "yup", "validator", "bind"
+    )
+
+    sections = [
+        "### Joern CPG Structural Control-Flow & Taint Analysis Briefing:",
+        "DEFENSIVE SECURITY POLICY (Zero False Negatives): Presence checks (if x) and auth checks (@login_required) do NOT neutralize injection payloads.",
+        ""
+    ]
+
+    for i, sym in enumerate(target_syms):
+        g = guards_res[i] if i < len(guards_res) and not isinstance(guards_res[i], Exception) else {}
+        c = callers_res[i] if i < len(callers_res) and not isinstance(callers_res[i], Exception) else {}
+
+        if isinstance(g, str):
+            try:
+                g = json.loads(g)
+            except Exception:
+                g = {"guards": [g]} if g else {}
+
+        if isinstance(c, str):
+            try:
+                c = json.loads(c)
+            except Exception:
+                c = {"callers_with_args": [c]} if c else {}
+
+        raw_guards = g.get("guards", []) if isinstance(g, dict) else []
+        if isinstance(raw_guards, str):
+            raw_guards = [raw_guards]
+
+        strong_sanitizers = []
+        weak_checks = []
+
+        for guard in raw_guards:
+            guard_str = str(guard).strip()
+            if not guard_str:
+                continue
+            if any(k in guard_str.lower() for k in SANITIZER_KEYWORDS):
+                strong_sanitizers.append(guard_str)
+            else:
+                weak_checks.append(guard_str)
+
+        sections.append(f"- **Symbol: `{sym}`**")
+
+        # Report Guard Classification
+        if strong_sanitizers:
+            sections.append(f"  - Verified Sanitizers/Neutralizers: {', '.join(strong_sanitizers)}")
+            sections.append("  - Taint Status: POTENTIALLY SANITIZED (Verify parameter binding in diff)")
+        elif weak_checks:
+            sections.append(f"  - Non-Sanitizing Guards: {', '.join(weak_checks)}")
+            sections.append("  - Taint Status: [WARNING: INSUFFICIENT SANITIZATION — Presence/Auth check only, does NOT neutralize injection]")
+        else:
+            sections.append("  - Verified Sanitizers: NONE (Unshielded sink)")
+            sections.append("  - Taint Status: [CRITICAL: NO SANITIZER DETECTED — High injection exposure if reached by untrusted input]")
+
+        # Report Callers & Args
+        raw_callers = c.get("callers_with_args", []) if isinstance(c, dict) else []
+        if isinstance(raw_callers, str):
+            raw_callers = [line.strip() for line in raw_callers.splitlines() if line.strip()]
+
+        if raw_callers:
+            clean_callers = [str(call).strip() for call in raw_callers[:3] if str(call).strip()]
+            if clean_callers:
+                sections.append(f"  - Observed Call Sites: {'; '.join(clean_callers)}")
+            else:
+                sections.append("  - Observed Call Sites: Internal or unreferenced in CPG call graph")
+        else:
+            sections.append("  - Observed Call Sites: None detected in current graph")
+
+        sections.append("")
+
+    return "\n".join(sections).strip()
+
+
 async def _run_cpg_analysis(repo_id: str, syms: List[str]) -> str:
     """Retrieve Joern CPG control-flow guards and callers for changed symbols concurrently."""
     if not syms:
@@ -64,13 +153,55 @@ async def _run_cpg_analysis(repo_id: str, syms: List[str]) -> str:
     guards_res = all_cpg[: len(target_syms)]
     callers_res = all_cpg[len(target_syms) :]
 
-    cpg_entries = []
-    for i, s in enumerate(target_syms):
-        g = guards_res[i] if not isinstance(guards_res[i], Exception) else str(guards_res[i])
-        c = callers_res[i] if not isinstance(callers_res[i], Exception) else str(callers_res[i])
-        cpg_entries.append({"symbol": s, "reachable_guards": g, "callers_with_args": c})
+    return format_cpg_security_summary(target_syms, guards_res, callers_res)
 
-    return json.dumps(cpg_entries, indent=2)
+
+def deduplicate_issues(issues: List[Dict[str, Any]], line_window: int = 15) -> List[Dict[str, Any]]:
+    """
+    Deduplicate issues that target the same file and have overlapping line ranges
+    or identical core concepts to prevent duplicate predictions.
+    """
+    if not issues:
+        return []
+
+    deduped: List[Dict[str, Any]] = []
+
+    for issue in issues:
+        f = issue.get("file_path", "")
+        try:
+            l = int(issue.get("line", 0))
+        except (ValueError, TypeError):
+            l = 0
+        desc = f"{issue.get('title', '')} {issue.get('description', '')}".lower()
+
+        is_duplicate = False
+        for existing in deduped:
+            ef = existing.get("file_path", "")
+            if f != ef:
+                continue
+            try:
+                el = int(existing.get("line", 0))
+            except (ValueError, TypeError):
+                el = 0
+
+            edesc = f"{existing.get('title', '')} {existing.get('description', '')}".lower()
+            line_diff = abs(l - el)
+
+            t1 = set(re.findall(r"[a-z]{4,}", desc))
+            t2 = set(re.findall(r"[a-z]{4,}", edesc))
+            overlap = len(t1 & t2) / max(1, len(t1 | t2)) if (t1 and t2) else 0.0
+
+            if (line_diff <= line_window and overlap >= 0.25) or (line_diff == 0 and overlap >= 0.15):
+                is_duplicate = True
+                if issue.get("severity") in ("critical", "error") and existing.get("severity") not in ("critical", "error"):
+                    existing["severity"] = issue.get("severity")
+                break
+
+        if not is_duplicate:
+            deduped.append(issue)
+
+    return deduped
+
 
 
 async def run_agentic_pr_review(
@@ -114,7 +245,7 @@ async def run_agentic_pr_review(
         f"Target Repo: '{repo_id}' (branch: '{branch}')\n"
         f"Changed Files: {changed_files}\n"
         f"Modified Symbols: {changed_symbols}\n"
-        f"Systematically inspect EVERY file listed in Changed Files ({changed_files}) for runtime bugs, unhandled promise rejections, missing try-catch error handling around dynamic imports or API calls, and logic flaws:\n\n{raw_diff_text[:12000]}"
+        f"Systematically inspect EVERY file listed in Changed Files ({changed_files}) for runtime bugs, unhandled promise rejections, missing try-catch error handling around dynamic imports or API calls, and logic flaws:\n\n{raw_diff_text[:25000]}"
     )
 
     # 4. Concurrent execution of Neo4j Blast Radius, Vector Search, Joern CPG, and Groq Worker
@@ -196,7 +327,7 @@ async def run_agentic_pr_review(
         changed_files=changed_files,
         changed_symbols=changed_symbols,
         blast_radius_json=blast_json,
-        diff_text=raw_diff_text[:16000],
+        diff_text=raw_diff_text[:60000],
         convention_violations=violations_dicts,
         semantic_context=semantic_json,
         cpg_context=cpg_context,
@@ -206,7 +337,6 @@ async def run_agentic_pr_review(
 
     # 7. Extract confirmed issues surviving falsification & merge candidate issues
     structured_issues: List[Dict[str, Any]] = []
-    seen_issue_keys = set()
     orchestrator_confirmed = None
 
     try:
@@ -220,32 +350,32 @@ async def run_agentic_pr_review(
     except Exception as e:
         logger.debug(f"Orchestrator confirmed issues parse notice: {e}")
 
-    # Add candidate issues from worker node
-    for item in candidate_issues:
-        key = (item.get("file_path", ""), item.get("line", 0), item.get("title", ""))
-        if key not in seen_issue_keys:
-            seen_issue_keys.add(key)
-            structured_issues.append(item)
+    raw_issues: List[Dict[str, Any]] = []
 
-    # Merge any confirmed issues uniquely identified by orchestrator
+    # Priority 1: Add orchestrator confirmed issues
     if orchestrator_confirmed and len(orchestrator_confirmed) > 0:
         for item in orchestrator_confirmed:
             f = item.get("file_path", changed_files[0] if changed_files else "codebase")
             l = item.get("line", 1)
             t = item.get("title", "Code Issue Detected")
-            key = (f, l, t)
-            if key not in seen_issue_keys:
-                seen_issue_keys.add(key)
-                structured_issues.append({
-                    "id": str(uuid.uuid4()),
-                    "title": t,
-                    "description": item.get("description", "Issue verified by orchestrator."),
-                    "category": item.get("category", "bug"),
-                    "severity": item.get("severity", "warning"),
-                    "file_path": f,
-                    "line": l,
-                    "suggested_fix": item.get("suggested_fix", ""),
-                })
+            raw_issues.append({
+                "id": str(uuid.uuid4()),
+                "title": t,
+                "description": item.get("description", "Issue verified by orchestrator."),
+                "category": item.get("category", "bug"),
+                "severity": item.get("severity", "warning"),
+                "file_path": f,
+                "line": l,
+                "suggested_fix": item.get("suggested_fix", ""),
+            })
+
+    # Priority 2: Add worker candidate issues
+    for item in candidate_issues:
+        raw_issues.append(item)
+
+    # Deduplicate issues to eliminate overlapping line reports on same file
+    structured_issues = deduplicate_issues(raw_issues, line_window=15)
+
 
     # Add critical convention violations to structured_issues (style suggestions stay in suggestions)
     for v in all_violations:

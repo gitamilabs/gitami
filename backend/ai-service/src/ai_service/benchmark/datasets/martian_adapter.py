@@ -54,6 +54,131 @@ CATEGORY_MAP = {
 }
 
 
+def _find_best_hunk_line(comment_text: str, file_hunks: list) -> Optional[int]:
+    """Find the most relevant line in a file's hunks for a given comment."""
+    line_match = re.search(r"\b(?:line|lines)\s+(\d+)", comment_text, re.IGNORECASE)
+    if line_match:
+        return int(line_match.group(1))
+
+    for h in file_hunks:
+        if h.added_lines:
+            return h.added_lines[0][0]
+        if h.removed_lines:
+            return h.removed_lines[0][0]
+    return None
+
+
+def locate_comment_target(
+    comment_text: str,
+    hunks: list,
+    changed_files: List[str],
+) -> tuple[str, Optional[int]]:
+    """
+    Intelligently associates a Martian benchmark golden comment with the correct file
+    and line number within the PR diff hunks.
+    """
+    if not changed_files:
+        return "", None
+
+    # 1. Direct filename check in comment text
+    for cf in changed_files:
+        fname = os.path.basename(cf)
+        base_no_ext = os.path.splitext(fname)[0]
+        if fname.lower() in comment_text.lower() or (len(base_no_ext) > 3 and base_no_ext.lower() in comment_text.lower()):
+            matching_hunks = [h for h in hunks if h.file_path == cf]
+            return cf, _find_best_hunk_line(comment_text, matching_hunks)
+
+    # 2. Extract significant identifier tokens and joined phrases from comment
+    backtick_tokens = set(re.findall(r"`([^`]+)`", comment_text))
+    code_identifiers = set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]{2,}(?:\.[a-zA-Z0-9_]+)*\b", comment_text))
+
+    phrases = re.findall(r"\b([A-Za-z]+)\s+([A-Za-z]+)\b", comment_text)
+    joined_phrases = {f"{w1}{w2}".lower() for w1, w2 in phrases if len(w1) > 2 and len(w2) > 2}
+
+    STOPWORDS = {
+        "the", "this", "that", "with", "from", "should", "have", "would", "could",
+        "does", "because", "when", "where", "which", "then", "also", "into", "been",
+        "being", "between", "before", "after", "while", "above", "below", "true", "false",
+        "error", "warning", "issue", "problem", "function", "method", "class", "file",
+        "code", "line", "lines", "return", "returns", "using", "call", "calls", "used",
+        "instead", "since", "here", "there", "some", "other", "about", "import", "imports",
+        "export", "exports", "async", "await", "catch", "try", "const", "let", "var",
+        "calendar", "event", "events", "type", "types", "interface", "name", "names",
+        "null", "undefined", "value", "values", "string", "number", "boolean", "array",
+        "object", "test", "tests", "adding", "consider", "handle", "handling", "causes",
+        "gracefully", "failures", "operations", "callbacks", "uses", "package", "packages",
+        "for", "not", "are", "can", "due", "lead", "leads", "only", "all", "any",
+        "such", "more", "than", "within", "without", "each", "every", "potential",
+        "increase", "unmount", "memory", "leak", "component", "records", "default",
+        "during", "now", "occur", "occurs", "path", "paths", "case", "cases", "cause",
+        "sensitive", "validation", "fail", "fails", "enters", "user", "users", "two",
+        "concurrent", "login", "requests", "written", "back", "mutated", "decrypted",
+        "inconsistent", "naming", "handles", "endpoint", "disable", "mentions", "message"
+    }
+    meaningful_tokens = set()
+    for t in code_identifiers | backtick_tokens:
+        clean = re.sub(r"[\(\)]", "", t).strip()
+        if clean.lower() not in STOPWORDS and len(clean) > 2:
+            meaningful_tokens.add(clean)
+
+    # 3. Score each changed file based on distinct token matches in hunk diff lines
+    file_distinct_matches: Dict[str, set] = {cf: set() for cf in changed_files}
+    file_weighted_score: Dict[str, float] = {cf: 0.0 for cf in changed_files}
+    file_best_line: Dict[str, Optional[int]] = {cf: None for cf in changed_files}
+    file_best_line_score: Dict[str, float] = {cf: -1.0 for cf in changed_files}
+
+    for hunk in hunks:
+        cf = hunk.file_path
+        if cf not in file_distinct_matches:
+            continue
+
+        all_lines = hunk.added_lines + hunk.removed_lines
+        for line_no, content in all_lines:
+            content_lower = content.lower()
+            curr_line_score = 0.0
+
+            for jp in joined_phrases:
+                if jp in content_lower and len(jp) > 6:
+                    file_distinct_matches[cf].add(jp)
+                    file_weighted_score[cf] += 10.0
+                    curr_line_score += 10.0
+
+            for token in meaningful_tokens:
+                pattern = r"\b" + re.escape(token) + r"\b"
+                if re.search(pattern, content, re.IGNORECASE):
+                    file_distinct_matches[cf].add(token.lower())
+                    w = 5.0 if (token in backtick_tokens or re.search(r"[A-Z]", token)) else 2.0
+                    file_weighted_score[cf] += w
+                    curr_line_score += w
+
+            if curr_line_score > file_best_line_score[cf]:
+                file_best_line_score[cf] = curr_line_score
+                file_best_line[cf] = line_no
+
+    scored_files = sorted(
+        changed_files,
+        key=lambda cf: (len(file_distinct_matches[cf]), file_weighted_score[cf]),
+        reverse=True,
+    )
+    best_file = scored_files[0]
+    if len(file_distinct_matches[best_file]) > 0:
+        best_line = file_best_line.get(best_file)
+        if best_line is None:
+            best_line = _find_best_hunk_line(comment_text, [h for h in hunks if h.file_path == best_file])
+        return best_file, best_line
+
+    # 4. Fallback to explicit line if present in comment, else changed_files[0]
+    line_match = re.search(r"\b(?:line|lines)\s+(\d+)", comment_text, re.IGNORECASE)
+    fallback_line = int(line_match.group(1)) if line_match else None
+    if fallback_line is None and hunks:
+        for h in hunks:
+            if h.file_path == changed_files[0] and h.added_lines:
+                fallback_line = h.added_lines[0][0]
+                break
+
+    return changed_files[0], fallback_line
+
+
 class MartianAdapter(BenchmarkDataset):
     """Adapter for Martian Code Review Benchmark dataset."""
 
@@ -141,7 +266,7 @@ class MartianAdapter(BenchmarkDataset):
                 hunks = parse_git_diff(diff_text) if diff_text else []
                 changed_files = [h.file_path for h in hunks if h.file_path]
 
-                # Map comments to GroundTruthIssue
+                # Map comments to GroundTruthIssue using intelligent locator
                 gt_issues: List[GroundTruthIssue] = []
                 for c in item.get("comments", []):
                     comment_text = c.get("comment", "")
@@ -151,27 +276,7 @@ class MartianAdapter(BenchmarkDataset):
                     sev = SEVERITY_MAP.get(raw_sev, "warning")
                     cat = CATEGORY_MAP.get(raw_cat, "bug")
 
-                    # Extract line number if explicitly mentioned in comment
-                    line_match = re.search(r"\b(?:line|lines)\s+(\d+)", comment_text, re.IGNORECASE)
-                    line_start = int(line_match.group(1)) if line_match else None
-
-                    # Associate with file: look for exact filename in comment, else default to primary changed file
-                    target_file = ""
-                    for cf in changed_files:
-                        fname = os.path.basename(cf)
-                        if fname in comment_text or cf in comment_text:
-                            target_file = cf
-                            break
-                    if not target_file and changed_files:
-                        target_file = changed_files[0]
-
-                    # Fallback line number to first hunk line if not found
-                    if line_start is None and hunks:
-                        for h in hunks:
-                            if not target_file or h.file_path == target_file:
-                                if h.added_lines:
-                                    line_start = h.added_lines[0][0]
-                                    break
+                    target_file, line_start = locate_comment_target(comment_text, hunks, changed_files)
 
                     gt_issues.append(
                         GroundTruthIssue(

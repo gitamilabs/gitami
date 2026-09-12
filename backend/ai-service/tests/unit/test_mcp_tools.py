@@ -7,6 +7,7 @@ from ai_service.parsing.parser import CodeParser
 from ai_service.graph.writer import upsert_file_and_symbols, upsert_call_edges, upsert_import_edges, delete_repo_data
 from ai_service.graph.resolver import resolve_repo_imports
 from ai_service.jobs.init_job import run_init_job
+from ai_service.config import settings
 from ai_service.mcp.tools import (
     tool_get_repo_structure,
     tool_get_symbol_details,
@@ -16,6 +17,7 @@ from ai_service.mcp.tools import (
 )
 
 
+@pytest.mark.skipif(not getattr(settings, "neo4j_uri", ""), reason="Neo4j URI not configured")
 @pytest.mark.asyncio
 async def test_mcp_tools_against_neo4j():
     client = Neo4jClient()

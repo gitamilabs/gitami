@@ -53,3 +53,40 @@ async def test_execute_tool_by_name_cpg_dispatch():
     )
     parsed_guard = json.loads(res_guard)
     assert parsed_guard["symbol"] == "login"
+
+
+def test_format_cpg_security_summary():
+    from ai_service.agent.reviewer import format_cpg_security_summary
+
+    target_syms = ["db_execute", "render_html", "log_event"]
+    guards_res = [
+        {"guards": ["if req.query:", "if is_admin(req):"]},  # Weak presence & auth
+        {"guards": ["const clean = DOMPurify.sanitize(input)"]},  # Strong sanitizer
+        {"guards": []},  # Unguarded sink
+    ]
+    callers_res = [
+        {"callers_with_args": ["routes.py: search_users(req.params.query)"]},
+        {"callers_with_args": ["views.py: show_profile(user_data)"]},
+        {"callers_with_args": []},
+    ]
+
+    summary = format_cpg_security_summary(target_syms, guards_res, callers_res)
+
+    # Verify header & policy statement
+    assert "Joern CPG Structural Control-Flow & Taint Analysis Briefing" in summary
+    assert "DEFENSIVE SECURITY POLICY (Zero False Negatives)" in summary
+
+    # Verify weak guard classification on db_execute
+    assert "**Symbol: `db_execute`**" in summary
+    assert "INSUFFICIENT SANITIZATION" in summary
+    assert "Non-Sanitizing Guards: if req.query:, if is_admin(req):" in summary
+
+    # Verify strong sanitizer classification on render_html
+    assert "**Symbol: `render_html`**" in summary
+    assert "POTENTIALLY SANITIZED" in summary
+    assert "DOMPurify.sanitize" in summary
+
+    # Verify unguarded sink on log_event
+    assert "**Symbol: `log_event`**" in summary
+    assert "NO SANITIZER DETECTED" in summary
+

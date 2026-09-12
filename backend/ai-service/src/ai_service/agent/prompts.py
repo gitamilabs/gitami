@@ -72,8 +72,10 @@ Static Convention Violations:
 Git Patch / Diff Content:
 {diff_text}
 
-Instructions:
-1. Apply the 5-step Falsification Protocol: Verify or falsify the candidate issues using the diff context and Joern CPG reachable guards/callers.
-2. Provide your review analysis (Verdict, Risk Assessment, Summary, Review Comments).
-3. Conclude with a strict JSON block ```json {{"confirmed_issues": [...]}} ``` containing ONLY the verified, surviving defects.
+Instructions (Dual-Scope Review: PR Code Quality + Defensive Security):
+1. Scope A (PR Code Quality): Inspect for runtime bugs, unawaited promises in loops (`Array.forEach(async ...)`), missing try-catch on dynamic imports, React resource leaks (`URL.createObjectURL` without cleanup), and logic/type mismatches.
+2. Scope B (Defensive Security - Zero False Negatives): Prioritize recall on injection flaws. Only falsify an injection vulnerability if the diff or CPG briefing provides verifiable proof of mathematical/cryptographic neutralization. Presence checks (`if x != null`), existence checks (`if req.body`), try-catch blocks, and auth checks do NOT neutralize injection payloads.
+3. Provide your review analysis (Verdict, Risk Assessment, Summary, Review Comments).
+4. Conclude with a strict JSON block ```json {{"confirmed_issues": [...]}} ``` containing all verified or unneutralized defects. Consolidate overlapping findings on the same file into distinct issues.
 """
+

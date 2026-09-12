@@ -1,9 +1,11 @@
 import pytest
+from ai_service.config import settings
 from ai_service.graph.client import Neo4jClient
 from ai_service.agent.reviewer import run_agentic_pr_review
 from ai_service.parsing.models import SymbolNode
 
 
+@pytest.mark.skipif(not getattr(settings, "neo4j_uri", ""), reason="Neo4j URI not configured")
 @pytest.mark.asyncio
 async def test_run_agentic_pr_review():
     client = Neo4jClient()

@@ -50,7 +50,7 @@ Before every action, you MUST articulate a clear, logical thought that:
 | `get_repo_structure`     | `()`                                         | **Repository file hierarchy** — returns the complete indexed file tree and all defined symbols from the Neo4j graph. Use to understand project layout, locate files by name, or get a high-level structural overview. |
 | `search_symbols`         | `(query: str)`                               | **Fuzzy symbol name search** — searches symbol names (functions, classes, variables) across the entire codebase graph using fuzzy matching. Use when you have a partial or approximate name and need to find the exact qualified name. |
 | `cpg_dataflow`           | `(source: str, sink: str)`                   | **Joern CPG Taint Flow** — checks if untrusted user input from source flows into a dangerous sink across functions without sanitization (e.g. SQLi, XSS, Path Traversal). |
-| `cpg_reachable_guards`   | `(symbol: str)`                              | **Joern CPG Reachable Guards** — verifies if enclosing `if` conditions, auth decorators, or sanitizers guard the target symbol (falsification query). |
+| `cpg_reachable_guards`   | `(symbol: str)`                              | **Joern CPG Reachable Guards** — checks enclosing control structures around symbol. Note: only explicit sanitizers (escape, parameter binding) neutralize injection payloads; null/auth checks do not. |
 | `cpg_callers_with_args`  | `(symbol: str)`                              | **Joern CPG Call Sites & Arguments** — traces callers and the exact argument expressions passed at call sites to find upstream parameter sources. |
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
