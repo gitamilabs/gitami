@@ -39,7 +39,7 @@ async def run_autonomous_pr_fixer(
     Autonomous PR Fix Agent — Surgical Patch Mode:
     1. Reads existing file content passed from control plane (api-service) or local disk.
     2. Gemini Orchestrator plans minimal, targeted code changes.
-    3. Groq Worker applies ONLY the specific line-level edits, preserving all other code.
+    3. Worker Node (Ollama / Groq) applies ONLY the specific line-level edits, preserving all other code.
     4. Returns the complete file with minimal surgical changes applied.
     """
     if llm_client is None:
@@ -117,7 +117,7 @@ async def run_autonomous_pr_fixer(
 
     plan_rationale = await llm_client.run_orchestrator(orchestrator_prompt, orchestrator_system)
 
-    # Step 2: Groq Worker Surgical Patch Generator
+    # Step 2: Worker Node Surgical Patch Generator (Ollama / Groq)
     worker_system = get_prompt("fixer_worker")
 
     # Build per-file worker prompts

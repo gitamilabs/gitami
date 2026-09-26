@@ -3,6 +3,8 @@ import urllib.request
 import urllib.error
 import json
 import re
+import asyncio
+import concurrent.futures
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from ai_service.config import settings
@@ -64,20 +66,7 @@ class JoernClient:
                 "engine": "offline",
             }
 
-        client = self._get_cpgqls_client()
-        if client:
-            try:
-                res = client.execute(query)
-                return {
-                    "success": True,
-                    "stdout": res.get("stdout", ""),
-                    "stderr": res.get("stderr", ""),
-                    "engine": "joern_cpgqls",
-                }
-            except Exception as e:
-                logger.debug(f"CPGQL execution error via client: {e}")
-
-        # HTTP Fallback direct query
+        # 1. Primary: Direct HTTP query-sync endpoint (safe in both sync and async contexts)
         try:
             req = urllib.request.Request(
                 f"{self.url}/query-sync",
@@ -86,19 +75,61 @@ class JoernClient:
             )
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 body = resp.read().decode("utf-8")
+                stdout = body
+                stderr = ""
+                success = True
+                try:
+                    payload = json.loads(body)
+                    if isinstance(payload, dict):
+                        stdout = payload.get("stdout", body)
+                        stderr = payload.get("stderr", "")
+                        success = payload.get("success", True)
+                except Exception:
+                    pass
+
                 return {
-                    "success": True,
-                    "stdout": body,
-                    "stderr": "",
+                    "success": success,
+                    "stdout": stdout,
+                    "stderr": stderr,
                     "engine": "joern_http",
                 }
-        except Exception as e:
-            return {
-                "success": False,
-                "stdout": "",
-                "stderr": str(e),
-                "engine": "offline",
-            }
+        except Exception as http_err:
+            logger.debug(f"Direct HTTP Joern query failed ({http_err}); trying cpgqls client fallback.")
+
+        # 2. Fallback: cpgqls-client (safely executed to prevent asyncio event loop clash)
+        client = self._get_cpgqls_client()
+        if client:
+            try:
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+
+                if loop and loop.is_running():
+                    # Running inside an active event loop: execute in a separate worker thread
+                    # with its own isolated event loop to prevent "Cannot run the event loop
+                    # while another loop is running" and unawaited coroutine warnings.
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(asyncio.run, client._send_query(query))
+                        res = future.result(timeout=self.timeout)
+                else:
+                    res = client.execute(query)
+
+                return {
+                    "success": True,
+                    "stdout": res.get("stdout", "") if isinstance(res, dict) else str(res),
+                    "stderr": res.get("stderr", "") if isinstance(res, dict) else "",
+                    "engine": "joern_cpgqls",
+                }
+            except Exception as e:
+                logger.debug(f"CPGQL execution error via client: {e}")
+
+        return {
+            "success": False,
+            "stdout": "",
+            "stderr": "CPGQL query failed via all available protocols",
+            "engine": "offline",
+        }
 
     def import_code(self, repo_path: str, project_name: str) -> Dict[str, Any]:
         """Import repository into Joern CPG database."""

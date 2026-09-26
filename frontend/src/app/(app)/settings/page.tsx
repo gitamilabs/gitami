@@ -451,12 +451,28 @@ export default function SettingsPage() {
                   {/* Primary LLM Orchestrator Card */}
                   <div className="p-4 rounded-xl bg-zinc-950/70 border border-zinc-800 space-y-2">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs font-bold text-indigo-400">
+                      <div className={`flex items-center gap-2 text-xs font-bold ${
+                        aiConfig.models.orchestrator_provider === "ollama"
+                          ? "text-emerald-400"
+                          : aiConfig.models.orchestrator_provider === "groq"
+                          ? "text-cyan-400"
+                          : "text-indigo-400"
+                      }`}>
                         <Bot className="w-4 h-4" />
                         <span>Primary LLM Orchestrator</span>
                       </div>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                        Google GenAI
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                        aiConfig.models.orchestrator_provider === "ollama"
+                          ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                          : aiConfig.models.orchestrator_provider === "groq"
+                          ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/20"
+                          : "bg-indigo-500/10 text-indigo-300 border-indigo-500/20"
+                      }`}>
+                        {aiConfig.models.orchestrator_provider === "ollama"
+                          ? "Local Ollama (Qwen)"
+                          : aiConfig.models.orchestrator_provider === "groq"
+                          ? "Groq Cloud (Qwen)"
+                          : "Google GenAI"}
                       </span>
                     </div>
                     <p className="text-base font-mono font-bold text-white truncate">
@@ -474,22 +490,37 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* Groq Worker Node Card */}
+                  {/* Worker Node Card (Ollama Local / Groq) */}
                   <div className="p-4 rounded-xl bg-zinc-950/70 border border-zinc-800 space-y-2 md:col-span-2">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs font-bold text-cyan-400">
+                      <div className={`flex items-center gap-2 text-xs font-bold ${
+                        aiConfig.models.worker_provider === "groq" ? "text-cyan-400" : "text-emerald-400"
+                      }`}>
                         <Cpu className="w-4 h-4" />
-                        <span>Groq Parallel Sub-task & Diff Hunk Worker</span>
+                        <span>
+                          {aiConfig.models.worker_provider === "groq"
+                            ? "Groq Parallel Sub-task & Diff Hunk Worker"
+                            : "Local Ollama Sub-task & Diff Hunk Worker"}
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
-                        Groq Fast Inference
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                        aiConfig.models.worker_provider === "groq"
+                          ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/20"
+                          : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20"
+                      }`}>
+                        {aiConfig.models.worker_provider === "groq"
+                          ? "Groq Cloud Inference"
+                          : "Local Ollama (localhost:11434)"}
                       </span>
                     </div>
                     <p className="text-base font-mono font-bold text-white">
                       {aiConfig.models.worker_model}
                     </p>
                     <div className="flex flex-wrap gap-1 pt-1">
-                      {aiConfig.models.groq_models.map((m) => (
+                      {(aiConfig.models.worker_provider === "groq"
+                        ? aiConfig.models.groq_models
+                        : (aiConfig.models.ollama_models || [aiConfig.models.worker_model])
+                      ).map((m) => (
                         <span key={m} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
                           {m}
                         </span>

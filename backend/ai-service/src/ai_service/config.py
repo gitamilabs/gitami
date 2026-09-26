@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     vector_db: str = "chroma_cloud"
     # EMBEDDER: gemini | openai | fastembed
     embedder: str = "gemini"
+    # WORKER_PROVIDER: ollama | groq | gemini
+    worker_provider: str = "ollama"
+    # ORCHESTRATOR_PROVIDER: ollama | groq | gemini
+    orchestrator_provider: str = "ollama"
+    orchestrator_model: str = "qwen2.5-coder:latest"
 
     # ── ChromaDB ──────────────────────────────────────────────────────────────
     chroma_persist_dir: str = "./chroma_db"
@@ -56,6 +61,10 @@ class Settings(BaseSettings):
 
     # ── Groq ──────────────────────────────────────────────────────────────────
     groq_api_key: str = ""
+
+    # ── Ollama Local Worker LLM ───────────────────────────────────────────────
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen2.5-coder:latest"
 
     # ── Joern CPG Sidecar ─────────────────────────────────────────────────────
     joern_url: str = "http://localhost:8088"

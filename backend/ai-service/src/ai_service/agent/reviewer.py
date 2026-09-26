@@ -214,7 +214,7 @@ async def run_agentic_pr_review(
     vector_client: Optional[VectorKBClient] = None,
     llm_client: Optional[DualLLMClient] = None,
 ) -> AgentReviewResult:
-    """Execute autonomous agentic PR review using FastMCP knowledge base tools + Gemini/Groq dual LLMs."""
+    """Execute autonomous agentic PR review using FastMCP knowledge base tools + Gemini/Ollama dual LLMs."""
     if llm_client is None:
         llm_client = DualLLMClient()
 
@@ -248,7 +248,7 @@ async def run_agentic_pr_review(
         f"Systematically inspect EVERY file listed in Changed Files ({changed_files}) for runtime bugs, unhandled promise rejections, missing try-catch error handling around dynamic imports or API calls, and logic flaws:\n\n{raw_diff_text[:25000]}"
     )
 
-    # 4. Concurrent execution of Neo4j Blast Radius, Vector Search, Joern CPG, and Groq Worker
+    # 4. Concurrent execution of Neo4j Blast Radius, Vector Search, Joern CPG, and Worker Node (Ollama / Groq)
     blast_task = tool_get_blast_radius(client, repo_id=repo_id, changed_symbols=changed_symbols, branch=branch)
     vector_task = tool_vector_search(vector_client, query_text=diff_query, repo_id=repo_id, n_results=3)
     cpg_task = _run_cpg_analysis(repo_id=repo_id, syms=changed_symbols)
@@ -320,14 +320,15 @@ async def run_agentic_pr_review(
         except Exception as ge:
             logger.warning(f"Fallback Gemini worker inspection notice: {ge}")
 
-    # 6. Invoke Google Gemini Orchestrator for RAG synthesis & 5-Step Falsification
+    # 6. Invoke Primary Orchestrator (Qwen / Gemini) for RAG synthesis & 5-Step Falsification
+    diff_limit = 35000 if getattr(llm_client, "orchestrator_provider", "") == "ollama" else 60000
     orch_prompt = build_orchestrator_prompt(
         repo_id=repo_id,
         branch=branch,
         changed_files=changed_files,
         changed_symbols=changed_symbols,
         blast_radius_json=blast_json,
-        diff_text=raw_diff_text[:60000],
+        diff_text=raw_diff_text[:diff_limit],
         convention_violations=violations_dicts,
         semantic_context=semantic_json,
         cpg_context=cpg_context,

@@ -107,6 +107,11 @@ export interface AIServiceConfig {
   models: {
     gemini_models: string[];
     groq_models: string[];
+    ollama_models?: string[];
+    ollama_model?: string;
+    worker_provider?: string;
+    orchestrator_provider?: string;
+    orchestrator_model?: string;
     primary_orchestrator: string;
     worker_model: string;
   };

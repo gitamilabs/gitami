@@ -146,15 +146,35 @@ async def health_check():
 async def get_system_config():
     """Get active system configuration including Vector DB, Embedder, and Model lists."""
     from ai_service.config import settings
-    from ai_service.agent.llm_client import GEMINI_MODELS, GROQ_MODELS
+    from ai_service.agent.llm_client import GEMINI_MODELS, GROQ_MODELS, OLLAMA_MODELS
+
+    if settings.worker_provider == "ollama":
+        active_worker = settings.ollama_model
+    elif settings.worker_provider == "groq":
+        active_worker = GROQ_MODELS[0] if GROQ_MODELS else "openai/gpt-oss-120b"
+    else:
+        active_worker = GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-3.1-flash-lite"
+
+    if settings.orchestrator_provider == "ollama":
+        active_orchestrator = settings.orchestrator_model
+    elif settings.orchestrator_provider == "groq":
+        active_orchestrator = "qwen/qwen3.8-27b"
+    else:
+        active_orchestrator = GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-3.6-flash"
+
     return {
         "vector_db": settings.vector_db,
         "embedder": settings.embedder,
         "models": {
             "gemini_models": GEMINI_MODELS,
             "groq_models": GROQ_MODELS,
-            "primary_orchestrator": GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-3.6-flash",
-            "worker_model": GROQ_MODELS[0] if GROQ_MODELS else "openai/gpt-oss-120b",
+            "ollama_models": OLLAMA_MODELS,
+            "ollama_model": settings.ollama_model,
+            "worker_provider": settings.worker_provider,
+            "orchestrator_provider": settings.orchestrator_provider,
+            "orchestrator_model": settings.orchestrator_model,
+            "primary_orchestrator": active_orchestrator,
+            "worker_model": active_worker,
         },
         "storage": {
             "qdrant_collection": settings.qdrant_collection,
