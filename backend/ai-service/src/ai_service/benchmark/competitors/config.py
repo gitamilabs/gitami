@@ -3,6 +3,9 @@
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 from typing import Any, Dict, List, Literal, Optional
 
 from ai_service.benchmark.competitors.key_rotator import parse_keys

@@ -29,16 +29,21 @@ from ai_service.vector.client import VectorKBClient
 logger = logging.getLogger(__name__)
 
 GEMINI_BENCHMARK_MODELS = [
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3.5-flash-lite",
     "gemini-flash-latest",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
+    "gemini-2.0-flash",
     "gemini-1.5-flash",
 ]
 
 GROQ_BENCHMARK_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-70b-versatile",
     "qwen/qwen3.8-27b",
+    "llama-3.3-70b-versatile",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
 ]
 
 

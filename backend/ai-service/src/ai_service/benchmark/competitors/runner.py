@@ -18,13 +18,117 @@ from ai_service.benchmark.competitors.simulators import SIMULATOR_DISPATCHER
 from ai_service.benchmark.config import BenchmarkConfig
 from ai_service.benchmark.datasets import get_dataset
 from ai_service.benchmark.datasets.base import BenchmarkTestCase
-from ai_service.benchmark.kb_lifecycle import BenchmarkKBContext
 from ai_service.benchmark.report import BenchmarkReportGenerator
 from ai_service.benchmark.scorer import AggregateScore, BenchmarkScorer, TestCaseScore
 from ai_service.graph.client import Neo4jClient
 from ai_service.vector.client import VectorKBClient
 
 logger = logging.getLogger(__name__)
+
+
+class CompetitorKBContext:
+    """Isolated, lightweight KB context manager tailored for competitor requirements."""
+
+    def __init__(
+        self,
+        repo_id: str,
+        branch: str,
+        repo_dir: Optional[Path],
+        kb_mode: str,
+        graph_client: Optional[Neo4jClient] = None,
+        vector_client: Optional[VectorKBClient] = None,
+        cleanup: bool = True,
+    ):
+        self.repo_id = repo_id
+        self.branch = branch
+        self.repo_dir = repo_dir
+        self.kb_mode = kb_mode
+        self.graph_client = graph_client
+        self.vector_client = vector_client
+        self.cleanup = cleanup
+
+    async def __aenter__(self):
+        # 1. Ingest into Vector DB (Chroma) if chroma_only or dual
+        if (
+            self.kb_mode in ("chroma_only", "dual")
+            and self.vector_client
+            and self.repo_dir
+            and self.repo_dir.exists()
+        ):
+            try:
+                docs = []
+                metas = []
+                ids = []
+                for p in self.repo_dir.rglob("*"):
+                    if p.is_file() and not p.name.startswith("."):
+                        try:
+                            content = p.read_text(encoding="utf-8", errors="ignore")
+                            if content.strip():
+                                rel = str(p.relative_to(self.repo_dir)).replace("\\", "/")
+                                docs.append(content[:4000])
+                                metas.append({
+                                    "file_path": rel,
+                                    "repo": self.repo_id,
+                                    "branch": self.branch,
+                                    "type": "code",
+                                })
+                                ids.append(f"{self.repo_id}_{rel}_{len(ids)}")
+                        except Exception:
+                            pass
+                if docs:
+                    self.vector_client.upsert(
+                        repo_id=self.repo_id,
+                        branch=self.branch,
+                        content_type="code",
+                        documents=docs,
+                        metadatas=metas,
+                        ids=ids,
+                    )
+            except Exception as e:
+                logger.debug(f"[CompetitorKB] Vector upsert note: {e}")
+
+        # 2. Ingest into Graph DB (Neo4j) if neo4j_only or dual
+        if (
+            self.kb_mode in ("neo4j_only", "dual")
+            and self.graph_client
+            and getattr(self.graph_client, "_driver", None)
+            and self.repo_dir
+            and self.repo_dir.exists()
+        ):
+            try:
+                from ai_service.parsing.parser import CodeParser
+                from ai_service.graph.writer import upsert_file_and_symbols, delete_repo_data
+
+                await delete_repo_data(self.graph_client, repo_id=self.repo_id, branch=self.branch)
+                parser = CodeParser()
+                parse_results = parser.parse_directory(self.repo_dir)
+                for pr in parse_results:
+                    await upsert_file_and_symbols(
+                        self.graph_client,
+                        repo_id=self.repo_id,
+                        branch=self.branch,
+                        file_path=pr.file_path,
+                        symbols=pr.symbols,
+                    )
+            except Exception as e:
+                logger.debug(f"[CompetitorKB] Graph upsert note: {e}")
+
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.cleanup:
+            if self.vector_client:
+                try:
+                    self.vector_client.delete(where={"repo": self.repo_id})
+                except Exception:
+                    pass
+            if self.graph_client and getattr(self.graph_client, "_driver", None):
+                try:
+                    from ai_service.graph.writer import delete_repo_data
+
+                    await delete_repo_data(self.graph_client, repo_id=self.repo_id, branch=self.branch)
+                except Exception:
+                    pass
 
 
 @dataclass
@@ -117,9 +221,16 @@ class CompetitorBenchmarkRunner:
         if self.config.kb_mode in ("neo4j_only", "dual"):
             try:
                 graph_client = Neo4jClient()
-                await graph_client.connect()
+                await asyncio.wait_for(graph_client.connect(), timeout=3.0)
+                await asyncio.wait_for(graph_client.verify_connectivity(), timeout=3.0)
             except Exception as e:
-                logger.warning(f"Neo4j connection error ({e}); proceeding with offline graph context.")
+                logger.warning(f"Neo4j connection/connectivity notice ({e}); proceeding with offline graph context.")
+                if graph_client:
+                    try:
+                        await graph_client.close()
+                    except Exception:
+                        pass
+                graph_client = None
 
         if self.config.kb_mode in ("chroma_only", "dual"):
             try:
@@ -201,10 +312,11 @@ class CompetitorBenchmarkRunner:
                         stage_dir = self._setup_stage_directory(case)
                         repo_dir = stage_dir
 
-                    async with BenchmarkKBContext(
+                    async with CompetitorKBContext(
                         repo_id=repo_id,
                         branch=self.config.branch,
                         repo_dir=repo_dir,
+                        kb_mode=self.config.kb_mode,
                         graph_client=graph_client if self.config.kb_mode in ("neo4j_only", "dual") else None,
                         vector_client=vector_client if self.config.kb_mode in ("chroma_only", "dual") else None,
                         cleanup=self.config.cleanup_kb,
