@@ -44,7 +44,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       } animate-fade-in`}
     >
       {!isUser && (
-        <div className="w-8 h-8 rounded-xl bg-zinc-900 border border-zinc-800 shrink-0 flex items-center justify-center mt-1">
+        <div className="w-8 h-8 rounded-xl bg-white/[0.04] border border-white/[0.06] shrink-0 flex items-center justify-center mt-1">
           <Bot className="w-4 h-4 text-blue-400" />
         </div>
       )}
@@ -53,7 +53,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
         className={`max-w-3xl rounded-2xl p-5 ${
           isUser
             ? "bg-blue-600 text-white rounded-br-md border border-blue-500/40"
-            : "glass-panel rounded-bl-md border border-slate-800 text-slate-100"
+            : "bg-[#11131a] rounded-bl-md border border-white/[0.06] text-zinc-100 shadow-sm"
         }`}
       >
         {isUser ? (
@@ -101,7 +101,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
             {/* Executed Knowledge Base Tool Steps */}
             {message.toolSteps && message.toolSteps.length > 0 && (
               <div className="space-y-1.5">
-                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1 font-mono">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-400 px-1 font-mono">
                   <Layers className="w-3.5 h-3.5 text-cyan-400" />
                   <span>Knowledge Base & Graph Tool Execution</span>
                 </div>
@@ -113,7 +113,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
             {/* Synthesized Answer Body */}
             {message.content ? (
-              <div className="prose-custom text-xs sm:text-sm leading-relaxed text-slate-200 relative pt-1">
+              <div className="prose-custom text-xs sm:text-sm leading-relaxed text-zinc-200 relative pt-1">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {message.content}
                 </ReactMarkdown>
@@ -127,10 +127,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
             {/* Cited Sources List */}
             {message.citations && message.citations.length > 0 && (
-              <div className="border-t border-slate-800/80 pt-3.5 space-y-2.5">
+              <div className="border-t border-white/[0.06] pt-3.5 space-y-2.5">
                 <button
                   onClick={() => setCitationsOpen(!citationsOpen)}
-                  className="w-full flex items-center justify-between text-left text-xs font-semibold text-slate-300 hover:text-white transition-colors"
+                  className="w-full flex items-center justify-between text-left text-xs font-semibold text-zinc-300 hover:text-white transition-colors"
                 >
                   <div className="flex items-center gap-1.5">
                     <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
@@ -139,9 +139,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
                     </span>
                   </div>
                   {citationsOpen ? (
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
                   ) : (
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                    <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />
                   )}
                 </button>
 
@@ -157,19 +157,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
             {/* Footer Metadata & Copy */}
             {!message.isStreaming && message.content && (
-              <div className="flex items-center justify-between text-[11px] text-slate-400 pt-3 border-t border-slate-800/80 font-mono">
+              <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-3 border-t border-white/[0.06] font-mono">
                 <div className="flex items-center gap-3">
                   {message.latencyMs && message.latencyMs > 0 && (
-                    <span className="flex items-center gap-1 text-slate-400">
+                    <span className="flex items-center gap-1 text-zinc-400">
                       <Clock className="w-3 h-3 text-amber-400" />
                       {formatLatency(message.latencyMs)}
                     </span>
                   )}
-                  <span className="text-slate-500 hidden sm:inline-block">Dual-LLM (Gemini + Groq)</span>
+                  <span className="text-zinc-500 hidden sm:inline-block">Dual-LLM (Gemini + Groq)</span>
                 </div>
                 <button
                   onClick={handleCopyAnswer}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors border border-transparent hover:border-slate-700"
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/[0.05] transition-colors border border-transparent hover:border-white/[0.08]"
                 >
                   {copied ? (
                     <>
@@ -190,7 +190,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       </div>
 
       {isUser && (
-        <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 p-0.5 shrink-0 flex items-center justify-center text-slate-300 mt-1 shadow-sm">
+        <div className="w-8 h-8 rounded-xl bg-white/[0.04] border border-white/[0.08] p-0.5 shrink-0 flex items-center justify-center text-zinc-300 mt-1 shadow-sm">
           <User className="w-4 h-4" />
         </div>
       )}

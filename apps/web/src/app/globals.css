@@ -4,8 +4,15 @@
 
 @layer base {
   :root {
-    --background: #000000;
+    --background: #0c0d12;
     --foreground: #ededed;
+    --muted: #151720;
+    --muted-foreground: #9499ad;
+    --border: rgba(255, 255, 255, 0.07);
+    --border-subtle: rgba(255, 255, 255, 0.04);
+    --surface: #11131a;
+    --surface-elevated: #151822;
+    --surface-hover: #171a26;
     --font-inter: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
@@ -21,7 +28,7 @@
   }
 
   ::selection {
-    background-color: #27272a;
+    background-color: #262936;
     color: #ffffff;
   }
 }
@@ -37,32 +44,30 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: rgba(255, 255, 255, 0.18);
 }
 
-/* Flat panel surfaces (Vercel-style) — kept under the original class names so
-   every existing component that references .glass-panel / .glass-card keeps
-   working, just rendered as flat near-black surfaces instead of blurred glass. */
+/* Vercel Dark clean flat surfaces without harsh white outlines */
 .glass-panel {
-  background: #0a0a0a;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #11131a;
+  border: 1px solid rgba(255, 255, 255, 0.07);
   box-shadow: none;
 }
 
 .glass-panel-elevated {
-  background: #0f0f0f;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 12px 28px -12px rgba(0, 0, 0, 0.65);
+  background: #141721;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
 .glass-card {
-  background: #0a0a0a;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #11131a;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .glass-card-hover {
@@ -70,17 +75,16 @@
 }
 
 .glass-card-hover:hover {
-  background: #0f0f0f;
-  border-color: rgba(255, 255, 255, 0.16);
+  background: #161924;
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .glass-card-active {
-  background: #0f0f0f;
-  border-color: rgba(255, 255, 255, 0.22);
+  background: #1a1e2c;
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
-/* Glow utilities kept as no-ops / very subtle so components that still
-   reference them stay flat rather than reintroducing colored bloom. */
+/* Glow utilities kept as no-ops */
 .glow-subtle,
 .glow-cyan,
 .glow-emerald,
@@ -90,88 +94,30 @@
 
 /* Vercel-style surfaces */
 .vercel-card {
-  background: #0a0a0a;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  background: #11131a;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.15s ease;
 }
 
 .vercel-card:hover {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.1);
+  background: #151822;
 }
 
-.vercel-input {
-  background: #0a0a0a;
-  border: 1px solid #27272a;
-  color: #fafafa;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+.vercel-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background-color 0.12s ease;
 }
 
-.vercel-input:focus {
-  outline: none;
-  border-color: #71717a;
-  box-shadow: 0 0 0 1px #71717a;
+.vercel-row:hover {
+  background-color: rgba(255, 255, 255, 0.03);
 }
 
-.vercel-button-primary {
-  background: #ffffff;
-  color: #000000;
-  font-weight: 500;
-  transition: all 0.15s ease;
-}
-
-.vercel-button-primary:hover {
-  background: #d4d4d8;
-}
-
-.vercel-button-secondary {
-  background: #18181b;
-  border: 1px solid #27272a;
-  color: #fafafa;
-  transition: all 0.15s ease;
-}
-
-.vercel-button-secondary:hover {
-  background: #27272a;
-  border-color: #3f3f46;
-}
-
-/* Background Grids (subtle, monochrome — no colored radial glow) */
-.bg-radial-gradient {
-  background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.05) 0%, rgba(0, 0, 0, 0) 60%);
-}
-
-.bg-grid-pattern {
-  background-size: 36px 36px;
-  background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-}
-
-.bg-dot-grid {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-
-/* Animations */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.animate-shimmer {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.06) 50%, rgba(255, 255, 255, 0) 100%);
-  background-size: 200% 100%;
-  animation: shimmer 3s infinite;
-}
-
+/* Keyframe animations */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(3px);
   }
   to {
     opacity: 1;
@@ -180,172 +126,5 @@
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* Markdown typography styling inside chat */
-.prose-custom pre {
-  background: #0a0a0a !important;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0.75rem;
-  padding: 1rem;
-  overflow-x: auto;
-  margin: 0.75rem 0;
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-}
-
-.prose-custom code {
-  background: rgba(255, 255, 255, 0.08);
-  color: #e4e4e7;
-  padding: 0.15rem 0.4rem;
-  border-radius: 0.375rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 0.84em;
-  font-family: var(--font-mono);
-}
-
-.prose-custom pre code {
-  background: transparent !important;
-  color: #e4e4e7;
-  padding: 0;
-  border: none;
-}
-
-.prose-custom h1,
-.prose-custom h2,
-.prose-custom h3 {
-  color: #fafafa;
-  font-weight: 700;
-  margin-top: 1.15rem;
-  margin-bottom: 0.5rem;
-  letter-spacing: -0.02em;
-}
-
-.prose-custom h1 {
-  font-size: 1.25rem;
-}
-.prose-custom h2 {
-  font-size: 1.1rem;
-}
-.prose-custom h3 {
-  font-size: 0.975rem;
-}
-
-.prose-custom p {
-  margin-bottom: 0.75rem;
-  line-height: 1.68;
-  color: #d4d4d8;
-}
-
-.prose-custom ul,
-.prose-custom ol {
-  padding-left: 1.25rem;
-  margin-bottom: 0.75rem;
-  color: #d4d4d8;
-}
-
-.prose-custom li {
-  margin-bottom: 0.35rem;
-  line-height: 1.6;
-}
-
-.prose-custom strong {
-  color: #ffffff;
-  font-weight: 600;
-}
-
-.prose-custom a {
-  color: #60a5fa;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  font-weight: 500;
-  transition: color 0.15s;
-}
-
-.prose-custom a:hover {
-  color: #93c5fd;
-}
-
-.prose-custom blockquote {
-  border-left: 3px solid #3f3f46;
-  padding-left: 1rem;
-  color: #a1a1aa;
-  margin: 0.75rem 0;
-  font-style: italic;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 0 0.5rem 0.5rem 0;
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-}
-
-.prose-custom table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 1rem 0;
-  font-size: 0.8125rem;
-}
-
-.prose-custom th {
-  background: #0f0f0f;
-  color: #e4e4e7;
-  font-weight: 600;
-  text-align: left;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.prose-custom td {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #d4d4d8;
-}
-
-.prose-custom tr:nth-child(even) td {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-/* ==========================================================================
-   Global Animations & Loaders
-   ========================================================================== */
-
-@keyframes sentinel-pulse-ring {
-  0% {
-    transform: scale(0.95);
-    opacity: 0.3;
-  }
-  50% {
-    transform: scale(1.08);
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(0.95);
-    opacity: 0.3;
-  }
-}
-
-@keyframes sentinel-scan {
-  0% {
-    transform: translateX(-100%);
-  }
-  50% {
-    transform: translateX(100%);
-  }
-  100% {
-    transform: translateX(250%);
-  }
-}
-
-.animate-sentinel-ring {
-  animation: sentinel-pulse-ring 2.4s ease-in-out infinite;
-}
-
-.animate-sentinel-scan {
-  animation: sentinel-scan 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-/* Top Route Progress Bar Glow */
-.route-progress-bar {
-  background: linear-gradient(90deg, #6366f1 0%, #38bdf8 50%, #818cf8 100%);
-  box-shadow: 0 0 12px rgba(99, 102, 241, 0.75), 0 0 4px rgba(56, 189, 248, 0.9);
+  animation: fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

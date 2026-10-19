@@ -19,12 +19,14 @@ interface PRIssueChecklistProps {
   issues: PRIssueItem[];
   onFixSelected: (selectedIds: string[]) => Promise<{ fixPrUrl?: string } | void>;
   isFixing?: boolean;
+  onToggleFixed?: (issueId: string, isFixed: boolean) => Promise<void>;
 }
 
 export const PRIssueChecklist: React.FC<PRIssueChecklistProps> = ({
   issues,
   onFixSelected,
   isFixing = false,
+  onToggleFixed,
 }) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [fixResultUrl, setFixResultUrl] = useState<string | null>(null);
@@ -111,10 +113,10 @@ export const PRIssueChecklist: React.FC<PRIssueChecklistProps> = ({
 
   if (issues.length === 0) {
     return (
-      <div className="glass-panel border border-slate-800/80 rounded-xl p-8 text-center my-6">
+      <div className="bg-[#11131a] border border-white/[0.06] rounded-xl p-8 text-center my-6">
         <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
         <h4 className="text-lg font-bold text-white">No Issues Detected</h4>
-        <p className="text-xs text-slate-400 mt-1">
+        <p className="text-xs text-zinc-400 mt-1">
           The ReAct agent analyzed this PR and found no logical errors, bugs, or convention violations.
         </p>
       </div>
@@ -122,20 +124,20 @@ export const PRIssueChecklist: React.FC<PRIssueChecklistProps> = ({
   }
 
   return (
-    <div className="glass-panel border border-slate-800/80 rounded-xl p-6 my-6 shadow-xl">
+    <div className="bg-[#11131a] border border-white/[0.06] rounded-xl p-6 my-6 shadow-sm">
       {/* Action Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-5 mb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-5 mb-5">
         <div>
           <div className="flex items-center gap-2">
             <Wrench className="w-5 h-5 text-indigo-400" />
             <h3 className="text-lg font-bold text-white tracking-tight">
               PR Issues & Vulnerabilities Checklist
             </h3>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-800 text-slate-300 border border-slate-700">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/[0.05] text-zinc-300 border border-white/[0.08]">
               {openIssues.length} Open
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-zinc-400 mt-1">
             Select issues below and click <span className="text-indigo-300 font-semibold">Fix using AI</span> to launch autonomous agents that push a fix PR to GitHub.
           </p>
         </div>
@@ -144,7 +146,7 @@ export const PRIssueChecklist: React.FC<PRIssueChecklistProps> = ({
           {openIssues.length > 0 && (
             <button
               onClick={handleSelectAll}
-              className="text-xs font-mono text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-950/40 transition-all cursor-pointer"
+              className="text-xs font-mono text-zinc-400 hover:text-zinc-200 px-3 py-1.5 rounded-lg border border-white/[0.08] hover:border-white/[0.15] bg-white/[0.03] transition-all cursor-pointer"
             >
               {selectedIds.length === openIssues.length ? "Deselect All" : "Select All"}
             </button>
@@ -216,10 +218,10 @@ export const PRIssueChecklist: React.FC<PRIssueChecklistProps> = ({
               }}
               className={`group p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
                 item.isFixed
-                  ? "bg-slate-950/40 border-slate-800/60 opacity-60 cursor-default"
+                  ? "bg-[#0c0d12]/50 border-white/[0.04] opacity-60 cursor-default"
                   : isSelected
                   ? "bg-indigo-950/40 border-indigo-500/80 shadow-lg shadow-indigo-500/10 ring-1 ring-indigo-500/50"
-                  : "bg-slate-950/70 border-slate-800/80 hover:border-slate-700 hover:bg-slate-950"
+                  : "bg-[#0c0d12] border-white/[0.06] hover:border-white/[0.12] hover:bg-white/[0.02]"
               }`}
             >
               <div className="flex items-start gap-3.5">
@@ -233,7 +235,7 @@ export const PRIssueChecklist: React.FC<PRIssueChecklistProps> = ({
                     className={`mt-1 w-4 h-4 rounded flex items-center justify-center border transition-all cursor-pointer ${
                       isSelected
                         ? "bg-indigo-600 border-indigo-500 text-white shadow-sm"
-                        : "bg-slate-900 border-slate-700 hover:border-slate-500 text-transparent"
+                        : "bg-[#11131a] border-white/[0.12] hover:border-white/[0.2] text-transparent"
                     }`}
                   >
                     ✓
@@ -264,30 +266,46 @@ export const PRIssueChecklist: React.FC<PRIssueChecklistProps> = ({
                       {item.severity}
                     </span>
 
-                    <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
-                      <FileCode className="w-3.5 h-3.5 text-slate-500" />
+                    <span className="text-[11px] font-mono text-zinc-400 flex items-center gap-1">
+                      <FileCode className="w-3.5 h-3.5 text-zinc-500" />
                       {item.filePath}:{item.line}
                     </span>
 
-                    {item.isFixed && (
+                    {onToggleFixed ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleFixed(item.id, !item.isFixed);
+                        }}
+                        className={`ml-auto text-[10px] font-mono px-2 py-0.5 rounded border transition-colors cursor-pointer ${
+                          item.isFixed
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
+                            : "bg-white/[0.04] text-zinc-400 border-white/[0.08] hover:text-white hover:bg-white/[0.08]"
+                        }`}
+                        title={item.isFixed ? "Mark as Open" : "Mark as Resolved"}
+                      >
+                        {item.isFixed ? "Resolved ✓" : "Mark Resolved"}
+                      </button>
+                    ) : item.isFixed ? (
                       <span className="ml-auto text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
                         Fixed via AI PR
                       </span>
-                    )}
+                    ) : null}
                   </div>
 
                   {/* Title & Description */}
-                  <h4 className="text-sm font-bold text-slate-100 group-hover:text-white transition-colors">
+                  <h4 className="text-sm font-bold text-zinc-100 group-hover:text-white transition-colors">
                     {item.title}
                   </h4>
-                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
                     {item.description}
                   </p>
 
                   {/* Suggested Fix snippet */}
                   {item.suggestedFix && (
-                    <div className="mt-2.5 p-3 rounded-lg bg-slate-900 border border-slate-800/80">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    <div className="mt-2.5 p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                      <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider block mb-1">
                         Suggested Fix / Patch Strategy:
                       </span>
                       <p className="text-xs font-mono text-indigo-300 whitespace-pre-wrap leading-relaxed">

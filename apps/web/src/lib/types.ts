@@ -296,3 +296,166 @@ export interface PRData {
   updatedAt?: string;
 }
 
+// ==========================================
+// Workspace, Team, Project, & Build Types
+// ==========================================
+
+export interface Team {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeamMember {
+  id: string;
+  organizationId: string;
+  userId: string;
+  role: "OWNER" | "MEMBER" | "VIEWER" | string;
+  createdAt: string;
+  user: {
+    id: string;
+    username: string;
+    email: string | null;
+    avatarUrl: string;
+  };
+}
+
+export interface UpdateTeamInput {
+  name?: string;
+  slug?: string;
+}
+
+export interface UpdateProjectInput {
+  name?: string;
+  description?: string;
+  slug?: string;
+}
+
+export interface UpdateRepoInput {
+  defaultBranch?: string;
+  isActive?: boolean;
+  name?: string;
+}
+
+export interface CreatePRInput {
+  repoFullName: string;
+  prNumber?: number;
+  title: string;
+  body?: string;
+  baseBranch?: string;
+  headBranch: string;
+  htmlUrl?: string;
+}
+
+export interface UpdatePRInput {
+  title?: string;
+  body?: string;
+  state?: "open" | "closed" | "merged" | string;
+  status?: string;
+}
+
+export interface Project {
+  id: string;
+  organizationId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  repositoryCount?: number;
+  repositories?: ConnectedRepository[];
+  latestBuild?: Build | null;
+  status?: "BUILDING" | "READY" | "IDLE" | string;
+}
+
+export interface BuildStage {
+  key: string;
+  name: string;
+  status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED";
+}
+
+export interface BuildStats {
+  symbols_parsed?: number;
+  files_parsed?: number;
+  packages?: number;
+  edges_count?: number;
+  duration_seconds?: number;
+}
+
+export interface Build {
+  id: string;
+  projectId: string;
+  repositoryId: string;
+  type: string;
+  targetCommitSha: string;
+  branch: string;
+  status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+  progress: number;
+  stage: string;
+  stats?: BuildStats | null;
+  error?: string | null;
+  createdAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  stages?: BuildStage[];
+  currentStage?: string;
+}
+
+export interface GraphCommunity {
+  id: number;
+  label: string;
+  size: number;
+  color: string;
+  borderColor: string;
+  paletteName: string;
+}
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  type: "File" | "Symbol" | "Package" | string;
+  communityId?: number;
+  communityLabel?: string;
+  communityColor?: string;
+  communityBorder?: string;
+  degree?: number;
+  inDegree?: number;
+  outDegree?: number;
+  importance?: number;
+  props?: Record<string, any>;
+  x?: number;
+  y?: number;
+  vx?: number;
+  vy?: number;
+}
+
+export interface GraphEdge {
+  id?: string;
+  source: string;
+  target: string;
+  relation: "DEFINES" | "CALLS" | "IMPORTS" | "DEPENDS_ON" | string;
+  type?: string;
+  props?: Record<string, any>;
+}
+
+export interface GraphData {
+  status: "READY" | "NOT_INDEXED" | "BUILDING" | "FAILED" | "NO_REPOSITORY";
+  message?: string;
+  repository?: ConnectedRepository;
+  build?: Build;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  communities?: GraphCommunity[];
+  stats?: {
+    nodeCount: number;
+    edgeCount: number;
+    communityCount: number;
+  };
+  totalNodes?: number;
+  totalEdges?: number;
+}
+
+
+

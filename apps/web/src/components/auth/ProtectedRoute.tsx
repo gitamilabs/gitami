@@ -23,7 +23,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center">
         <PageLoader
-          label="Authenticating Sentinel Session..."
+          label="Authenticating GitAmi Session..."
           sublabel="Verifying cryptographically signed session & permissions"
         />
       </div>

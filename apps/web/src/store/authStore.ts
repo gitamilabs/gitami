@@ -16,6 +16,8 @@ interface AuthState {
   fetchUser: () => Promise<void>;
 }
 
+let initPromise: Promise<void> | null = null;
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   user: null,
@@ -26,9 +28,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setToken: (token: string | null) => {
     if (typeof window !== "undefined") {
       if (token) {
-        localStorage.setItem("sentinel_token", token);
+        localStorage.setItem("gitami_token", token);
+        document.cookie = `gitami_token=${token}; path=/; max-age=2592000; SameSite=Lax`;
       } else {
+        localStorage.removeItem("gitami_token");
         localStorage.removeItem("sentinel_token");
+        document.cookie = "gitami_token=; path=/; max-age=0; SameSite=Lax";
       }
     }
     set({ token });
@@ -41,53 +46,68 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initialize: async () => {
     if (typeof window === "undefined") return;
 
-    const savedToken = localStorage.getItem("sentinel_token");
-    if (!savedToken) {
-      set({ isInitialized: true, token: null, user: null });
+    if (get().isInitialized && get().user) {
       return;
     }
 
-    // Mock token support for testing / offline preview
-    if (savedToken.startsWith("mock_")) {
-      const mockUser: User = {
-        id: "usr_mock_12345",
-        username: "sentinel-dev",
-        name: "Sentinel Developer",
-        email: "developer@sentinel-ai.local",
-        avatarUrl: "",
-        githubId: "87654321",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      set({ token: savedToken, user: mockUser, isInitialized: true, isLoading: false, error: null });
-      return;
+    if (initPromise) {
+      return initPromise;
     }
 
-    set({ token: savedToken, isLoading: true });
-    try {
-      const { user } = await authApi.getMe(savedToken);
-      set({ user, isLoading: false, isInitialized: true, error: null });
-    } catch (err: any) {
-      console.warn("Failed to restore session token:", err);
-      // Only remove if unauthorized 401/403
-      if (err.message && (err.message.includes("401") || err.message.includes("403") || err.message.includes("Unauthorized"))) {
-        localStorage.removeItem("sentinel_token");
-        set({ token: null, user: null, isLoading: false, isInitialized: true, error: err.message });
-      } else {
-        // Fallback placeholder profile for offline/dev resilience
-        const fallbackUser: User = {
-          id: "usr_session",
-          username: "developer",
-          name: "Developer",
-          email: null,
+    initPromise = (async () => {
+      const savedToken = localStorage.getItem("gitami_token") || localStorage.getItem("sentinel_token");
+      if (!savedToken) {
+        set({ isInitialized: true, token: null, user: null });
+        return;
+      }
+
+      // Mock token support for testing / offline preview
+      if (savedToken.startsWith("mock_")) {
+        const mockUser: User = {
+          id: "usr_mock_12345",
+          username: "gitami-dev",
+          name: "GitAmi Developer",
+          email: "developer@gitami.local",
           avatarUrl: "",
-          githubId: "0000",
+          githubId: "87654321",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        set({ token: savedToken, user: fallbackUser, isLoading: false, isInitialized: true, error: null });
+        set({ token: savedToken, user: mockUser, isInitialized: true, isLoading: false, error: null });
+        return;
       }
-    }
+
+      set({ token: savedToken, isLoading: true });
+      try {
+        const { user } = await authApi.getMe(savedToken);
+        set({ user, isLoading: false, isInitialized: true, error: null });
+      } catch (err: any) {
+        console.warn("Failed to restore session token:", err);
+        // Only remove if unauthorized 401/403
+        if (err.message && (err.message.includes("401") || err.message.includes("403") || err.message.includes("Unauthorized"))) {
+          localStorage.removeItem("gitami_token");
+          localStorage.removeItem("sentinel_token");
+          set({ token: null, user: null, isLoading: false, isInitialized: true, error: err.message });
+        } else {
+          // Fallback placeholder profile for offline/dev resilience
+          const fallbackUser: User = {
+            id: "usr_session",
+            username: "developer",
+            name: "Developer",
+            email: null,
+            avatarUrl: "",
+            githubId: "0000",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          set({ token: savedToken, user: fallbackUser, isLoading: false, isInitialized: true, error: null });
+        }
+      } finally {
+        initPromise = null;
+      }
+    })();
+
+    return initPromise;
   },
 
   fetchUser: async () => {
@@ -121,7 +141,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     }
     if (typeof window !== "undefined") {
+      localStorage.removeItem("gitami_token");
       localStorage.removeItem("sentinel_token");
+      document.cookie = "gitami_token=; path=/; max-age=0; SameSite=Lax";
+      document.cookie = "gitami_team=; path=/; max-age=0; SameSite=Lax";
     }
     set({ token: null, user: null, error: null });
     if (typeof window !== "undefined") {

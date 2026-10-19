@@ -26,12 +26,12 @@ export const Button: React.FC<ButtonProps> = ({
     glow: "bg-blue-600 hover:bg-blue-500 text-white shadow-xs border border-blue-500/50 active:scale-[0.98]",
     cyan: "bg-blue-600 hover:bg-blue-500 text-white shadow-xs border border-blue-500/50 active:scale-[0.98]",
     secondary:
-      "bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 hover:border-zinc-700 active:scale-[0.98]",
+      "bg-white/[0.04] hover:bg-white/[0.08] text-zinc-200 border border-white/[0.08] hover:border-white/[0.15] active:scale-[0.98]",
     danger:
       "bg-red-500/10 hover:bg-red-500/15 text-red-400 border border-red-500/25 hover:border-red-500/40 active:scale-[0.98]",
-    ghost: "bg-transparent hover:bg-zinc-900 text-zinc-400 hover:text-white active:scale-[0.98]",
+    ghost: "bg-transparent hover:bg-white/[0.05] text-zinc-400 hover:text-white active:scale-[0.98]",
     outline:
-      "bg-transparent hover:bg-zinc-900/60 text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-600 active:scale-[0.98]",
+      "bg-transparent hover:bg-white/[0.04] text-zinc-300 hover:text-white border border-white/[0.08] hover:border-white/[0.15] active:scale-[0.98]",
   };
 
   const sizeStyles = {

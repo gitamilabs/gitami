@@ -17,16 +17,20 @@ This AI Service is a high-performance Python backend that bridges **AST-level st
 │                                SYSTEM LANDSCAPE                                  │
 ├──────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                  │
-│   Next.js 16 UI  ◄──►  Bun Control Plane API  ◄──►  FastAPI / FastMCP AI Service │
-│   (Port 3000)          (Port 3001)                  (Port 8000)                  │
-│                                                          │                       │
-│                                       ┌──────────────────┴───────────────────┐   │
-│                                       ▼                                      ▼   │
-│                             ChromaDB (Vector DB)                     Neo4j (Graph DB)
-│                             - Code Signatures                        - File Nodes│
-│                             - Docstrings & Bodies                    - Symbol Nodes
-│                             - PR / Issue / Commit Context            - CALLS / IMPORTS
-│                             - Multi-repo scoped                      - Multi-repo isolated
+│   Next.js 16 UI  ◄────────►  Bun Control Plane API  ◄───────►  FastAPI AI Service │
+│   (Port 3000)                (Port 5000)                        (Port 8000)      │
+│                                  │                                   │           │
+│                                  ▼                                   ▼           │
+│                           PostgreSQL (ACID)                 ┌────────────────┐   │
+│                           - Tenancy (Org/Team/Project)      │ Knowledge Base │   │
+│                           - Connected Repos & Tokens        ├────────────────┤   │
+│                           - Durable Index Jobs              │Neo4j (Graph DB)│   │
+│                           - PR & Review State               │- AST Call Tree │   │
+│                                                             │- Imports & Deps│   │
+│                                                             │ChromaDB(Vector)│   │
+│                                                             │- Curated Syms  │   │
+│                                                             │- Docs & Threads│   │
+│                                                             └────────────────┘   │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -36,78 +40,53 @@ This AI Service is a high-performance Python backend that bridges **AST-level st
 
 | Tier / Service | Technology | Primary Responsibilities |
 |---|---|---|
-| **Frontend** | Next.js 16, React 19, TailwindCSS | Developer dashboard, interactive diff viewer, streaming AI reasoning visualizer, cited source inspection, one-click fix acceptance. |
-| **Control Plane** | Bun, TypeScript, Drizzle ORM, SQLite/Postgres | GitHub App webhook intake, authentication, HMAC signature validation, job dispatching, GitHub comment posting, PR branch patching via Octokit. |
-| **AI Intelligence Engine** | Python 3.12, UV, FastAPI, FastMCP | AST code parsing (Tree-sitter), Graph KB (Neo4j), Vector KB (ChromaDB), Blast Radius calculations, ReAct Agent Loop, Dual-LLM review & surgical fix synthesis. |
+| **Frontend (`apps/web`)** | Next.js 16, React 19, TailwindCSS | Developer dashboard, multi-tenant workspace (`/[teamSlug]/[projectSlug]`), interactive diff viewer, streaming AI reasoning visualizer, cited source inspection. |
+| **Control Plane (`apps/api`)** | Bun, TypeScript, Drizzle ORM, PostgreSQL | GitHub App webhook intake, authentication, HMAC signature validation, job dispatching, GitHub comment posting, PR branch patching via Octokit. |
+| **AI Intelligence Engine (`apps/ai`)** | Python 3.12, UV, FastAPI, FastMCP | AST code parsing (Tree-sitter), Graph KB (Neo4j), Vector KB (ChromaDB), Blast Radius calculations, Governed Context Engine, and multi-agent execution. |
 | **Graph Database** | Neo4j Community (Docker) | Structural code graph: callers, callees, imports, file dependencies, transitive blast radius paths. |
-| **Vector Database** | ChromaDB (Persistent) | Semantic code representations: function signatures, docstrings, code bodies, PRs, issues. |
+| **Vector Database** | ChromaDB (Persistent) | Semantic representations: curated function signatures, docstrings, non-trivial code summaries, PR/issue context. |
 
 ---
 
-## 3. Directory Layout & Module Structure
+## 3. Monorepo Layout & Directory Structure
 
 ```
-backend/ai-service/
-├── pyproject.toml              # UV / Hatchling dependency configuration
-├── docker-compose.yml          # Containerized Neo4j Graph DB service
-├── main.py                     # Entry point alias
-├── src/ai_service/
-│   ├── config.py               # Pydantic Settings (Neo4j, Chroma, API keys)
-│   ├── cli.py                  # Click CLI for batch jobs, indexing, visualizer
-│   ├── kb_unified.py           # UnifiedKB facade (Hybrid Search: Graph + Vector)
-│   ├── visualize.py            # Vis.js interactive HTML dependency graph generator
+gitami/
+├── apps/
+│   ├── web/                    # Next.js 16 frontend (React 19, TailwindCSS)
+│   │   └── src/
+│   │       ├── app/            # App Router: /[teamSlug]/[projectSlug]/*
+│   │       ├── components/     # UI, Layout, Graph, PR, Chat, Project, Team
+│   │       ├── features/       # Settings and specialized views
+│   │       ├── store/          # Zustand state stores
+│   │       └── lib/            # Unified API client & TypeScript contracts
 │   │
-│   ├── parsing/                # AST Code Analysis Engine (Tree-sitter)
-│   │   ├── models.py           # Dataclasses: SymbolNode, CallEdge, ImportEdge, ParseResult
-│   │   ├── parser.py           # CodeParser & LanguageRegistry (multi-language dispatcher)
-│   │   └── extractors/
-│   │       ├── base.py         # Abstract BaseExtractor class
-│   │       ├── python.py       # Python AST Extractor (functions, classes, calls, imports)
-│   │       └── mern.py         # MERN Extractor (JS, TS, JSX, TSX, React components, ES6 imports)
+│   ├── api/                    # Bun / Hono control plane & GitHub integration
+│   │   └── src/
+│   │       ├── db/             # Drizzle ORM schema & Postgres migrations
+│   │       ├── modules/        # Auth, GitHub, PRs, Projects, Teams, Builds
+│   │       ├── routes/         # Versioned REST endpoints (/api/v1/*)
+│   │       └── middlewares/    # Session JWT auth & security
 │   │
-│   ├── graph/                  # Structural Knowledge Base (Neo4j)
-│   │   ├── client.py           # Async Neo4j driver client wrapper
-│   │   ├── schema.py           # Multi-tenant uniqueness constraints & indexes
-│   │   ├── writer.py           # Batch upserts: File, Symbol, CALLS, IMPORTS, DEPENDS_ON
-│   │   ├── reader.py           # Cypher queries: get_symbol, get_dependents, get_dependencies
-│   │   └── resolver.py         # Post-parse import linker (resolves relative/aliased paths)
-│   │
-│   ├── vector/                 # Semantic Knowledge Base (ChromaDB)
-│   │   └── client.py           # VectorKBClient, GeminiEmbeddingFunction, batch upserts, staleness management
-│   │
-│   ├── repo/                   # Git Operations Engine
-│   │   ├── cloner.py           # Git clone with short-lived tokens & branch checkout
-│   │   └── differ.py           # Git diff analyzer (changed files, added/deleted/modified symbols)
-│   │
-│   ├── analysis/               # Deterministic Code Review Rules & Impact Engine
-│   │   ├── blast_radius.py     # Transitive graph traversal & ripple impact risk scoring
-│   │   ├── conventions.py      # Static rule engine (function length, docstrings, PascalCase)
-│   │   └── decision.py         # Deterministic decision gate (ACCEPT vs SUGGEST)
-│   │
-│   ├── agent/                  # Multi-Model AI Agent System
-│   │   ├── llm_client.py       # DualLLMClient (Gemini 2.0 Flash + Groq Llama 3.3 70B failover)
-│   │   ├── prompts.py          # ReAct system prompts, Orchestrator prompts, Worker prompts
-│   │   ├── diff_parser.py      # Git diff hunk parser & symbol change extractor
-│   │   ├── reviewer.py         # Multi-Agent Reviewer (Gemini Orchestrator + Groq Worker)
-│   │   ├── fixer.py            # Autonomous Surgical Patch PR Fixer Agent
-│   │   └── agent_loop.py       # AutonomousAgentLoop (ReAct SSE streaming + tool execution)
-│   │
-│   ├── mcp/                    # Model Context Protocol (MCP) Integration
-│   │   ├── server.py           # FastMCP stdio server exposing KB tools to external agents
-│   │   └── tools.py            # Core tool implementations (hybrid_search, get_blast_radius, etc.)
-│   │
-│   ├── jobs/                   # Orchestrated Batch Jobs (called by CLI / Bun API)
-│   │   ├── init_job.py         # Flow 1: Repository Ingestion & Dual Indexing
-│   │   └── pr_eval_job.py      # Flow 2: PR Evaluation & Incremental Indexing
-│   │
-│   └── web/                    # FastAPI HTTP & SSE Server
-│       └── app.py              # REST API: /api/chat, /api/pr/review, /api/pr/fix, /api/ingest-url
+│   └── ai/                     # Python AI intelligence service (UV, FastAPI)
+│       └── src/
+│           ├── config.py       # Pydantic Settings (Neo4j, Chroma, Gemini, Groq)
+│           ├── context/        # Governed Context Engine (retrieval, auth, ranking)
+│           ├── indexer/        # Canonical Full & Incremental Indexers (Tree-sitter)
+│           ├── parsing/        # Multi-language AST extractors (Python, TS/JS/React)
+│           ├── graph/          # Neo4j client, schema, batch writer, reader, resolver
+│           ├── vector/         # ChromaDB client, smart cleaner, splitter, embedders
+│           ├── analysis/       # Blast radius calculation, conventions, decision gate
+│           ├── agents/         # Multi-agent system (Investigation, Review, Issue, Doc, Code)
+│           ├── mcp/            # FastMCP tools exposing KB to agents
+│           └── web/            # Internal FastAPI HTTP & SSE server
 │
-└── tests/                      # Pytest Unit & Integration Test Suite
-    ├── unit/                   # Unit tests (AST parsing, blast radius, decision, resolver, MCP)
-    ├── integration/            # Multi-repo isolation, init job, PR eval job, agent review
-    └── fixtures/               # Sample Python & MERN codebases
+├── docs/                       # Architectural specifications & feature definitions
+├── docker-compose.yml          # Local infrastructure (Neo4j Community & PostgreSQL)
+├── package.json                # Monorepo root workspace configuration
+└── turbo.json                  # Turborepo task pipeline configuration
 ```
+
 
 ---
 

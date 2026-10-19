@@ -18,13 +18,22 @@ import {
   PromptInfo,
   PromptsResponse,
   PromptUpdateResponse,
+  Team,
+  TeamMember,
+  UpdateTeamInput,
+  UpdateProjectInput,
+  UpdateRepoInput,
+  CreatePRInput,
+  UpdatePRInput,
+  Project,
+  Build,
+  GraphData,
 } from "./types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
 
-const AI_SERVICE_BASE_URL =
-  process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+const INTELLIGENCE_BASE_URL = `${API_BASE_URL}/intelligence`;
 
 // ==========================================
 // Control Plane API (api-service on Bun/Hono)
@@ -62,8 +71,16 @@ export const authApi = {
 };
 
 export const githubApi = {
-  getInstallUrl: async (token: string): Promise<InstallUrlResponse> => {
-    const res = await fetch(`${API_BASE_URL}/github/install-url`, {
+  getInstallUrl: async (
+    token: string,
+    teamSlug?: string,
+    projectSlug?: string
+  ): Promise<InstallUrlResponse> => {
+    const params = new URLSearchParams();
+    if (teamSlug) params.append("teamSlug", teamSlug);
+    if (projectSlug) params.append("projectSlug", projectSlug);
+    const queryString = params.toString() ? `?${params.toString()}` : "";
+    const res = await fetch(`${API_BASE_URL}/github/install-url${queryString}`, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
@@ -104,11 +121,46 @@ export const githubApi = {
     return res.json();
   },
 
+  getRepository: async (token: string, repoId: string): Promise<{ repository: ConnectedRepository }> => {
+    const res = await fetch(`${API_BASE_URL}/github/repositories/${encodeURIComponent(repoId)}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch repository details");
+    }
+    return res.json();
+  },
+
+  updateRepository: async (
+    token: string,
+    repoId: string,
+    updates: UpdateRepoInput
+  ): Promise<{ repository: ConnectedRepository }> => {
+    const res = await fetch(`${API_BASE_URL}/github/repositories/${encodeURIComponent(repoId)}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update repository");
+    }
+    return res.json();
+  },
+
   disconnectRepository: async (
     token: string,
     repoId: string
   ): Promise<{ success: boolean; message: string }> => {
-    const res = await fetch(`${API_BASE_URL}/github/repositories/${repoId}`, {
+    const res = await fetch(`${API_BASE_URL}/github/repositories/${encodeURIComponent(repoId)}`, {
       method: "DELETE",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -238,33 +290,33 @@ export const githubApi = {
 
 export const aiApi = {
   checkHealth: async (): Promise<HealthResponse> => {
-    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/health`);
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/health`);
     if (!res.ok) {
-      throw new Error(`AI Service health check failed (${res.status})`);
+      throw new Error(`Intelligence Service health check failed (${res.status})`);
     }
     return res.json();
   },
 
   getConfig: async (): Promise<AIServiceConfig> => {
-    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/config`);
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/config`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || err.error || "Failed to fetch AI service configuration");
+      throw new Error(err.detail || err.error || "Failed to fetch AI configuration");
     }
     return res.json();
   },
 
   listPrompts: async (): Promise<PromptsResponse> => {
-    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/prompts`);
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/prompts`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || err.error || "Failed to fetch AI system prompts");
+      throw new Error(err.detail || err.error || "Failed to fetch AI prompts");
     }
     return res.json();
   },
 
   getPrompt: async (key: string): Promise<PromptInfo> => {
-    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/prompts/${key}`);
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/prompts/${key}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || err.error || `Failed to fetch prompt '${key}'`);
@@ -273,7 +325,7 @@ export const aiApi = {
   },
 
   updatePrompt: async (key: string, text: string): Promise<PromptUpdateResponse> => {
-    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/prompts/${key}`, {
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/prompts/${key}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -289,11 +341,9 @@ export const aiApi = {
   },
 
   resetPrompt: async (key: string): Promise<PromptUpdateResponse> => {
-    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/prompts/${key}/reset`, {
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/prompts/${key}/reset`, {
       method: "POST",
-      headers: {
-        Accept: "application/json",
-      },
+      headers: { Accept: "application/json" },
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -303,7 +353,7 @@ export const aiApi = {
   },
 
   listRepos: async (): Promise<ReposResponse> => {
-    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/repos`);
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/repos`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || "Failed to fetch indexed repositories");
@@ -311,23 +361,8 @@ export const aiApi = {
     return res.json();
   },
 
-  ingestRepo: async (payload: IngestRequest): Promise<IngestResponse> => {
-    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/ingest`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || err.error || "Repository ingestion failed");
-    }
-    return res.json();
-  },
-
   chatQuery: async (payload: ChatRequest): Promise<ChatResponse> => {
-    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/chat`, {
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/chat`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -352,7 +387,7 @@ export const aiApi = {
     signal?: AbortSignal
   ): Promise<void> => {
     try {
-      const response = await fetch(`${AI_SERVICE_BASE_URL}/api/chat/stream`, {
+      const response = await fetch(`${INTELLIGENCE_BASE_URL}/chat/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -410,10 +445,156 @@ export const aiApi = {
   },
 
   getGraphReport: async (repoId: string, branch: string = "main"): Promise<{ status: string; repo_id: string; report_markdown: string }> => {
-    const res = await fetch(`${AI_SERVICE_BASE_URL}/api/graph-report/${encodeURIComponent(repoId)}?branch=${encodeURIComponent(branch)}`);
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/graph-report/${encodeURIComponent(repoId)}?branch=${encodeURIComponent(branch)}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || err.error || "Failed to generate graph report");
+    }
+    return res.json();
+  },
+
+  /**
+   * Curated Investigation Agent
+   */
+  investigate: async (params: {
+    query: string;
+    repoId: string;
+    branch?: string;
+    isIncident?: boolean;
+    incidentContext?: Record<string, any>;
+    maxSteps?: number;
+  }): Promise<any> => {
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/investigate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: params.query,
+        repo_id: params.repoId,
+        branch: params.branch || "main",
+        is_incident: params.isIncident || false,
+        incident_context: params.incidentContext,
+        max_steps: params.maxSteps || 8,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Investigation request failed");
+    }
+    return res.json();
+  },
+
+  /**
+   * Curated Issue Agent
+   */
+  analyzeIssue: async (params: {
+    repoId: string;
+    issueNumber: number;
+    title: string;
+    body?: string;
+    author?: string;
+    labels?: string[];
+    existingIssues?: any[];
+  }): Promise<any> => {
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/issue/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_id: params.repoId,
+        issue_number: params.issueNumber,
+        title: params.title,
+        body: params.body || "",
+        author: params.author || "unknown",
+        labels: params.labels || [],
+        existing_issues: params.existingIssues,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Issue analysis failed");
+    }
+    return res.json();
+  },
+
+  /**
+   * Curated Doc Agent
+   */
+  generateDoc: async (params: {
+    repoId: string;
+    docType?: string;
+    topic: string;
+    branch?: string;
+    feedToKb?: boolean;
+    mergedPrs?: any[];
+  }): Promise<any> => {
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/doc/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_id: params.repoId,
+        doc_type: params.docType || "workflow_guide",
+        topic: params.topic,
+        branch: params.branch || "main",
+        feed_to_kb: params.feedToKb !== false,
+        merged_prs: params.mergedPrs,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Doc generation failed");
+    }
+    return res.json();
+  },
+
+  /**
+   * Curated Code Agent Stage 1: Plan
+   */
+  planCodeFix: async (params: {
+    repoId: string;
+    issueTitle: string;
+    issueDescription: string;
+    triggerSource?: string;
+    affectedFiles?: string[];
+    branch?: string;
+  }): Promise<any> => {
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/code/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_id: params.repoId,
+        issue_title: params.issueTitle,
+        issue_description: params.issueDescription,
+        trigger_source: params.triggerSource || "review",
+        affected_files: params.affectedFiles,
+        branch: params.branch || "main",
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Code fix planning failed");
+    }
+    return res.json();
+  },
+
+  /**
+   * Curated Code Agent Stage 2: Execute
+   */
+  executeCodeFix: async (params: {
+    plan: any;
+    existingFileContents: Record<string, string>;
+    maintainerNotes?: string;
+  }): Promise<any> => {
+    const res = await fetch(`${INTELLIGENCE_BASE_URL}/code/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: params.plan,
+        existing_file_contents: params.existingFileContents,
+        maintainer_notes: params.maintainerNotes,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Code fix execution failed");
     }
     return res.json();
   },
@@ -514,5 +695,569 @@ export const prApi = {
     }
     return res.json();
   },
+
+  createPullRequest: async (
+    token: string,
+    payload: CreatePRInput
+  ): Promise<{ pullRequest: PRData }> => {
+    const res = await fetch(`${API_BASE_URL}/prs`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to create pull request");
+    }
+    return res.json();
+  },
+
+  updatePullRequest: async (
+    token: string,
+    id: string,
+    updates: UpdatePRInput
+  ): Promise<{ pullRequest: PRData }> => {
+    const res = await fetch(`${API_BASE_URL}/prs/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update pull request");
+    }
+    return res.json();
+  },
+
+  deletePullRequest: async (
+    token: string,
+    id: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const res = await fetch(`${API_BASE_URL}/prs/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to delete pull request");
+    }
+    return res.json();
+  },
+
+  updateIssue: async (
+    token: string,
+    issueId: string,
+    updates: { isFixed?: boolean; title?: string; severity?: string }
+  ): Promise<{ issue: PRIssueItem }> => {
+    const res = await fetch(`${API_BASE_URL}/prs/issues/${encodeURIComponent(issueId)}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update issue");
+    }
+    return res.json();
+  },
 };
+
+// ==========================================
+// Teams & Projects Control Plane APIs
+// ==========================================
+
+export const teamsApi = {
+  getTeams: async (token: string): Promise<{ teams: Team[] }> => {
+    const res = await fetch(`${API_BASE_URL}/teams`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch teams");
+    }
+    return res.json();
+  },
+
+  createTeam: async (token: string, name: string): Promise<{ team: Team }> => {
+    const res = await fetch(`${API_BASE_URL}/teams`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to create team");
+    }
+    return res.json();
+  },
+
+  getTeamBySlug: async (token: string, teamSlug: string): Promise<{ team: Team }> => {
+    const res = await fetch(`${API_BASE_URL}/teams/${encodeURIComponent(teamSlug)}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch team");
+    }
+    return res.json();
+  },
+
+  getTeamProjects: async (
+    token: string,
+    teamSlug: string
+  ): Promise<{ projects: Project[]; team: Team }> => {
+    const res = await fetch(
+      `${API_BASE_URL}/teams/${encodeURIComponent(teamSlug)}/projects`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch team projects");
+    }
+    return res.json();
+  },
+
+  createTeamProject: async (
+    token: string,
+    teamSlug: string,
+    name: string,
+    description?: string
+  ): Promise<{ project: Project }> => {
+    const res = await fetch(
+      `${API_BASE_URL}/teams/${encodeURIComponent(teamSlug)}/projects`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ name, description }),
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to create project");
+    }
+    return res.json();
+  },
+
+  updateTeam: async (
+    token: string,
+    teamSlug: string,
+    updates: UpdateTeamInput
+  ): Promise<{ team: Team }> => {
+    const res = await fetch(`${API_BASE_URL}/teams/${encodeURIComponent(teamSlug)}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update team");
+    }
+    return res.json();
+  },
+
+  deleteTeam: async (
+    token: string,
+    teamSlug: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const res = await fetch(`${API_BASE_URL}/teams/${encodeURIComponent(teamSlug)}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to delete team");
+    }
+    return res.json();
+  },
+
+  getTeamMembers: async (
+    token: string,
+    teamSlug: string
+  ): Promise<{ members: TeamMember[] }> => {
+    const res = await fetch(`${API_BASE_URL}/teams/${encodeURIComponent(teamSlug)}/members`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch team members");
+    }
+    return res.json();
+  },
+
+  addTeamMember: async (
+    token: string,
+    teamSlug: string,
+    usernameOrEmail: string,
+    role: string = "MEMBER"
+  ): Promise<{ member: TeamMember }> => {
+    const res = await fetch(`${API_BASE_URL}/teams/${encodeURIComponent(teamSlug)}/members`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ usernameOrEmail, role }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to add team member");
+    }
+    return res.json();
+  },
+
+  updateTeamMemberRole: async (
+    token: string,
+    teamSlug: string,
+    memberId: string,
+    role: string
+  ): Promise<{ member: TeamMember }> => {
+    const res = await fetch(
+      `${API_BASE_URL}/teams/${encodeURIComponent(teamSlug)}/members/${encodeURIComponent(memberId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ role }),
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update member role");
+    }
+    return res.json();
+  },
+
+  removeTeamMember: async (
+    token: string,
+    teamSlug: string,
+    memberId: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const res = await fetch(
+      `${API_BASE_URL}/teams/${encodeURIComponent(teamSlug)}/members/${encodeURIComponent(memberId)}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to remove member");
+    }
+    return res.json();
+  },
+};
+
+export const projectsApi = {
+  getProject: async (
+    token: string,
+    projectIdOrSlug: string
+  ): Promise<{
+    project: Project;
+    organization: Team;
+    repositories: ConnectedRepository[];
+    builds: Build[];
+  }> => {
+    const res = await fetch(
+      `${API_BASE_URL}/projects/${encodeURIComponent(projectIdOrSlug)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch project details");
+    }
+    return res.json();
+  },
+
+  attachRepository: async (
+    token: string,
+    projectIdOrSlug: string,
+    repositoryId: string
+  ): Promise<{ success: boolean; repository: ConnectedRepository }> => {
+    const res = await fetch(
+      `${API_BASE_URL}/projects/${encodeURIComponent(projectIdOrSlug)}/repositories`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ repositoryId }),
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to connect repository to project");
+    }
+    return res.json();
+  },
+
+  detachRepository: async (
+    token: string,
+    projectIdOrSlug: string,
+    repositoryId: string
+  ): Promise<{ success: boolean }> => {
+    const res = await fetch(
+      `${API_BASE_URL}/projects/${encodeURIComponent(
+        projectIdOrSlug
+      )}/repositories/${encodeURIComponent(repositoryId)}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to disconnect repository");
+    }
+    return res.json();
+  },
+
+  getBuilds: async (
+    token: string,
+    projectIdOrSlug: string
+  ): Promise<{ builds: Build[] }> => {
+    const res = await fetch(
+      `${API_BASE_URL}/projects/${encodeURIComponent(projectIdOrSlug)}/builds`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch builds");
+    }
+    return res.json();
+  },
+
+  startBuild: async (
+    token: string,
+    projectIdOrSlug: string,
+    repositoryId: string,
+    branch?: string
+  ): Promise<{ success: boolean; build: Build }> => {
+    const res = await fetch(
+      `${API_BASE_URL}/projects/${encodeURIComponent(projectIdOrSlug)}/builds`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ repositoryId, branch }),
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to start build");
+    }
+    return res.json();
+  },
+
+  getBuild: async (token: string, buildId: string): Promise<{ build: Build }> => {
+    const res = await fetch(`${API_BASE_URL}/builds/${encodeURIComponent(buildId)}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch build");
+    }
+    return res.json();
+  },
+
+  cancelBuild: async (token: string, buildId: string): Promise<{ success: boolean; build: Build }> => {
+    const res = await fetch(`${API_BASE_URL}/builds/${encodeURIComponent(buildId)}/cancel`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to cancel build");
+    }
+    return res.json();
+  },
+
+  getGraph: async (
+    token: string,
+    projectIdOrSlug: string,
+    repoId?: string,
+    branch?: string,
+    maxNodes?: number
+  ): Promise<GraphData> => {
+    const params = new URLSearchParams();
+    if (repoId) params.append("repoId", repoId);
+    if (branch) params.append("branch", branch);
+    if (maxNodes) params.append("maxNodes", String(maxNodes));
+    const qs = params.toString() ? `?${params.toString()}` : "";
+
+    const res = await fetch(
+      `${API_BASE_URL}/projects/${encodeURIComponent(projectIdOrSlug)}/graph${qs}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to fetch knowledge graph");
+    }
+    return res.json();
+  },
+
+  updateProject: async (
+    token: string,
+    projectIdOrSlug: string,
+    updates: UpdateProjectInput
+  ): Promise<{ project: Project }> => {
+    const res = await fetch(
+      `${API_BASE_URL}/projects/${encodeURIComponent(projectIdOrSlug)}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(updates),
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update project");
+    }
+    return res.json();
+  },
+
+  deleteProject: async (
+    token: string,
+    projectIdOrSlug: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const res = await fetch(
+      `${API_BASE_URL}/projects/${encodeURIComponent(projectIdOrSlug)}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to delete project");
+    }
+    return res.json();
+  },
+
+  updateBuild: async (
+    token: string,
+    buildId: string,
+    updates: { status?: string; stage?: string; error?: string }
+  ): Promise<{ success: boolean; build: Build }> => {
+    const res = await fetch(`${API_BASE_URL}/builds/${encodeURIComponent(buildId)}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update build");
+    }
+    return res.json();
+  },
+
+  deleteBuild: async (
+    token: string,
+    buildId: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const res = await fetch(`${API_BASE_URL}/builds/${encodeURIComponent(buildId)}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to delete build");
+    }
+    return res.json();
+  },
+};
+
 

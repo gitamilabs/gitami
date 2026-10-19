@@ -67,18 +67,18 @@ export const ToolStepAccordion: React.FC<ToolStepAccordionProps> = ({ step }) =>
   };
 
   return (
-    <div className="rounded-xl border border-slate-800/80 bg-slate-900/70 overflow-hidden transition-all my-1.5 shadow-sm">
+    <div className="rounded-xl border border-white/[0.06] bg-[#0c0d12] overflow-hidden transition-all my-1.5 shadow-sm">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between p-3 text-left hover:bg-slate-800/50 transition-colors"
+        className="w-full flex items-center justify-between p-3 text-left hover:bg-white/[0.03] transition-colors"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="p-1.5 rounded-xl bg-slate-800/90 border border-slate-700/60 shrink-0 shadow-inner">
+          <div className="p-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08] shrink-0 shadow-inner">
             {getToolIcon(step.tool_name)}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-200 truncate">
+              <span className="text-xs font-bold text-zinc-200 truncate">
                 {step.title || step.tool_name}
               </span>
               <span
@@ -88,7 +88,7 @@ export const ToolStepAccordion: React.FC<ToolStepAccordionProps> = ({ step }) =>
               </span>
             </div>
             {step.summary && (
-              <p className="text-[11px] text-slate-400 truncate mt-0.5 max-w-md font-mono">
+              <p className="text-[11px] text-zinc-400 truncate mt-0.5 max-w-md font-mono">
                 {step.summary}
               </p>
             )}
@@ -102,39 +102,39 @@ export const ToolStepAccordion: React.FC<ToolStepAccordionProps> = ({ step }) =>
               <span>executing</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
+            <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 font-mono">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="flex items-center gap-1 text-slate-400">
+              <span className="flex items-center gap-1 text-zinc-400">
                 <Clock className="w-2.5 h-2.5 text-amber-400" />
                 {formatLatency(step.latency_ms || 0)}
               </span>
             </div>
           )}
           {isOpen ? (
-            <ChevronDown className="w-4 h-4 text-slate-400" />
+            <ChevronDown className="w-4 h-4 text-zinc-400" />
           ) : (
-            <ChevronRight className="w-4 h-4 text-slate-400" />
+            <ChevronRight className="w-4 h-4 text-zinc-400" />
           )}
         </div>
       </button>
 
       {isOpen && (
-        <div className="p-3.5 border-t border-slate-800 bg-slate-950/90 text-xs space-y-3 font-mono animate-fade-in">
+        <div className="p-3.5 border-t border-white/[0.06] bg-[#11131a] text-xs space-y-3 font-mono animate-fade-in">
           {step.args && Object.keys(step.args).length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[10px] font-bold uppercase text-slate-400">
+                <p className="text-[10px] font-bold uppercase text-zinc-400">
                   Input Parameters
                 </p>
                 <button
                   onClick={handleCopyArgs}
-                  className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-200"
+                  className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-zinc-200"
                 >
                   {copiedArgs ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                   <span>{copiedArgs ? "Copied" : "Copy"}</span>
                 </button>
               </div>
-              <pre className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 font-mono text-[11px] text-indigo-300 overflow-x-auto">
+              <pre className="p-2.5 rounded-xl bg-[#0c0d12] border border-white/[0.06] font-mono text-[11px] text-indigo-300 overflow-x-auto">
                 {JSON.stringify(step.args, null, 2)}
               </pre>
             </div>
@@ -143,18 +143,18 @@ export const ToolStepAccordion: React.FC<ToolStepAccordionProps> = ({ step }) =>
           {step.raw_output && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[10px] font-bold uppercase text-slate-400">
+                <p className="text-[10px] font-bold uppercase text-zinc-400">
                   Knowledge Base Tool Output
                 </p>
                 <button
                   onClick={handleCopyOutput}
-                  className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-200"
+                  className="flex items-center gap-1 text-[10px] text-zinc-400 hover:text-zinc-200"
                 >
                   {copiedOutput ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                   <span>{copiedOutput ? "Copied" : "Copy"}</span>
                 </button>
               </div>
-              <pre className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 font-mono text-[11px] text-slate-300 overflow-x-auto max-h-60">
+              <pre className="p-2.5 rounded-xl bg-[#0c0d12] border border-white/[0.06] font-mono text-[11px] text-zinc-300 overflow-x-auto max-h-60">
                 {typeof step.raw_output === "string"
                   ? step.raw_output
                   : JSON.stringify(step.raw_output, null, 2)}

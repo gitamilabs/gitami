@@ -34,7 +34,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   return (
     <div
       className={cn(
-        "glass-card glass-card-hover rounded-xl p-5 sm:p-6 flex flex-col justify-between",
+        "bg-[#11131a] border border-white/[0.06] rounded-xl p-5 sm:p-6 flex flex-col justify-between hover:border-white/[0.12] transition-colors",
         className
       )}
     >
@@ -58,7 +58,7 @@ export const StatCard: React.FC<StatCardProps> = ({
       </div>
 
       {(subtitle || trend) && (
-        <div className="mt-4 flex items-center justify-between text-xs text-zinc-500 pt-3.5 border-t border-zinc-800/80 font-sans">
+        <div className="mt-4 flex items-center justify-between text-xs text-zinc-500 pt-3.5 border-t border-white/[0.06] font-sans">
           {subtitle && <span className="truncate">{subtitle}</span>}
           {trend && (
             <span

@@ -1,5 +1,13 @@
 export { users, type User, type NewUser } from "./users";
 export {
+  organizations,
+  organizationMembers,
+  type Organization,
+  type NewOrganization,
+  type OrganizationMember,
+  type NewOrganizationMember,
+} from "./organizations";
+export {
   projects,
   type Project,
   type NewProject,

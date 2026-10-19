@@ -237,16 +237,43 @@ async function handleInstallationRepositoriesEvent(
   return { handled: true, action: `repositories_${action}` };
 }
 
-function handleIssuesEvent(
+async function handleIssuesEvent(
   payload: Record<string, unknown>,
-): { handled: boolean; action: string } {
+): Promise<{ handled: boolean; action: string }> {
   const action = payload.action as string;
-  const issue = payload.issue as { number?: number; title?: string };
+  const issue = payload.issue as {
+    number?: number;
+    title?: string;
+    body?: string;
+    user?: { login?: string };
+    html_url?: string;
+    labels?: Array<{ name: string }>;
+  };
   const repo = payload.repository as { full_name?: string };
 
   console.log(
     `📌 Issue ${action} in ${repo?.full_name}: #${issue?.number} — "${issue?.title}"`,
   );
+
+  // Trigger Issue Agent analysis workflow for newly opened or updated issues
+  if (["opened", "edited"].includes(action) && repo?.full_name && issue?.number) {
+    const aiServiceUrl = process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://localhost:8000";
+    fetch(`${aiServiceUrl}/api/issue/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_id: repo.full_name,
+        issue_number: issue.number,
+        title: issue.title || "",
+        body: issue.body || "",
+        author: issue.user?.login || "unknown",
+        html_url: issue.html_url || "",
+        labels: (issue.labels || []).map((l) => l.name),
+      }),
+    }).catch((err) => {
+      console.warn(`Issue analysis trigger notice for #${issue.number}:`, err);
+    });
+  }
 
   return { handled: true, action: `issue_${action}` };
 }
@@ -264,6 +291,7 @@ async function handlePullRequestEvent(
     base?: { ref?: string; sha?: string };
     head?: { ref?: string; sha?: string };
     user?: { login?: string };
+    merged?: boolean;
   };
   const repo = payload.repository as { id?: number; full_name?: string };
 
@@ -275,13 +303,53 @@ async function handlePullRequestEvent(
     `🔀 PR ${action} in ${repo.full_name}: #${pr.number} — "${pr.title}"`,
   );
 
+  const ingestedNames = await getIngestedRepoNames();
+
+  // Handle PR closed event: update DB status and trigger incremental reindex if merged
+  if (action === "closed") {
+    const isMerged = Boolean(pr.merged);
+    const headSha = pr.head?.sha || "";
+    const baseSha = pr.base?.sha || "";
+
+    await db
+      .update(pullRequests)
+      .set({
+        state: "closed",
+        status: isMerged ? "merged" : "closed",
+      })
+      .where(
+        and(
+          eq(pullRequests.repoFullName, repo.full_name),
+          eq(pullRequests.prNumber, pr.number)
+        )
+      );
+
+    if (isMerged && isRepoIngested(repo.full_name, ingestedNames)) {
+      console.log(`🔄 PR #${pr.number} merged into ${repo.full_name}. Triggering incremental reindexing...`);
+      const aiServiceUrl = process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://localhost:8000";
+      fetch(`${aiServiceUrl}/api/reindex`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          repo_id: repo.full_name,
+          base_commit_sha: baseSha,
+          target_commit_sha: headSha,
+          branch: pr.base?.ref || "main",
+        }),
+      }).catch((err) => {
+        console.error(`Failed to trigger incremental reindex for ${repo.full_name}:`, err);
+      });
+    }
+
+    return { handled: true, action: isMerged ? "pr_closed_merged" : "pr_closed" };
+  }
+
   // We act on opened, synchronize, or reopened PR events
   if (!["opened", "synchronize", "reopened"].includes(action)) {
     return { handled: true, action: `pr_${action}_ignored` };
   }
 
   // Only process PR events for ingested repositories
-  const ingestedNames = await getIngestedRepoNames();
   if (!isRepoIngested(repo.full_name, ingestedNames)) {
     console.log(`ℹ️ Skipping PR webhook review for non-ingested repo: ${repo.full_name}`);
     return { handled: true, action: "pr_repo_not_ingested" };

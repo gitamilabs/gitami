@@ -27,11 +27,20 @@ function AuthCallbackContent() {
     if (token) {
       setToken(token);
       fetchUser()
-        .then(() => {
+        .then(async () => {
           setStatus("success");
-          setTimeout(() => {
-            router.push("/dashboard");
-          }, 1000);
+          try {
+            const { teamsApi } = await import("../../../lib/api");
+            const data = await teamsApi.getTeams(token);
+            const teamSlug = data.teams?.[0]?.slug || "workspace";
+            setTimeout(() => {
+              router.push(`/${teamSlug}`);
+            }, 800);
+          } catch {
+            setTimeout(() => {
+              router.push("/");
+            }, 800);
+          }
         })
         .catch((err) => {
           console.error("Failed to fetch user profile after callback:", err);
@@ -68,7 +77,7 @@ function AuthCallbackContent() {
               Authentication Successful!
             </h2>
             <p className="text-xs text-slate-400">
-              Redirecting you to the Sentinel dashboard...
+              Redirecting you to the GitAmi dashboard...
             </p>
           </div>
         )}

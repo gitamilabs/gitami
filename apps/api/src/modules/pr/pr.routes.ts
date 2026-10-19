@@ -6,6 +6,10 @@ import {
   evaluatePRWithAIService,
   fixSelectedPRIssues,
   userOwnsRepo,
+  createPullRequestManual,
+  updatePullRequest,
+  deletePullRequest,
+  updatePRIssue,
 } from "./pr.service";
 import { syncPullRequestsForRepo } from "../github/github-app.service";
 import { verifySessionToken } from "../auth/auth.service";
@@ -49,6 +53,29 @@ prRouter.get("/", getPrListHandler);
 prRouter.get("", getPrListHandler);
 
 /**
+ * POST /api/prs
+ * Protected. Manually registers a new Pull Request.
+ */
+prRouter.post("/", authMiddleware, async (c) => {
+  const user = c.get("user");
+  const body = await c.req.json().catch(() => ({}));
+  if (!body.repoFullName || !body.title || !body.headBranch) {
+    return c.json({ error: "repoFullName, title, and headBranch are required" }, 400);
+  }
+  const prNumber = Number(body.prNumber) || (Math.floor(Date.now() / 1000) % 100000);
+  const newPr = await createPullRequestManual(user.id, {
+    repoFullName: body.repoFullName,
+    prNumber,
+    title: body.title,
+    body: body.body,
+    baseBranch: body.baseBranch,
+    headBranch: body.headBranch,
+    htmlUrl: body.htmlUrl,
+  });
+  return c.json({ pullRequest: newPr }, 201);
+});
+
+/**
  * POST or GET /api/prs/sync
  * Forces an immediate synchronization of PRs from GitHub App and returns the updated list.
  */
@@ -61,6 +88,30 @@ const syncPrHandler = async (c: any) => {
 
 prRouter.post("/sync", syncPrHandler);
 prRouter.get("/sync", syncPrHandler);
+
+/**
+ * PATCH /api/prs/issues/:issueId
+ * Protected. Updates or toggles an issue's fixed status or metadata.
+ */
+prRouter.patch("/issues/:issueId", authMiddleware, async (c) => {
+  const issueId = c.req.param("issueId");
+  if (!issueId) {
+    return c.json({ error: "Missing issueId" }, 400);
+  }
+  const body = await c.req.json().catch(() => ({}));
+
+  const updated = await updatePRIssue(issueId, {
+    isFixed: body.isFixed,
+    title: body.title,
+    severity: body.severity,
+  });
+
+  if (!updated) {
+    return c.json({ error: "Issue not found" }, 404);
+  }
+
+  return c.json({ issue: updated });
+});
 
 /**
  * GET /api/prs/:id
@@ -80,6 +131,49 @@ prRouter.get("/:id", authMiddleware, async (c) => {
     return c.json({ error: "PR not found" }, 404);
   }
   return c.json({ pullRequest: pr });
+});
+
+/**
+ * PATCH /api/prs/:id
+ * Protected. Updates PR details (title, body, state e.g. open/closed).
+ */
+prRouter.patch("/:id", authMiddleware, async (c) => {
+  const prId = c.req.param("id");
+  if (!prId) return c.json({ error: "Missing PR id" }, 400);
+  const user = c.get("user");
+  const pr = await getPullRequestDetails(prId);
+  if (!pr) return c.json({ error: "PR not found" }, 404);
+  if (!(await userOwnsRepo(user.id, pr.repoFullName))) {
+    return c.json({ error: "PR not found" }, 404);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const updated = await updatePullRequest(prId, {
+    title: body.title,
+    body: body.body,
+    state: body.state,
+    status: body.status,
+  });
+
+  return c.json({ pullRequest: updated });
+});
+
+/**
+ * DELETE /api/prs/:id
+ * Protected. Deletes a PR record and cascaded reviews/issues.
+ */
+prRouter.delete("/:id", authMiddleware, async (c) => {
+  const prId = c.req.param("id");
+  if (!prId) return c.json({ error: "Missing PR id" }, 400);
+  const user = c.get("user");
+  const pr = await getPullRequestDetails(prId);
+  if (!pr) return c.json({ error: "PR not found" }, 404);
+  if (!(await userOwnsRepo(user.id, pr.repoFullName))) {
+    return c.json({ error: "PR not found" }, 404);
+  }
+
+  await deletePullRequest(prId);
+  return c.json({ success: true, message: "Pull request deleted successfully" });
 });
 
 /**

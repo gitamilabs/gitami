@@ -45,7 +45,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       id: "welcome-msg",
       role: "assistant",
       content:
-        "Hello! I am your **Sentinel Autonomous Codebase Intelligence Assistant**. I can trace functions across repositories, run AST call graph traversals in Neo4j, calculate ripple blast radius, and retrieve semantic vector passages. Ask me anything about your codebase!",
+        "Hello! I am your **GitAmi Autonomous Codebase Intelligence Assistant**. I can trace functions across repositories, run AST call graph traversals in Neo4j, calculate ripple blast radius, and retrieve semantic vector passages. Ask me anything about your codebase!",
       timestamp: new Date().toISOString(),
     },
   ],

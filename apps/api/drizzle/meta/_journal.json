@@ -15,6 +15,13 @@
       "when": 1788969022743,
       "tag": "0001_productive_forgotten_one",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788981104188,
+      "tag": "0002_sturdy_xavin",
+      "breakpoints": true
     }
   ]
 }

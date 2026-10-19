@@ -21,8 +21,12 @@ interface RepoState {
   fetchConnectedRepos: (token: string, force?: boolean) => Promise<void>;
   fetchInstallations: (token: string) => Promise<void>;
   fetchIndexedRepos: (token: string, force?: boolean) => Promise<void>;
-  syncInstallations: (token: string) => Promise<void>;
   disconnectRepo: (token: string, repoId: string) => Promise<boolean>;
+  updateRepo: (
+    token: string,
+    repoId: string,
+    updates: import("../lib/types").UpdateRepoInput
+  ) => Promise<ConnectedRepository | null>;
   ingestConnectedRepo: (
     token: string,
     repoId: string,
@@ -132,6 +136,20 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     } catch (err: any) {
       set({ error: err.message });
       return false;
+    }
+  },
+
+  updateRepo: async (token: string, repoId: string, updates: import("../lib/types").UpdateRepoInput) => {
+    try {
+      const res = await githubApi.updateRepository(token, repoId, updates);
+      const updated = res.repository;
+      set((state) => ({
+        connectedRepos: state.connectedRepos.map((r) => (r.id === repoId ? { ...r, ...updated } : r)),
+      }));
+      return updated;
+    } catch (err: any) {
+      set({ error: err.message });
+      return null;
     }
   },
 

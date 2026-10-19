@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Navbar } from "../components/layout/Navbar";
 import { RouteProgressBar } from "../components/ui/RouteProgressBar";
 
 const geistSans = Geist({
@@ -15,13 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sentinel AI — Autonomous Codebase Knowledge Base & Agentic RAG",
+  title: "GitAmi — Autonomous Software Intelligence & Code Knowledge Engine",
   description:
-    "AST-level static code graph intelligence with Neo4j, ChromaDB semantic vector embeddings, and Gemini/Groq Dual-LLM agents.",
+    "AST-level software graph intelligence with Neo4j, Context Engine retrieval, semantic vector memory, and autonomous engineering agents.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: "#0c0d12",
   width: "device-width",
   initialScale: 1,
 };
@@ -36,11 +35,9 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} dark`}
     >
-      <body className="min-h-screen bg-black text-zinc-100 antialiased selection:bg-zinc-800 selection:text-white font-sans">
+      <body className="min-h-screen bg-[#0c0d12] text-zinc-200 antialiased selection:bg-indigo-950 selection:text-white font-sans">
         <RouteProgressBar />
-        <div className="fixed inset-0 bg-dot-grid pointer-events-none opacity-40 -z-10" />
-        <Navbar />
-        <main>{children}</main>
+        {children}
       </body>
     </html>
   );

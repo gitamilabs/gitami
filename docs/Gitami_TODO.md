@@ -1,27 +1,65 @@
 # Gitami — Product & Engineering TODO
 
-> Goal: evolve Gitami from the current repository-centric AI code review prototype into a project-centric software maintenance platform with a shared Intelligence Layer powering agents and chat.
+> Single source of truth for engineering tasks. Updated: October 2026.  
+> Aligned with `docs/KNOWLEDGE_BASE.md` and `docs/FEATURES.md`.
 
 ---
 
-## 0. Current State / Baseline
+## 🎯 Active Execution Roadmap (Priority Sequence)
 
-- [ ] Document the current Gitami architecture.
-- [ ] Document current frontend architecture.
-- [ ] Document current Bun/API service architecture.
-- [ ] Document current Python/AI service architecture.
-- [ ] Document current Neo4j schema.
-- [ ] Document current vector database schema.
-- [ ] Document current repository indexing flow.
-- [ ] Document current PR evaluation flow.
-- [ ] Document current MCP functionality.
-- [ ] Add integration tests around the existing PR review flow.
-- [ ] Add integration tests around the existing indexing flow.
-- [ ] Record known technical debt and current limitations.
+### Phase 1: AI Service Foundation & Knowledge Base Repair (COMPLETED)
+- [x] Fix `init_job.py` and `pipeline.py` to use `parse_results` from the tarball stream instead of falling back to `Path(".")`.
+- [x] Wire `RepositoryIndexer.run_incremental(...)` into the canonical `/api/reindex` endpoint in `app.py`.
+- [x] Add Vector DB synchronization to `run_incremental` (delete stale entries for deleted and modified files, insert curated symbols, and roll forward commits).
+- [x] Call `clean_code_symbol` and `filter_repetitive_boilerplate` from `cleaner.py` before vector ingestion to prevent symbol flooding.
+- [x] Add `.limit()` and `.offset()` paging to ChromaDB `.get()` and `get_distinct_repos()` in `chroma_store.py` to fix "document limit reached" and memory crashes.
+- [x] Remove the leaked fallback webhook endpoints (`/webhooks`, `/api/webhooks`, `/api/github/webhooks`, `/`) from `app.py`.
+- [x] Connect `context/engine.py` as the governed retrieval layer for Chat, agent loops, and tool execution.
+
+### Phase 2: Control Plane (API Service) Hardening (COMPLETED)
+- [x] Replace unauthenticated public diff scraping (`fetch('.../pull/1.diff')`) with authenticated Octokit diff requests (`fetchAuthenticatedPRDiff` with GitHub App installation tokens).
+- [x] Convert `executeBackgroundBuild` to a durable tracked job state machine (`QUEUED` → `RUNNING` → `COMPLETED` / `FAILED`) with 10-minute AbortController timeouts.
+- [x] Handle PR merged webhook events (`action === "closed" && pr.merged`) to trigger incremental re-indexing.
+- [x] Wire `handleIssuesEvent` in `webhook.service.ts` to the Issue Agent workflow instead of a `console.log` stub.
+- [x] Create `intelligence.routes.ts` module in API to proxy all AI, Chat, graph, and curated agent requests through Bun control plane.
+
+### Phase 3: Frontend Cleanup & Routing Unification (COMPLETED)
+- [x] Remove all direct calls to port 8000 (`AI_SERVICE_BASE_URL`) from `lib/api.ts`; proxy everything through Bun (`INTELLIGENCE_BASE_URL` on port 5000).
+- [x] Fix the sidebar broken-link bug when no project is selected (`hasProject` guard and safe `projectBase`).
+- [x] Fix the PR reviews page infinite re-render loop (`selectedPR` removed from `useCallback` dependency array).
+- [x] Replace "Build" / "Run a Build" terminology with "Knowledge Sync" and "Knowledge Map" to hide infrastructure plumbing.
+- [x] Expose all curated agents on `aiApi` (`investigate`, `analyzeIssue`, `generateDoc`, `planCodeFix`, `executeCodeFix`).
+
+### Phase 4: Curated Agents Implementation (docs/FEATURES.md) (COMPLETED)
+- [x] **Investigation Agent:** Fast single-shot path + 8-step iterative hypothesis loop with confidence scores and reasoning trace.
+- [x] **Issue Agent:** Spam detection, open/closed duplicate detection, criticality scoring (1-10), domain tagging, `ai-code-suspected` flag.
+- [x] **Review Agent Upgrades:** Blast radius check, convention enforcement, test coverage gaps, AI code detection, security anti-patterns, cross-repo contracts, checklist export to Claude Code.
+- [x] **Doc Agent:** Automated workflow guides, onboarding docs per domain, weekly changelogs, decision logs, and stale doc tracking. Feeds generated docs back into Vector KB.
+- [x] **Code Agent:** Fix plan first → maintainer approval gate → test-first generation → sandbox execution → verified PR.
+- [x] Full unit test coverage in `tests/unit/test_curated_agents.py` (6 tests passing, all 126 AI unit tests passing).
 
 ---
 
-# 1. Repository / Monorepo Structure
+## 0. Current State / Baseline (COMPLETED)
+
+- [x] Document the current Gitami architecture (`docs/KNOWLEDGE_BASE.md`, `docs/CURRENT_IMPLEMENTATION_AUDIT.md`).
+- [x] Document current frontend architecture.
+- [x] Document current Bun/API service architecture.
+- [x] Document current Python/AI service architecture.
+- [x] Document current Neo4j schema.
+- [x] Document current vector database schema.
+- [x] Document current repository indexing flow.
+- [x] Document current PR evaluation flow.
+- [x] Record known technical debt and current limitations.
+
+---
+
+# 1. Repository / Monorepo Structure (COMPLETED)
+
+- [x] Monorepo workspace with Turborepo (`apps/web`, `apps/api`, `apps/ai`).
+- [x] Next.js frontend in `apps/web`.
+- [x] Bun API service in `apps/api`.
+- [x] Python AI service independently managed with `uv` in `apps/ai`.
 
 ## 1.1 Monorepo Migration
 

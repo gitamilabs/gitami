@@ -17,13 +17,13 @@ export const Badge: React.FC<BadgeProps> = ({
 }) => {
   const variantStyles = {
     primary: "bg-blue-500/10 text-blue-400 border-blue-500/25",
-    secondary: "bg-zinc-800 text-zinc-400 border-zinc-700/60",
+    secondary: "bg-white/[0.04] text-zinc-300 border-white/[0.08]",
     success: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25",
     warning: "bg-amber-500/10 text-amber-400 border-amber-500/25",
     danger: "bg-red-500/10 text-red-400 border-red-500/25",
     info: "bg-blue-500/10 text-blue-400 border-blue-500/25",
     purple: "bg-purple-500/10 text-purple-400 border-purple-500/25",
-    outline: "bg-transparent text-zinc-400 border-zinc-700/80 hover:border-zinc-600",
+    outline: "bg-transparent text-zinc-300 border-white/[0.08] hover:border-white/[0.15]",
   };
 
   const dotColors = {

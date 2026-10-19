@@ -26,7 +26,7 @@ export const RepoSelector: React.FC = () => {
 
   if (indexedRepos.length === 0) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-500">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-zinc-500">
         <FolderGit2 className="w-3.5 h-3.5 shrink-0" />
         <span>No repositories indexed yet — ingest one from Projects</span>
       </div>
@@ -35,7 +35,7 @@ export const RepoSelector: React.FC = () => {
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800 focus-within:border-zinc-600">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] focus-within:border-white/20">
         <FolderGit2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
         <span className="text-zinc-500 font-medium font-mono text-[11px]">KB Space:</span>
         <div className="relative flex items-center">
@@ -46,7 +46,7 @@ export const RepoSelector: React.FC = () => {
             className="bg-transparent text-zinc-100 font-mono font-semibold focus:outline-none cursor-pointer pr-4 appearance-none text-xs"
           >
             {indexedRepos.map((repo) => (
-              <option key={repo} value={repo} className="bg-zinc-900 text-zinc-200">
+              <option key={repo} value={repo} className="bg-[#11131a] text-zinc-200">
                 {repo}
               </option>
             ))}
@@ -55,7 +55,7 @@ export const RepoSelector: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800 focus-within:border-zinc-600">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] focus-within:border-white/20">
         <GitBranch className="w-3.5 h-3.5 text-blue-400 shrink-0" />
         <span className="text-zinc-500 font-medium font-mono text-[11px]">Branch:</span>
         <input

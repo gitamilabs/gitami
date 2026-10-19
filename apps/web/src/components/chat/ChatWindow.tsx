@@ -72,11 +72,13 @@ export const ChatWindow: React.FC = () => {
     }
   };
 
+  const [chatMode, setChatMode] = useState<"ask" | "investigate">("ask");
+
   const handleGenerateReport = async () => {
     if (!selectedRepo) return;
     setIsGeneratingReport(true);
     try {
-      addAssistantMessage("Generating Graphify Architecture Report...");
+      addAssistantMessage("Generating GitAmi Architecture Report...");
       const res = await aiApi.getGraphReport(selectedRepo, selectedBranch);
       addAssistantMessage(res.report_markdown);
     } catch (err: any) {
@@ -86,13 +88,8 @@ export const ChatWindow: React.FC = () => {
     }
   };
 
-  const modelLabel = aiConfig
-    ? `${aiConfig.models.primary_orchestrator} + ${aiConfig.models.worker_model}`
-    : "Gemini 2.0 Flash + Groq 70B";
-
-  const vectorDbLabel = aiConfig?.vector_db
-    ? aiConfig.vector_db.replace("_", " ").toUpperCase()
-    : "Vector DB";
+  const modelLabel = "GitAmi Intelligence Engine";
+  const vectorDbLabel = "Knowledge Base";
 
   const starterCategories = [
     {
@@ -112,35 +109,57 @@ export const ChatWindow: React.FC = () => {
       ],
     },
     {
-      category: "Vector KB & Architecture",
+      category: "Knowledge Base & Architecture",
       icon: <Database className="w-3.5 h-3.5 text-cyan-400" />,
       prompts: [
         `How does the dual-KB (Neo4j AST + ${vectorDbLabel} vector embeddings) architecture work?`,
-        "Explain how the FastMCP server tools interface with the ReAct agent loop",
+        "Explain how codebase intelligence retrieval works across AST and vector indices",
       ],
     },
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-2rem)] sm:h-[calc(100vh-3rem)] glass-panel rounded-xl border border-slate-800/80 overflow-hidden relative">
+    <div className="flex flex-col h-[calc(100vh-2rem)] sm:h-[calc(100vh-3rem)] bg-[#0c0d12] rounded-xl border border-white/[0.06] overflow-hidden relative">
       {/* Header bar */}
-      <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md flex flex-wrap items-center justify-between gap-3">
+      <div className="p-3 sm:p-4 border-b border-white/[0.06] bg-[#0c0d12]/90 backdrop-blur-md flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <RepoSelector />
+
+          {/* Ask / Investigate Segmented Toggle */}
+          <div className="flex items-center p-0.5 bg-white/[0.03] border border-white/[0.06] rounded-lg text-xs font-medium">
+            <button
+              type="button"
+              onClick={() => setChatMode("ask")}
+              className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
+                chatMode === "ask"
+                  ? "bg-white/[0.08] text-white font-semibold"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Ask
+            </button>
+            <button
+              type="button"
+              onClick={() => setChatMode("investigate")}
+              className={`px-3 py-1 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer ${
+                chatMode === "investigate"
+                  ? "bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 font-semibold"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <Sparkles className="w-3 h-3 text-indigo-400" />
+              <span>Investigate</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-2.5">
-          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
-            <span className="truncate max-w-[320px]" title={modelLabel}>{modelLabel}</span>
-          </div>
-
           <Button
             variant="ghost"
             size="sm"
             onClick={clearMessages}
-            leftIcon={<Trash2 className="w-3.5 h-3.5 text-slate-500" />}
-            className="text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl"
+            leftIcon={<Trash2 className="w-3.5 h-3.5 text-zinc-500" />}
+            className="text-xs text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg"
             title="Clear Chat History"
           >
             Clear
@@ -158,8 +177,8 @@ export const ChatWindow: React.FC = () => {
                 <FileText className="w-3.5 h-3.5 text-indigo-400" />
               )
             }
-            className="text-xs text-indigo-200 hover:text-white hover:bg-indigo-500/20 rounded-xl border border-indigo-500/20"
-            title="Generate Graphify Report"
+            className="text-xs text-zinc-300 hover:text-white rounded-lg border border-white/[0.08] bg-white/[0.04]"
+            title="Generate Architecture Report"
           >
             Graph Report
           </Button>
@@ -170,15 +189,15 @@ export const ChatWindow: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center max-w-2xl mx-auto py-10 space-y-6">
-            <div className="w-14 h-14 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
               <Bot className="w-7 h-7 text-blue-400" />
             </div>
 
             <div className="space-y-2">
               <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-                Ask Sentinel Codebase Agent
+                Ask GitAmi Codebase Agent
               </h3>
-              <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
+              <p className="text-xs sm:text-sm text-zinc-400 max-w-md mx-auto leading-relaxed">
                 Inspect call graphs, compute transitive blast radius, or search semantic vector passages across your repository.
               </p>
             </div>
@@ -187,7 +206,7 @@ export const ChatWindow: React.FC = () => {
             <div className="w-full space-y-3 pt-2 text-left">
               {starterCategories.map((cat, idx) => (
                 <div key={idx} className="space-y-1.5">
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono flex items-center gap-1.5 px-1">
+                  <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider font-mono flex items-center gap-1.5 px-1">
                     {cat.icon}
                     <span>{cat.category}</span>
                   </p>
@@ -199,7 +218,7 @@ export const ChatWindow: React.FC = () => {
                           setInput(prompt);
                           if (textareaRef.current) textareaRef.current.focus();
                         }}
-                        className="text-left text-xs p-3 rounded-xl bg-slate-900/80 hover:bg-indigo-950/40 border border-slate-800/90 hover:border-indigo-700/60 text-slate-300 transition-all leading-relaxed truncate group shadow-sm"
+                        className="text-left text-xs p-3 rounded-xl bg-[#11131a] hover:bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] text-zinc-300 transition-all leading-relaxed truncate group shadow-sm"
                       >
                         <span className="group-hover:text-indigo-200 transition-colors">
                           {prompt}
@@ -233,8 +252,8 @@ export const ChatWindow: React.FC = () => {
       </div>
 
       {/* Input Composer area */}
-      <div className="p-3 sm:p-4 border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-xl">
-        <div className="relative flex items-end gap-2 bg-slate-900/90 border border-slate-700/80 focus-within:border-indigo-500 rounded-xl p-2 shadow-inner transition-all">
+      <div className="p-3 sm:p-4 border-t border-white/[0.06] bg-[#0c0d12]">
+        <div className="relative flex items-end gap-2 bg-[#11131a] border border-white/[0.08] focus-within:border-white/[0.16] rounded-xl p-2 transition-all">
           <textarea
             ref={textareaRef}
             rows={1}
@@ -245,8 +264,12 @@ export const ChatWindow: React.FC = () => {
               e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about functions, call hierarchies, blast radius, or architecture..."
-            className="flex-1 max-h-36 bg-transparent text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none resize-none px-2.5 py-1.5 leading-relaxed font-sans"
+            placeholder={
+              chatMode === "investigate"
+                ? "Investigate architectural impact, blast radius, or cross-file caller dependencies..."
+                : "Ask GitAmi about your codebase..."
+            }
+            className="flex-1 max-h-36 bg-transparent text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none resize-none px-2.5 py-1.5 leading-relaxed font-sans"
           />
 
           <div className="flex items-center gap-1.5 shrink-0">
@@ -260,27 +283,31 @@ export const ChatWindow: React.FC = () => {
                 Stop
               </Button>
             ) : (
-              <Button
-                variant="glow"
-                size="sm"
+              <button
+                type="button"
                 onClick={handleSend}
                 disabled={!input.trim()}
-                rightIcon={<Send className="w-3.5 h-3.5" />}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer disabled:opacity-40 ${
+                  chatMode === "investigate"
+                    ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs"
+                    : "bg-white hover:bg-zinc-200 text-black shadow-xs"
+                }`}
               >
-                Ask Agent
-              </Button>
+                <span>{chatMode === "investigate" ? "Investigate" : "Ask"}</span>
+                <Send className="w-3 h-3" />
+              </button>
             )}
           </div>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2 px-1 font-mono">
+        <div className="flex items-center justify-between text-[11px] text-zinc-500 mt-2 px-1 font-mono">
           <span className="flex items-center gap-1">
-            <CornerDownLeft className="w-3 h-3 text-slate-500" />
-            <kbd className="bg-slate-800/80 px-1.5 py-0.5 rounded text-[10px] text-slate-400">Enter</kbd> to send,{" "}
-            <kbd className="bg-slate-800/80 px-1.5 py-0.5 rounded text-[10px] text-slate-400">Shift+Enter</kbd> for newline
+            <CornerDownLeft className="w-3 h-3 text-zinc-500" />
+            <kbd className="bg-zinc-800/80 px-1.5 py-0.5 rounded text-[10px] text-zinc-400">Enter</kbd> to send,{" "}
+            <kbd className="bg-zinc-800/80 px-1.5 py-0.5 rounded text-[10px] text-zinc-400">Shift+Enter</kbd> for newline
           </span>
-          <span className="hidden sm:inline-block">
-            FastMCP • Tree-sitter AST • Neo4j • {vectorDbLabel}
+          <span className="hidden sm:inline-block text-zinc-500">
+            GitAmi Context Engine V1 • AST Software Graph &amp; Vector KB
           </span>
         </div>
       </div>

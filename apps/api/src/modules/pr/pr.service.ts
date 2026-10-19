@@ -1,4 +1,4 @@
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { db } from "../../db";
 import {
   pullRequests,
@@ -177,6 +177,52 @@ export async function getPullRequestDetails(prId: string) {
   };
 }
 
+/**
+ * Fetches PR diff text using authenticated GitHub App installation access.
+ * Handles private repositories seamlessly and falls back to public diff URL if necessary.
+ */
+export async function fetchAuthenticatedPRDiff(
+  repoFullName: string,
+  prNumber: number
+): Promise<string> {
+  const [owner, repo] = repoFullName.split("/");
+  if (owner && repo) {
+    try {
+      const token = await getInstallationTokenForRepo(owner, repo);
+      const headers: Record<string, string> = {
+        "User-Agent": "Gitami-API",
+        Accept: "application/vnd.github.v3.diff",
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const diffRes = await fetch(
+        `https://api.github.com/repos/${repoFullName}/pulls/${prNumber}`,
+        { headers }
+      );
+      if (diffRes.ok) {
+        return await diffRes.text();
+      }
+    } catch (err) {
+      console.warn(`Authenticated diff fetch failed for ${repoFullName}#${prNumber}:`, err);
+    }
+  }
+
+  // Fallback to public diff if token not available or public repo
+  try {
+    const diffRes = await fetch(`https://github.com/${repoFullName}/pull/${prNumber}.diff`, {
+      headers: { "User-Agent": "Gitami-API" },
+    });
+    if (diffRes.ok) {
+      return await diffRes.text();
+    }
+  } catch (e) {
+    console.warn(`Public fallback diff fetch failed for ${repoFullName}#${prNumber}:`, e);
+  }
+
+  return "";
+}
+
 export async function evaluatePRWithAIService(prId: string) {
   const pr = await getPullRequestDetails(prId);
   if (!pr) throw new Error("PR not found");
@@ -202,18 +248,8 @@ export async function evaluatePRWithAIService(prId: string) {
     };
   }
 
-  // Fetch raw GitHub patch diff for line-level code inspection
-  let diffText = "";
-  try {
-    const diffRes = await fetch(`https://github.com/${pr.repoFullName}/pull/${pr.prNumber}.diff`, {
-      headers: { "User-Agent": "Sentinel-AI-PR-Reviewer" },
-    });
-    if (diffRes.ok) {
-      diffText = await diffRes.text();
-    }
-  } catch (e) {
-    console.warn("Could not fetch raw GitHub PR diff:", e);
-  }
+  // Fetch GitHub patch diff via authenticated Octokit/REST API
+  const diffText = await fetchAuthenticatedPRDiff(pr.repoFullName, pr.prNumber);
 
   // Call AI Service PR review endpoint
   const response = await fetch(`${AI_SERVICE_URL}/api/pr/review`, {
@@ -338,17 +374,8 @@ export async function fixSelectedPRIssues(prId: string, issueIds: string[]) {
     }
   }
 
-  // Fetch PR diff for context
-  let diffText = "";
-  try {
-    const diffUrl = `https://github.com/${pr.repoFullName}/pull/${pr.prNumber}.diff`;
-    const diffResp = await fetch(diffUrl);
-    if (diffResp.ok) {
-      diffText = await diffResp.text();
-    }
-  } catch {
-    // diff is optional context
-  }
+  // Fetch PR diff for context using authenticated GitHub API
+  const diffText = await fetchAuthenticatedPRDiff(pr.repoFullName, pr.prNumber);
 
   // Request AI Service to generate SURGICAL patch fixes for selected issues
   const aiResponse = await fetch(`${AI_SERVICE_URL}/api/pr/fix`, {
@@ -540,3 +567,122 @@ export async function fixSelectedPRIssues(prId: string, issueIds: string[]) {
     fixedIssuesCount: selectedIssues.length,
   };
 }
+
+/**
+ * Manually registers a new Pull Request for testing or custom tracking.
+ */
+export async function createPullRequestManual(
+  userId: string,
+  data: {
+    repoFullName: string;
+    prNumber: number;
+    title: string;
+    body?: string;
+    baseBranch?: string;
+    headBranch: string;
+    htmlUrl?: string;
+  }
+): Promise<PullRequest> {
+  const [repo] = await db
+    .select()
+    .from(connectedRepositories)
+    .where(
+      and(
+        eq(connectedRepositories.userId, userId),
+        eq(connectedRepositories.fullName, data.repoFullName)
+      )
+    )
+    .limit(1);
+
+  const [newPr] = await db
+    .insert(pullRequests)
+    .values({
+      repositoryId: repo?.id || null,
+      repoFullName: data.repoFullName,
+      prNumber: data.prNumber,
+      title: data.title,
+      body: data.body || "",
+      baseBranch: data.baseBranch || "main",
+      headBranch: data.headBranch,
+      state: "open",
+      status: "pending",
+      htmlUrl: data.htmlUrl || `https://github.com/${data.repoFullName}/pull/${data.prNumber}`,
+    })
+    .returning();
+
+  if (!newPr) {
+    throw new Error("Failed to create pull request");
+  }
+
+  return newPr;
+}
+
+/**
+ * Updates a Pull Request's title, body, state (open/closed), or status.
+ */
+export async function updatePullRequest(
+  id: string,
+  updates: {
+    title?: string;
+    body?: string;
+    state?: string;
+    status?: string;
+  }
+): Promise<PullRequest | null> {
+  const setValues: Partial<typeof pullRequests.$inferInsert> = {};
+  if (updates.title) setValues.title = updates.title.trim();
+  if (updates.body !== undefined) setValues.body = updates.body;
+  if (updates.state) setValues.state = updates.state;
+  if (updates.status) setValues.status = updates.status;
+
+  if (Object.keys(setValues).length === 0) {
+    const [existing] = await db
+      .select()
+      .from(pullRequests)
+      .where(eq(pullRequests.id, id))
+      .limit(1);
+    return existing || null;
+  }
+
+  const [updated] = await db
+    .update(pullRequests)
+    .set(setValues)
+    .where(eq(pullRequests.id, id))
+    .returning();
+
+  return updated || null;
+}
+
+/**
+ * Deletes a Pull Request record and cascaded reviews/issues.
+ */
+export async function deletePullRequest(id: string): Promise<boolean> {
+  const [deleted] = await db
+    .delete(pullRequests)
+    .where(eq(pullRequests.id, id))
+    .returning();
+
+  return !!deleted;
+}
+
+/**
+ * Updates an issue in a PR review (e.g. toggle isFixed or update status).
+ */
+export async function updatePRIssue(
+  issueId: string,
+  updates: { isFixed?: boolean; title?: string; severity?: string }
+): Promise<PRIssue | null> {
+  const setValues: Partial<typeof prIssues.$inferInsert> = {};
+  if (typeof updates.isFixed === "boolean") setValues.isFixed = updates.isFixed;
+  if (updates.title) setValues.title = updates.title.trim();
+  if (updates.severity) setValues.severity = updates.severity;
+
+  const [updated] = await db
+    .update(prIssues)
+    .set(setValues)
+    .where(eq(prIssues.id, issueId))
+    .returning();
+
+  return updated || null;
+}
+
