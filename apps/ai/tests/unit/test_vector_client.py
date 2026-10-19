@@ -1,4 +1,4 @@
-﻿"""Integration tests for VectorKBClient using VECTOR_DB=memory and mocked embedder."""
+"""Integration tests for VectorKBClient using VECTOR_DB=memory and mocked embedder."""
 import os
 import pytest
 from unittest.mock import patch, MagicMock
@@ -117,3 +117,51 @@ def test_delete_stale_entries(client):
     docs = results["documents"][0]
     assert any("new_fn" in d for d in docs)
     assert not any("old_fn" in d for d in docs)
+
+
+def test_sanitize_document_size():
+    from src.vector.client import _sanitize_document_size, MAX_DOCUMENT_BYTES
+
+    # Small doc unaffected
+    small = "def hello(): pass"
+    assert _sanitize_document_size(small) == small
+
+    # Massive doc truncated strictly to <= MAX_DOCUMENT_BYTES
+    massive = "x" * (MAX_DOCUMENT_BYTES * 3)
+    sanitized = _sanitize_document_size(massive)
+    assert len(sanitized.encode("utf-8")) <= MAX_DOCUMENT_BYTES
+    assert "... [truncated for vector index]" in sanitized
+
+
+def test_oversized_code_body_is_truncated(client):
+    from src.vector.client import MAX_DOCUMENT_BYTES
+
+    huge_code = "print('hello world')\n" * 2000  # ~42,000 bytes
+    client.add_code_entry(
+        repo="huge-repo",
+        branch="main",
+        file_path="huge.py",
+        symbol="HugeClass",
+        signature="class HugeClass:",
+        description="Huge class description",
+        commit_hash="h123",
+        code_body=huge_code,
+    )
+    results = client.query(["HugeClass"], n_results=1, where={"repo": "huge-repo"})
+    assert len(results["documents"][0]) == 1
+    doc = results["documents"][0][0]
+    assert len(doc.encode("utf-8")) <= MAX_DOCUMENT_BYTES
+    assert "[implementation truncated]" in doc or "[truncated for vector index]" in doc
+
+
+@pytest.mark.asyncio
+async def test_batch_upsert_arbitrary_records(client):
+    records = [
+        {"content": "API Documentation for users", "file_path": "docs/api.md", "name": "API Docs"},
+        {"content": "Architecture Guide", "file_path": "docs/arch.md", "name": "Arch Guide"},
+    ]
+    res = await client.batch_upsert("doc-repo", records)
+    assert res["total"] == 2
+    assert res["successful"] == 2
+    assert res["failed"] == 0
+

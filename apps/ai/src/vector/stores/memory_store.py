@@ -73,14 +73,23 @@ class MemoryStore:
 
     def get(
         self,
-        where: Dict[str, Any],
+        where: Optional[Dict[str, Any]] = None,
         include: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
-        matches = [i for i, m in enumerate(self._metas) if self._matches(m, where)]
+        if where:
+            matches = [i for i, m in enumerate(self._metas) if self._matches(m, where)]
+        else:
+            matches = list(range(len(self._metas)))
+        start = offset or 0
+        end = start + limit if limit is not None else len(matches)
+        selected = matches[start:end]
         return {
-            "ids":       [self._ids[i]   for i in matches],
-            "documents": [self._docs[i]  for i in matches],
-            "metadatas": [self._metas[i] for i in matches],
+            "ids":       [self._ids[i]   for i in selected],
+            "documents": [self._docs[i]  for i in selected],
+            "metadatas": [self._metas[i] for i in selected],
         }
 
     def update(self, ids: List[str], metadatas: List[Dict[str, Any]]) -> None:

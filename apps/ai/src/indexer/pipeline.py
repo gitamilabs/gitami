@@ -3,7 +3,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from git import Repo
 
 from src.graph.client import Neo4jClient
@@ -26,6 +26,7 @@ from src.indexer.validator import IndexValidator
 from src.parsing.parser import CodeParser
 from src.parsing.models import ParseResult
 from src.vector.client import VectorKBClient
+from src.vector.cleaner import clean_code_symbol, filter_repetitive_boilerplate
 
 logger = logging.getLogger(__name__)
 
@@ -63,16 +64,20 @@ class RepositoryIndexer:
 
     async def run(
         self,
-        repo_dir: str | Path,
-        repo_id: str,
+        repo_dir: Optional[str | Path] = None,
+        repo_id: str = "default",
         target_commit_sha: str = "HEAD",
         branch: str = "main",
         project_id: str = "default",
         job_type: IndexJobType = IndexJobType.INITIAL,
         validate_only: bool = False,
+        stage_callback: Optional[Any] = None,
+        parse_results: Optional[List[ParseResult]] = None,
     ) -> Tuple[IndexJob, RepositoryIndexState, ValidationReport]:
         """
         Execute the canonical full indexing pipeline against an explicit commit SHA.
+        Supports both on-disk git repository paths and pre-parsed in-memory results
+        (e.g., from zero-disk tarball streaming).
         
         Returns:
             Tuple[IndexJob, RepositoryIndexState, ValidationReport]
@@ -86,17 +91,21 @@ class RepositoryIndexer:
                 project_id=project_id,
                 job_type=job_type,
                 validate_only=validate_only,
+                stage_callback=stage_callback,
+                parse_results=parse_results,
             )
 
     async def _run(
         self,
-        repo_dir: str | Path,
-        repo_id: str,
+        repo_dir: Optional[str | Path] = None,
+        repo_id: str = "default",
         target_commit_sha: str = "HEAD",
         branch: str = "main",
         project_id: str = "default",
         job_type: IndexJobType = IndexJobType.INITIAL,
         validate_only: bool = False,
+        stage_callback: Optional[Any] = None,
+        parse_results: Optional[List[ParseResult]] = None,
     ) -> Tuple[IndexJob, RepositoryIndexState, ValidationReport]:
         start_time = time.time()
         job = IndexJob(
@@ -112,6 +121,16 @@ class RepositoryIndexer:
         fatal_errors: List[str] = []
         warnings: List[str] = []
 
+        async def emit_stage(stage_name: str, status_name: str = "RUNNING", stage_stats: Optional[Dict[str, Any]] = None, stage_error: Optional[str] = None):
+            if stage_callback:
+                try:
+                    s_data = stage_stats if stage_stats is not None else stats.model_dump()
+                    res = stage_callback(stage_name, status_name, s_data, stage_error)
+                    if asyncio.iscoroutine(res):
+                        await res
+                except Exception as cb_err:
+                    logger.debug(f"Stage callback error: {cb_err}")
+
         owns_graph_client = False
         if self.graph_client is None and not validate_only:
             self.graph_client = Neo4jClient()
@@ -122,128 +141,172 @@ class RepositoryIndexer:
                 logger.warning(f"Could not connect to Neo4j, running in offline/dry mode: {e}")
 
         try:
-            # ── 1. Repository Snapshot ──────────────────────────────────────────
+            # ── 1. Repository Snapshot & Code Analysis ──────────────────────────
             job.stage = "SNAPSHOT"
             job.progress = 10
-            with RepositorySnapshot(repo_dir, target_commit_sha) as snapshot:
-                resolved_sha = snapshot.resolved_commit_sha
+            await emit_stage("SNAPSHOT", "RUNNING")
+
+            if parse_results is not None:
+                # Mode A: Pre-parsed in-memory results (e.g. tarball streamer)
+                resolved_sha = (
+                    target_commit_sha
+                    if target_commit_sha not in ("HEAD", "main")
+                    else "synthetic-commit-0000000000000000000000000000000000000000"
+                )
                 job.target_commit_sha = resolved_sha
 
-                # ── 2. File Discovery ───────────────────────────────────────────
                 job.stage = "DISCOVERY"
                 job.progress = 25
-                discovered_files, skipped_count = self.discovery.discover_files(snapshot)
-                stats.files_discovered = len(discovered_files)
-                stats.files_skipped = skipped_count
+                stats.files_discovered = len(parse_results)
+                stats.files_skipped = 0
+                await emit_stage("DISCOVERY", "RUNNING", {"files_discovered": len(parse_results), "files_skipped": 0})
 
-                # ── 3. Code Analysis (AST) ──────────────────────────────────────
                 job.stage = "AST_ANALYSIS"
                 job.progress = 45
-                parse_results: List[ParseResult] = []
+                stats.files_parsed = len(parse_results)
+                for pr in parse_results:
+                    if pr.errors:
+                        stats.parse_errors += len(pr.errors)
+                        warnings.extend([f"{pr.file_path}: {err}" for err in pr.errors])
+                await emit_stage("AST_ANALYSIS", "RUNNING", {"files_parsed": stats.files_parsed, "parse_errors": stats.parse_errors})
+            else:
+                # Mode B: On-disk repository snapshot
+                if not repo_dir:
+                    raise ValueError("Either 'repo_dir' or 'parse_results' must be provided for indexing.")
+                with RepositorySnapshot(repo_dir, target_commit_sha) as snapshot:
+                    resolved_sha = snapshot.resolved_commit_sha
+                    job.target_commit_sha = resolved_sha
 
-                for df in discovered_files:
-                    try:
-                        code_bytes = snapshot.read_bytes(df.file_path)
-                        pr = self.parser.parse_code_bytes(code_bytes, df.file_path)
-                        if pr:
-                            parse_results.append(pr)
-                            stats.files_parsed += 1
-                            if pr.errors:
-                                stats.parse_errors += len(pr.errors)
-                                warnings.extend([f"{df.file_path}: {err}" for err in pr.errors])
-                        else:
-                            stats.files_skipped += 1
-                    except Exception as parse_err:
-                        stats.parse_errors += 1
-                        warnings.append(f"Failed to parse {df.file_path}: {parse_err}")
+                    job.stage = "DISCOVERY"
+                    job.progress = 25
+                    await emit_stage("DISCOVERY", "RUNNING")
+                    discovered_files, skipped_count = self.discovery.discover_files(snapshot)
+                    stats.files_discovered = len(discovered_files)
+                    stats.files_skipped = skipped_count
+                    await emit_stage("DISCOVERY", "RUNNING", {"files_discovered": len(discovered_files), "files_skipped": skipped_count})
 
-                # ── 4. Graph Indexing (Neo4j) ───────────────────────────────────
-                if not validate_only and self.graph_client:
-                    job.stage = "GRAPH_INDEXING"
-                    job.progress = 70
-                    graph_indexer = GraphIndexer(self.graph_client)
+                    job.stage = "AST_ANALYSIS"
+                    job.progress = 45
+                    await emit_stage("AST_ANALYSIS", "RUNNING")
+                    parse_results = []
 
-                    await graph_indexer.ensure_v1_schema()
-                    await graph_indexer.index_repository_node(
-                        project_id=project_id,
-                        repo_id=repo_id,
-                        commit_sha=resolved_sha,
-                        branch=branch,
-                    )
+                    for df in discovered_files:
+                        try:
+                            code_bytes = snapshot.read_bytes(df.file_path)
+                            pr = self.parser.parse_code_bytes(code_bytes, df.file_path)
+                            if pr:
+                                parse_results.append(pr)
+                                stats.files_parsed += 1
+                                if pr.errors:
+                                    stats.parse_errors += len(pr.errors)
+                                    warnings.extend([f"{df.file_path}: {err}" for err in pr.errors])
+                            else:
+                                stats.files_skipped += 1
+                        except Exception as parse_err:
+                            stats.parse_errors += 1
+                    await emit_stage("AST_ANALYSIS", "RUNNING", {"files_parsed": stats.files_parsed, "parse_errors": stats.parse_errors})
 
-                    dirs_count, files_count = await graph_indexer.index_directories_and_files(
-                        repo_id=repo_id,
-                        commit_sha=resolved_sha,
-                        branch=branch,
-                        parse_results=parse_results,
-                    )
+            # ── 4. Graph Indexing (Neo4j) ───────────────────────────────────
+            if not validate_only and self.graph_client:
+                job.stage = "GRAPH_INDEXING"
+                job.progress = 70
+                await emit_stage("GRAPH_INDEXING", "RUNNING")
+                graph_indexer = GraphIndexer(self.graph_client)
 
-                    symbols_count = await graph_indexer.index_symbols_and_entities(
-                        repo_id=repo_id,
-                        commit_sha=resolved_sha,
-                        branch=branch,
-                        parse_results=parse_results,
-                    )
+                await graph_indexer.ensure_v1_schema()
+                await graph_indexer.index_repository_node(
+                    project_id=project_id,
+                    repo_id=repo_id,
+                    commit_sha=resolved_sha,
+                    branch=branch,
+                )
 
-                    heritage_count = await graph_indexer.index_heritage(
-                        repo_id=repo_id,
-                        commit_sha=resolved_sha,
-                        parse_results=parse_results,
-                    )
+                dirs_count, files_count = await graph_indexer.index_directories_and_files(
+                    repo_id=repo_id,
+                    commit_sha=resolved_sha,
+                    branch=branch,
+                    parse_results=parse_results,
+                )
 
-                    calls_count, imports_count = await graph_indexer.index_calls_and_imports(
-                        repo_id=repo_id,
-                        commit_sha=resolved_sha,
-                        parse_results=parse_results,
-                    )
+                symbols_count = await graph_indexer.index_symbols_and_entities(
+                    repo_id=repo_id,
+                    commit_sha=resolved_sha,
+                    branch=branch,
+                    parse_results=parse_results,
+                )
 
-                    tests_count = await graph_indexer.index_tests(
-                        repo_id=repo_id,
-                        commit_sha=resolved_sha,
-                        parse_results=parse_results,
-                    )
+                heritage_count = await graph_indexer.index_heritage(
+                    repo_id=repo_id,
+                    commit_sha=resolved_sha,
+                    parse_results=parse_results,
+                )
 
-                    # Post-processing import resolution
-                    try:
-                        await resolve_repo_imports(self.graph_client, repo_id=repo_id, branch=branch)
-                    except Exception as res_err:
-                        warnings.append(f"Import resolution notice: {res_err}")
+                calls_count, imports_count = await graph_indexer.index_calls_and_imports(
+                    repo_id=repo_id,
+                    commit_sha=resolved_sha,
+                    parse_results=parse_results,
+                )
 
-                    stats.entities_created = 1 + dirs_count + files_count + symbols_count
-                    stats.relationships_created = (
-                        dirs_count + files_count + symbols_count + heritage_count + calls_count + imports_count + tests_count
-                    )
-                else:
-                    # Synthetic count calculation for validation/dry runs
-                    extracted_symbols = sum(len(pr.symbols) for pr in parse_results)
-                    stats.entities_created = len(parse_results) + extracted_symbols
-                    stats.relationships_created = sum(
-                        len(pr.calls) + len(pr.imports) + len(pr.heritage) for pr in parse_results
-                    )
+                tests_count = await graph_indexer.index_tests(
+                    repo_id=repo_id,
+                    commit_sha=resolved_sha,
+                    parse_results=parse_results,
+                )
 
-                # ── 5. Semantic Indexing (Optional / Decoupled) ─────────────────
-                if self.vector_client:
-                    job.stage = "SEMANTIC_INDEXING"
-                    job.progress = 85
-                    try:
-                        vector_entries = []
-                        for pr in parse_results:
-                            for sym in pr.symbols:
-                                vector_entries.append({
-                                    "repo": repo_id,
-                                    "branch": branch,
-                                    "file_path": sym.file_path,
-                                    "symbol": sym.name,
-                                    "start_line": sym.start_line,
-                                    "signature": sym.signature,
-                                    "description": sym.docstring or f"{sym.kind} {sym.name} in {sym.file_path}",
-                                    "code_body": sym.code_body,
-                                    "commit_hash": resolved_sha,
-                                    })
-                        if vector_entries:
-                            self.vector_client.add_code_entries_batch(vector_entries)
-                    except Exception as vec_err:
-                        warnings.append(f"Semantic vector indexing warning (non-fatal): {vec_err}")
+                # Post-processing import resolution
+                try:
+                    await resolve_repo_imports(self.graph_client, repo_id=repo_id, branch=branch)
+                except Exception as res_err:
+                    warnings.append(f"Import resolution notice: {res_err}")
+
+                stats.entities_created = 1 + dirs_count + files_count + symbols_count
+                stats.relationships_created = (
+                    dirs_count + files_count + symbols_count + heritage_count + calls_count + imports_count + tests_count
+                )
+            else:
+                # Synthetic count calculation for validation/dry runs
+                extracted_symbols = sum(len(pr.symbols) for pr in parse_results)
+                stats.entities_created = len(parse_results) + extracted_symbols
+                stats.relationships_created = sum(
+                    len(pr.calls) + len(pr.imports) + len(pr.heritage) for pr in parse_results
+                )
+
+            await emit_stage("GRAPH_INDEXING", "RUNNING", {"entities_created": stats.entities_created, "relationships_created": stats.relationships_created})
+
+            # ── 5. Semantic Indexing (Optional / Decoupled) ─────────────────
+            if self.vector_client:
+                job.stage = "SEMANTIC_INDEXING"
+                job.progress = 85
+                await emit_stage("SEMANTIC_INDEXING", "RUNNING")
+                try:
+                    raw_symbols = []
+                    for pr in parse_results:
+                        raw_symbols.extend(pr.symbols)
+
+                    cleaned_symbols = []
+                    for sym in raw_symbols:
+                        cs = clean_code_symbol(sym)
+                        if cs is not None:
+                            cleaned_symbols.append(cs)
+
+                    curated_symbols = filter_repetitive_boilerplate(cleaned_symbols)
+                    vector_entries = []
+                    for sym in curated_symbols:
+                        vector_entries.append({
+                            "repo": repo_id,
+                            "branch": branch,
+                            "file_path": sym.file_path,
+                            "symbol": sym.name,
+                            "start_line": sym.start_line,
+                            "signature": sym.signature,
+                            "description": sym.docstring or f"{sym.kind} {sym.name} in {sym.file_path}",
+                            "code_body": sym.code_body,
+                            "commit_hash": resolved_sha,
+                        })
+                    if vector_entries:
+                        self.vector_client.add_code_entries_batch(vector_entries)
+                except Exception as vec_err:
+                    warnings.append(f"Semantic vector indexing warning (non-fatal): {vec_err}")
 
         except Exception as fatal_e:
             fatal_errors.append(f"Fatal indexing pipeline failure: {str(fatal_e)}")
@@ -254,6 +317,7 @@ class RepositoryIndexer:
         # ── 6. Validation ───────────────────────────────────────────────────────
         job.stage = "VALIDATION"
         job.progress = 95
+        await emit_stage("VALIDATION", "RUNNING")
         report = self.validator.validate(
             repo_id=repo_id,
             commit_sha=job.target_commit_sha,
@@ -265,6 +329,7 @@ class RepositoryIndexer:
         # ── 7. State Transition ─────────────────────────────────────────────────
         if report.is_valid:
             job.transition_to(IndexJobStatus.COMPLETED, stage="COMPLETED")
+            await emit_stage("COMPLETED", "COMPLETED", stats.model_dump())
             state = RepositoryIndexState(
                 repository_id=repo_id,
                 branch=branch,
@@ -280,6 +345,7 @@ class RepositoryIndexer:
         else:
             err_summary = "; ".join(report.fatal_errors) or "Validation failed"
             job.transition_to(IndexJobStatus.FAILED, stage="FAILED", error=err_summary)
+            await emit_stage("FAILED", "FAILED", stats.model_dump(), err_summary)
             state = RepositoryIndexState(
                 repository_id=repo_id,
                 branch=branch,
@@ -742,6 +808,76 @@ class RepositoryIndexer:
                             commit_sha=resolved_target_sha,
                             branch=branch,
                         )
+
+                    # ── Incremental Vector Sync ─────────────────────────────────
+                    if self.vector_client and not validate_only:
+                        try:
+                            # 1. Purge vector entries for deleted files and renamed old paths
+                            for df in diff_res.deleted:
+                                self.vector_client.delete(where={
+                                    "$and": [
+                                        {"repo": repo_id},
+                                        {"branch": branch},
+                                        {"file_path": df.path},
+                                    ]
+                                })
+                            for rf in diff_res.renamed:
+                                if rf.old_path:
+                                    self.vector_client.delete(where={
+                                        "$and": [
+                                            {"repo": repo_id},
+                                            {"branch": branch},
+                                            {"file_path": rf.old_path},
+                                        ]
+                                    })
+
+                            # 2. Purge old vector entries for modified files
+                            for mf in diff_res.modified:
+                                self.vector_client.delete(where={
+                                    "$and": [
+                                        {"repo": repo_id},
+                                        {"branch": branch},
+                                        {"file_path": mf.path},
+                                    ]
+                                })
+
+                            # 3. Add cleaned symbols for added and modified files
+                            raw_inc_symbols = []
+                            for pr in added_prs + modified_prs:
+                                raw_inc_symbols.extend(pr.symbols)
+
+                            cleaned_inc_symbols = []
+                            for sym in raw_inc_symbols:
+                                cs = clean_code_symbol(sym)
+                                if cs is not None:
+                                    cleaned_inc_symbols.append(cs)
+
+                            curated_inc_symbols = filter_repetitive_boilerplate(cleaned_inc_symbols)
+                            inc_vector_entries = []
+                            for sym in curated_inc_symbols:
+                                inc_vector_entries.append({
+                                    "repo": repo_id,
+                                    "branch": branch,
+                                    "file_path": sym.file_path,
+                                    "symbol": sym.name,
+                                    "start_line": sym.start_line,
+                                    "signature": sym.signature,
+                                    "description": sym.docstring or f"{sym.kind} {sym.name} in {sym.file_path}",
+                                    "code_body": sym.code_body,
+                                    "commit_hash": resolved_target_sha,
+                                })
+                            if inc_vector_entries:
+                                self.vector_client.add_code_entries_batch(inc_vector_entries)
+
+                            # 4. Roll forward commit hash for untouched entries
+                            self.vector_client.roll_forward_commit(
+                                repo=repo_id,
+                                branch=branch,
+                                old_commit_hash=resolved_base_sha,
+                                new_commit_hash=resolved_target_sha,
+                            )
+                        except Exception as vec_err:
+                            warnings.append(f"Incremental vector sync warning (non-fatal): {vec_err}")
 
             except Exception as e:
                 fatal_errors.append(f"Fatal incremental indexing pipeline failure: {str(e)}")

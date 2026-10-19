@@ -1,4 +1,4 @@
-﻿"""FastEmbed local embedding model using ONNX runtime (~130 MB, no GPU needed)."""
+"""FastEmbed local embedding model using ONNX runtime (~130 MB, no GPU needed)."""
 from typing import List
 
 
@@ -27,6 +27,12 @@ class FastEmbedEmbedder:
             "snowflake/snowflake-arctic-embed-xs": 384,
         }
         self.dimension: int = dim_map.get(model_name, 384)
+
+    def name(self) -> str:
+        return "fastembed"
+
+    def get_config(self) -> dict:
+        return {"model_name": self.model_name}
 
     def __call__(self, input: List[str]) -> List[List[float]]:
         if not input:

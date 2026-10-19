@@ -116,12 +116,20 @@ class ChromaStore:
 
     def get(
         self,
-        where: Dict[str, Any],
+        where: Optional[Dict[str, Any]] = None,
         include: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> Dict[str, Any]:
-        kwargs: Dict[str, Any] = {"where": where}
+        kwargs: Dict[str, Any] = {}
+        if where:
+            kwargs["where"] = where
         if include:
             kwargs["include"] = include
+        if limit is not None:
+            kwargs["limit"] = limit
+        if offset is not None:
+            kwargs["offset"] = offset
         return self._collection.get(**kwargs)
 
     def update(self, ids: List[str], metadatas: List[Dict[str, Any]]) -> None:
@@ -135,15 +143,31 @@ class ChromaStore:
             return 0
 
     def get_distinct_repos(self) -> List[str]:
-        """Return list of unique repositories in the ChromaDB collection."""
+        """Return list of unique repositories in the ChromaDB collection using bounded paging."""
         try:
-            data = self._collection.get(include=["metadatas"])
             repos = set()
-            if data and data.get("metadatas"):
-                for meta in data["metadatas"]:
+            offset = 0
+            page_size = 500
+            max_scan = 10000
+
+            while offset < max_scan:
+                data = self._collection.get(
+                    include=["metadatas"],
+                    limit=page_size,
+                    offset=offset,
+                )
+                metas = data.get("metadatas") if data else None
+                if not metas:
+                    break
+                for meta in metas:
                     if meta and "repo" in meta and meta["repo"]:
                         repos.add(meta["repo"])
+                if len(metas) < page_size:
+                    break
+                offset += page_size
+
             return sorted(list(repos))
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to fetch distinct repos from ChromaStore: {e}")
             return []
 

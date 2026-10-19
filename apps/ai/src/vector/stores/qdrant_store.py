@@ -120,6 +120,9 @@ class QdrantStore:
         self,
         where: Dict[str, Any],
         include: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
         from qdrant_client.models import Filter
         qdrant_filter = self._build_filter(where)
@@ -127,7 +130,8 @@ class QdrantStore:
             collection_name=self._collection,
             scroll_filter=qdrant_filter,
             with_payload=True,
-            limit=10_000,
+            limit=limit or 10_000,
+            offset=offset,
         )
         ids, docs, metas = [], [], []
         for hit in results:

@@ -2,7 +2,7 @@ import time
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Callable, List, Optional
 
 from src.graph.client import Neo4jClient
 from src.vector.client import VectorKBClient
@@ -43,6 +43,7 @@ async def run_init_job(
     client: Optional[Neo4jClient] = None,
     vector_client: Optional[VectorKBClient] = None,
     extraction_mode: str = "fast",
+    stage_callback: Optional[Any] = None,
 ) -> InitResult:
     """
     Canonical V1 Repository Initialization.
@@ -55,7 +56,7 @@ async def run_init_job(
             vector_client=vector_client,
         )
 
-        target_dir = Path(repo_dir) if repo_dir else Path(".")
+        target_dir = Path(repo_dir) if repo_dir else None
         job, state, report = await indexer.run(
             repo_dir=target_dir,
             repo_id=repo_id,
@@ -63,6 +64,8 @@ async def run_init_job(
             branch=branch or "main",
             job_type=IndexJobType.INITIAL,
             validate_only=(client is None),
+            stage_callback=stage_callback,
+            parse_results=parse_results,
         )
 
         duration = round(time.time() - start_time, 3)

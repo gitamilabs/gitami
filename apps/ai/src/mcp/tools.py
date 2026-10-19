@@ -261,6 +261,36 @@ async def tool_get_file_content(repo_id: str, file_path: str) -> str:
         return json.dumps({"error": f"Failed to read file '{file_path}': {str(e)}"})
 
 
+async def tool_retrieve_context(
+    graph_client: Any,
+    vector_client: Any,
+    repo_id: str,
+    query: str,
+    branch: str = "main",
+    max_items: int = 10,
+    project_id: Optional[str] = None,
+) -> str:
+    """Retrieve governed multi-provider context (graph, vector, source, PRs) via ContextEngine."""
+    from dataclasses import asdict
+    from src.context import ContextEngine, ContextRequest, ContextAuthorizer, StaticAuthResolver
+    effective_project = project_id or repo_id
+    resolver = StaticAuthResolver({effective_project: {repo_id: None}})
+    engine = ContextEngine(
+        graph_client=graph_client,
+        vector_client=vector_client,
+        authorizer=ContextAuthorizer(resolver=resolver, graph_client=graph_client),
+    )
+    req = ContextRequest(
+        project_id=effective_project,
+        query=query,
+        repository_ids=[repo_id],
+        branch=branch,
+        max_items=max_items,
+    )
+    res = await engine.retrieve(req)
+    return json.dumps(asdict(res), indent=2)
+
+
 async def execute_tool_by_name(
     tool_name: str,
     tool_args: Dict[str, Any],
@@ -271,7 +301,18 @@ async def execute_tool_by_name(
 ) -> str:
     """Dynamically execute an MCP tool by name with arguments."""
     try:
-        if tool_name == "hybrid_search":
+        if tool_name in ("retrieve_context", "get_governed_context", "context_engine"):
+            query = tool_args.get("query") or tool_args.get("q") or ""
+            max_items = tool_args.get("max_items", 10)
+            return await tool_retrieve_context(
+                graph_client=graph_client,
+                vector_client=vector_client,
+                repo_id=repo_id,
+                query=query,
+                branch=branch,
+                max_items=max_items,
+            )
+        elif tool_name == "hybrid_search":
             query = tool_args.get("query") or tool_args.get("query_text") or tool_args.get("q") or ""
             return await tool_hybrid_search(
                 graph_client, vector_client, repo_id=repo_id, query_text=query, branch=branch

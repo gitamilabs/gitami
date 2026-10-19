@@ -112,16 +112,19 @@ class PineconeStore:
         self,
         where: Dict[str, Any],
         include: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
         # Pinecone does not support arbitrary metadata-only fetches without a vector;
         # fall back to a zero-vector query with a large top_k.
         logger.debug("PineconeStore.get() uses zero-vector query (Pinecone limitation)")
         zero = [0.0] * self._embedder.dimension
         pinecone_filter = self._build_filter(where)
-        kwargs: Dict[str, Any] = dict(vector=zero, top_k=1000, include_metadata=True)
+        kwargs_q: Dict[str, Any] = dict(vector=zero, top_k=limit or 1000, include_metadata=True)
         if pinecone_filter:
-            kwargs["filter"] = pinecone_filter
-        response = self._index.query(**kwargs)
+            kwargs_q["filter"] = pinecone_filter
+        response = self._index.query(**kwargs_q)
         ids, docs, metas = [], [], []
         for match in response.matches:
             meta = match.metadata or {}

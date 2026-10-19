@@ -44,6 +44,8 @@ class BaseVectorStore(Protocol):
         self,
         where: Dict[str, Any],
         include: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Retrieve documents and/or metadata matching the filter."""
         ...

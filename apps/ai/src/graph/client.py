@@ -28,6 +28,9 @@ class Neo4jClient:
             self._driver = AsyncGraphDatabase.driver(
                 self.uri,
                 auth=(self.user, self.password),
+                connection_timeout=10.0,
+                connection_acquisition_timeout=15.0,
+                max_connection_lifetime=300,
             )
 
     async def close(self) -> None:
@@ -39,11 +42,15 @@ class Neo4jClient:
         if not self._driver:
             await self.connect()
         assert self._driver is not None
-        await self._driver.verify_connectivity()
+        await asyncio.wait_for(self._driver.verify_connectivity(), timeout=10.0)
         return True
 
     async def execute_query(
-        self, query: str, parameters: Optional[Dict[str, Any]] = None, retries: int = 3
+        self,
+        query: str,
+        parameters: Optional[Dict[str, Any]] = None,
+        retries: int = 3,
+        timeout: float = 30.0,
     ) -> List[Dict[str, Any]]:
         """Run a query asynchronously with retries and return matching record dictionaries."""
         for attempt in range(retries):
@@ -52,10 +59,13 @@ class Neo4jClient:
                     await self.connect()
                 assert self._driver is not None
 
-                records, summary, keys = await self._driver.execute_query(
-                    query,
-                    parameters_=(parameters or {}),
-                    database_=self.database,
+                records, summary, keys = await asyncio.wait_for(
+                    self._driver.execute_query(
+                        query,
+                        parameters_=(parameters or {}),
+                        database_=self.database,
+                    ),
+                    timeout=timeout,
                 )
                 return [record.data() for record in records]
             except Exception as e:

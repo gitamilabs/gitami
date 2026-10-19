@@ -160,14 +160,25 @@ class SupabaseStore:
         self,
         where: Dict[str, Any],
         include: Optional[List[str]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        **kwargs,
     ) -> Dict[str, Any]:
         filter_json = self._build_filter(where)
+        params: Dict[str, Any] = {"filter": filter_json, "table_name": self._table}
+        if limit is not None:
+            params["limit_val"] = limit
         result = self._client.rpc(
             "get_documents",
-            {"filter": filter_json, "table_name": self._table},
+            params,
         ).execute()
         ids, docs, metas = [], [], []
-        for row in (result.data or []):
+        rows = result.data or []
+        if offset:
+            rows = rows[offset:]
+        if limit is not None:
+            rows = rows[:limit]
+        for row in rows:
             ids.append(row["id"])
             docs.append(row.get("content", ""))
             metas.append(row.get("metadata", {}))

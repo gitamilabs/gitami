@@ -20,6 +20,29 @@ from src.vector.splitter import split_markdown_text
 
 logger = logging.getLogger(__name__)
 
+# Chroma Cloud enforces a maximum document size limit of 16,384 bytes (16 KB) per document.
+# We set safe limits with headroom to guarantee no upsert payload fails quota validation.
+MAX_DOCUMENT_BYTES = 12000
+MAX_CODE_BODY_CHARS = 4000
+
+
+def _sanitize_document_size(doc: str, max_bytes: int = MAX_DOCUMENT_BYTES) -> str:
+    """
+    Ensure the document text does not exceed `max_bytes` when UTF-8 encoded.
+    Truncates cleanly along character boundaries and appends a truncation notice.
+    """
+    if not doc:
+        return ""
+    encoded = doc.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return doc
+
+    trunc_indicator = "\n... [truncated for vector index]"
+    indicator_bytes = len(trunc_indicator.encode("utf-8"))
+    budget = max(0, max_bytes - indicator_bytes)
+    truncated_text = encoded[:budget].decode("utf-8", errors="ignore")
+    return truncated_text + trunc_indicator
+
 
 class ContentType(str, Enum):
     CODE = "code"
@@ -53,8 +76,9 @@ class VectorKBClient:
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _upsert(self, doc_id: str, document: str, metadata: Dict[str, Any]) -> None:
-        """Upsert a single document."""
-        self._store.upsert(ids=[doc_id], documents=[document], metadatas=[metadata])
+        """Upsert a single document with guaranteed size bounds."""
+        sanitized_doc = _sanitize_document_size(document)
+        self._store.upsert(ids=[doc_id], documents=[sanitized_doc], metadatas=[metadata])
 
     def _normalize_where(self, where: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """Normalise a flat metadata dict into ChromaDB-style $and filter."""
@@ -95,8 +119,10 @@ class VectorKBClient:
             f"Description:\n{description}",
         ]
         if code_body:
+            if len(code_body) > MAX_CODE_BODY_CHARS:
+                code_body = code_body[:MAX_CODE_BODY_CHARS] + "\n... [implementation truncated]"
             doc_parts.append(f"Implementation Code:\n{code_body}")
-        document = "\n\n".join(doc_parts)
+        document = _sanitize_document_size("\n\n".join(doc_parts))
 
         metadata = {
             "repo": repo,
@@ -112,7 +138,7 @@ class VectorKBClient:
     def add_code_entries_batch(self, entries: List[Dict[str, Any]]) -> Dict[str, int]:
         """
         Batch upsert multiple code entries with per-batch resilience and retry.
-        Deduplicates by unique doc_id and respects the backend's batch_size.
+        Deduplicates by unique doc_id, enforces size quotas, and falls back to item-by-item upsert.
         """
         if not entries:
             return {"total": 0, "successful": 0, "failed": 0}
@@ -129,9 +155,12 @@ class VectorKBClient:
                 f"Signature:\n{item['signature']}",
                 f"Description:\n{item['description']}",
             ]
-            if item.get("code_body"):
-                doc_parts.append(f"Implementation Code:\n{item['code_body']}")
-            document = "\n\n".join(doc_parts)
+            code_body = item.get("code_body", "")
+            if code_body:
+                if len(code_body) > MAX_CODE_BODY_CHARS:
+                    code_body = code_body[:MAX_CODE_BODY_CHARS] + "\n... [implementation truncated]"
+                doc_parts.append(f"Implementation Code:\n{code_body}")
+            document = _sanitize_document_size("\n\n".join(doc_parts))
 
             metadata = {
                 "repo": item["repo"],
@@ -166,22 +195,70 @@ class VectorKBClient:
                 successful_count += len(batch_ids)
             except Exception as e:
                 logger.warning(
-                    f"Vector upsert failed for batch {batch_idx} ({len(batch_ids)} docs): {e}. Retrying once after backoff..."
+                    f"Vector upsert failed for batch {batch_idx} ({len(batch_ids)} docs): {e}. "
+                    "Falling back to resilient item-by-item upsert..."
                 )
-                time.sleep(1.0)
-                try:
-                    self._store.upsert(
-                        ids=batch_ids,
-                        documents=batch_docs,
-                        metadatas=batch_metas,
-                    )
-                    successful_count += len(batch_ids)
-                    logger.info(f"Retry succeeded for batch {batch_idx}")
-                except Exception as retry_err:
-                    logger.error(f"Permanent vector upsert failure for batch {batch_idx}: {retry_err}")
-                    failed_count += len(batch_ids)
+                time.sleep(0.5)
+                # Resilient fallback: Upsert item by item so a single oversized or malformed doc doesn't fail the batch
+                for doc_id, doc_text, meta in zip(batch_ids, batch_docs, batch_metas):
+                    try:
+                        sanitized = _sanitize_document_size(doc_text)
+                        self._store.upsert(
+                            ids=[doc_id],
+                            documents=[sanitized],
+                            metadatas=[meta],
+                        )
+                        successful_count += 1
+                    except Exception as item_err:
+                        logger.error(f"Permanent vector upsert failure for doc {doc_id}: {item_err}")
+                        failed_count += 1
 
         return {"total": len(doc_ids), "successful": successful_count, "failed": failed_count}
+
+    async def batch_upsert(self, repo: str, records: List[Dict[str, Any]]) -> Dict[str, int]:
+        """
+        Asynchronously batch upsert arbitrary records (used by DocAgent and agentic workflows).
+        Validates document sizes and falls back to item-by-item upsert if batch fails.
+        """
+        if not records:
+            return {"total": 0, "successful": 0, "failed": 0}
+
+        doc_ids: List[str] = []
+        documents: List[str] = []
+        metadatas: List[Dict[str, Any]] = []
+
+        for idx, rec in enumerate(records):
+            file_path = rec.get("file_path", f"doc_{idx}")
+            raw_name = rec.get("name", str(idx))
+            safe_name = raw_name.replace(" ", "_").replace("/", "_")
+            doc_id = f"doc_{repo}_{safe_name}_{idx}"
+            content = _sanitize_document_size(rec.get("content", ""))
+            meta = {
+                "repo": repo,
+                "file_path": file_path,
+                "kind": rec.get("kind", "documentation"),
+                "name": raw_name,
+                "content_type": ContentType.PR.value if rec.get("kind") == "pr" else "doc",
+            }
+            doc_ids.append(doc_id)
+            documents.append(content)
+            metadatas.append(meta)
+
+        try:
+            self._store.upsert(ids=doc_ids, documents=documents, metadatas=metadatas)
+            return {"total": len(records), "successful": len(records), "failed": 0}
+        except Exception as e:
+            logger.warning(f"Batch upsert failed in batch_upsert: {e}. Falling back to item-by-item...")
+            successful = 0
+            failed = 0
+            for d_id, d_doc, d_meta in zip(doc_ids, documents, metadatas):
+                try:
+                    self._store.upsert(ids=[d_id], documents=[d_doc], metadatas=[d_meta])
+                    successful += 1
+                except Exception as item_err:
+                    logger.error(f"Failed to upsert doc {d_id}: {item_err}")
+                    failed += 1
+            return {"total": len(records), "successful": successful, "failed": failed}
 
     def add_pr_entry(
         self,
@@ -266,28 +343,32 @@ class VectorKBClient:
         Update last_valid_commit and commit_hash for all entries in a repo/branch
         that still reference old_commit_hash.
         """
-        results = self._store.get(
-            where={
-                "$and": [
-                    {"repo": repo},
-                    {"branch": branch},
-                    {"last_valid_commit": old_commit_hash},
-                ]
-            },
-            include=["metadatas"],
-        )
+        while True:
+            results = self._store.get(
+                where={
+                    "$and": [
+                        {"repo": repo},
+                        {"branch": branch},
+                        {"last_valid_commit": old_commit_hash},
+                    ]
+                },
+                include=["metadatas"],
+                limit=1000,
+            )
 
-        if not results or not results.get("ids"):
-            return
+            if not results or not results.get("ids"):
+                break
 
-        ids_to_update = results["ids"]
-        metadatas_to_update = results["metadatas"]
+            ids_to_update = results["ids"]
+            metadatas_to_update = results["metadatas"]
 
-        for meta in metadatas_to_update:
-            meta["last_valid_commit"] = new_commit_hash
-            meta["commit_hash"] = new_commit_hash
+            for meta in metadatas_to_update:
+                meta["last_valid_commit"] = new_commit_hash
+                meta["commit_hash"] = new_commit_hash
 
-        self._store.update(ids=ids_to_update, metadatas=metadatas_to_update)
+            self._store.update(ids=ids_to_update, metadatas=metadatas_to_update)
+            if len(ids_to_update) < 1000:
+                break
 
     def delete_stale_entries(self, repo: str, branch: str, latest_commit_hash: str) -> None:
         """Delete entries for a repo/branch that do not have the latest commit hash."""

@@ -61,6 +61,43 @@ class AutonomousAgentLoop:
 
         history_context = _format_conversation_history(history)
 
+        # Pre-fetch high-confidence governed context via ContextEngine
+        initial_context_str = ""
+        try:
+            from src.context import ContextEngine, ContextRequest, ContextAuthorizer, StaticAuthResolver
+            resolver = StaticAuthResolver({repo_id: {repo_id: None}})
+            engine = ContextEngine(
+                graph_client=graph_client,
+                vector_client=vector_client,
+                authorizer=ContextAuthorizer(resolver=resolver, graph_client=graph_client),
+            )
+            ctx_res = await engine.retrieve(ContextRequest(
+                project_id=repo_id,
+                query=user_query,
+                repository_ids=[repo_id],
+                branch=branch,
+                max_items=4,
+                max_tokens=2000,
+            ))
+            if ctx_res and ctx_res.items:
+                ctx_parts = []
+                for item in ctx_res.items:
+                    snippet = item.content[:400]
+                    ctx_parts.append(f"- [{item.type.value}] {item.title}: {snippet}")
+                    if item.file_path:
+                        citations.append({
+                            "id": citation_counter,
+                            "file_path": item.file_path,
+                            "symbol": item.symbol,
+                            "lines": item.line_range,
+                            "snippet": snippet,
+                        })
+                        citation_counter += 1
+                if ctx_parts:
+                    initial_context_str = "\n### INITIAL GOVERNED REPOSITORY CONTEXT:\n" + "\n".join(ctx_parts) + "\n"
+        except Exception as e:
+            logger.debug(f"ContextEngine pre-fetch notice: {e}")
+
         for step_idx in range(1, max_steps + 1):
             # Formulate conversation prompt history for LLM
             history_str = ""
@@ -81,6 +118,7 @@ class AutonomousAgentLoop:
                 f"Repository: '{repo_id}' (branch: '{branch}')\n"
                 f"User Question: '{user_query}'\n"
                 f"{history_context}"
+                f"{initial_context_str}"
                 f"{history_str}\n"
                 f"Current Reasoning Step #{step_idx}. Decide your next action (call_tool or final_answer) in valid JSON."
             )

@@ -132,6 +132,17 @@ class IngestRequest(BaseModel):
     extraction_mode: Optional[str] = "fast"
 
 
+class ReindexRequest(BaseModel):
+    repo_id: str
+    branch: Optional[str] = "main"
+    base_commit_sha: Optional[str] = None
+    target_commit_sha: Optional[str] = "HEAD"
+    repo_dir: Optional[str] = None
+    full_name: Optional[str] = None
+    access_token: Optional[str] = None
+    force_full: Optional[bool] = False
+
+
 class PromptUpdateRequest(BaseModel):
     text: str
 
@@ -297,71 +308,97 @@ async def list_repositories():
 async def ingest_repository(req: IngestRequest):
     """
     Ingest a repository codebase into Neo4j Graph DB and ChromaDB Vector DB.
-    Supports in-memory archive streaming from GitHub (0 disk usage) or local directory.
+    Streams real stage events as NDJSON for durable build tracking.
     """
     from src.repo.streamer import stream_and_parse_github_repo
 
-    graph_client = Neo4jClient()
-    await graph_client.connect()
-    vector_client = VectorKBClient()
-
-    try:
-        if req.full_name:
-            # In-memory streaming from GitHub Tarball API
-            parse_results = stream_and_parse_github_repo(
-                full_name=req.full_name,
-                token=req.access_token,
-                branch=req.branch or "main",
-            )
-            result = await run_init_job(
-                repo_id=req.repo_id,
-                branch=req.branch or "main",
-                parse_results=parse_results,
-                client=graph_client,
-                vector_client=vector_client,
-                extraction_mode=req.extraction_mode or "fast",
-            )
-        elif req.repo_dir:
-            repo_path = Path(req.repo_dir)
-            if not repo_path.exists():
-                raise HTTPException(status_code=400, detail=f"Repository directory '{req.repo_dir}' does not exist.")
-
-            result = await run_init_job(
-                repo_id=req.repo_id,
-                branch=req.branch or "main",
-                repo_dir=repo_path,
-                client=graph_client,
-                vector_client=vector_client,
-                extraction_mode=req.extraction_mode or "fast",
-            )
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail="Must provide either 'full_name' (with optional 'access_token') for GitHub in-memory streaming, or 'repo_dir' for local folder ingestion.",
-            )
-
-        if getattr(result, "status", "") == "ERROR":
-            err_msg = "; ".join(getattr(result, "errors", [])) or "Unknown ingestion error"
-            raise HTTPException(status_code=500, detail=f"Ingestion failed: {err_msg}")
-
-        return {
-            "status": "success",
-            "repo_id": req.repo_id,
-            "symbols_parsed": getattr(result, "symbols_count", getattr(result, "total_symbols", 0)),
-            "files_parsed": getattr(result, "vector_entries_count", getattr(result, "total_files", 0)),
-            "packages": getattr(result, "total_packages", 0),
-            "edges_count": getattr(result, "edges_count", 0),
-            "duration_seconds": getattr(result, "duration_seconds", 0.0),
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
-    finally:
+    async def stream_progress():
+        graph_client = Neo4jClient()
         try:
-            await graph_client.close()
+            await graph_client.connect()
         except Exception:
             pass
+        vector_client = VectorKBClient()
+
+        queue = asyncio.Queue()
+
+        async def queue_cb(stage: str, status: str, stage_stats: Optional[Dict[str, Any]] = None, stage_error: Optional[str] = None):
+            await queue.put({
+                "stage": stage,
+                "status": status,
+                "stats": stage_stats or {},
+                "error": stage_error,
+                "timestamp": time.time(),
+            })
+
+        async def worker():
+            try:
+                await queue_cb("SNAPSHOT", "RUNNING", {})
+
+                if req.full_name:
+                    parse_results = stream_and_parse_github_repo(
+                        full_name=req.full_name,
+                        token=req.access_token,
+                        branch=req.branch or "main",
+                    )
+                    result = await run_init_job(
+                        repo_id=req.repo_id,
+                        branch=req.branch or "main",
+                        parse_results=parse_results,
+                        client=graph_client,
+                        vector_client=vector_client,
+                        extraction_mode=req.extraction_mode or "fast",
+                        stage_callback=queue_cb,
+                    )
+                elif req.repo_dir:
+                    repo_path = Path(req.repo_dir)
+                    if not repo_path.exists():
+                        await queue_cb("FAILED", "FAILED", {}, f"Directory '{req.repo_dir}' does not exist")
+                        return
+
+                    result = await run_init_job(
+                        repo_id=req.repo_id,
+                        branch=req.branch or "main",
+                        repo_dir=repo_path,
+                        client=graph_client,
+                        vector_client=vector_client,
+                        extraction_mode=req.extraction_mode or "fast",
+                        stage_callback=queue_cb,
+                    )
+                else:
+                    await queue_cb("FAILED", "FAILED", {}, "Must provide either 'full_name' or 'repo_dir'")
+                    return
+
+                if getattr(result, "status", "") == "ERROR":
+                    err_msg = "; ".join(getattr(result, "errors", [])) or "Ingestion validation failed"
+                    await queue_cb("FAILED", "FAILED", {}, err_msg)
+                else:
+                    final_stats = {
+                        "symbols_parsed": getattr(result, "symbols_count", getattr(result, "total_symbols", 0)),
+                        "files_parsed": getattr(result, "vector_entries_count", getattr(result, "total_files", 0)),
+                        "packages": getattr(result, "total_packages", 0),
+                        "edges_count": getattr(result, "edges_count", 0),
+                        "duration_seconds": getattr(result, "duration_seconds", 0.0),
+                    }
+                    await queue_cb("COMPLETED", "COMPLETED", final_stats)
+            except Exception as e:
+                await queue_cb("FAILED", "FAILED", {}, str(e))
+            finally:
+                await queue.put(None)
+                try:
+                    await graph_client.close()
+                except Exception:
+                    pass
+
+        asyncio.create_task(worker())
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield (json.dumps(item) + "\n").encode("utf-8")
+
+    return StreamingResponse(stream_progress(), media_type="application/x-ndjson")
 
 @app.post("/api/chat/stream")
 async def agent_chat_stream(req: ChatRequest):
@@ -513,6 +550,37 @@ async def _execute_single_tool(
             files_cnt = len(t_raw.get("files", []))
             t_summary = f"Retrieved structure for {files_cnt} indexed files in Neo4j."
 
+        elif t_name in ("retrieve_context", "get_governed_context", "context_engine"):
+            t_title = "Governed Context Engine"
+            from src.context import ContextEngine, ContextRequest, ContextAuthorizer, StaticAuthResolver
+            from dataclasses import asdict
+            resolver = StaticAuthResolver({req.repo_id: {req.repo_id: None}})
+            engine = ContextEngine(
+                graph_client=graph_client,
+                vector_client=vector_client,
+                authorizer=ContextAuthorizer(resolver=resolver, graph_client=graph_client),
+            )
+            q = t_args.get("query", req.message)
+            ctx_res = await engine.retrieve(ContextRequest(
+                project_id=req.repo_id,
+                query=q,
+                repository_ids=[req.repo_id],
+                branch=req.branch or "main",
+                max_items=t_args.get("max_items", 8),
+            ))
+            t_raw = asdict(ctx_res)
+            t_summary = f"Retrieved {len(ctx_res.items)} governed items across graph, vector, and source."
+            for itm in ctx_res.items:
+                local_cits_data.append({
+                    "file_path": itm.file_path or itm.title,
+                    "symbol": itm.symbol,
+                    "lines": itm.line_range,
+                    "snippet": itm.content[:300] + ("..." if len(itm.content) > 300 else ""),
+                    "source_type": itm.source.value if hasattr(itm.source, "value") else str(itm.source),
+                    "distance": round(1.0 - itm.score, 4) if itm.score else None,
+                    "full_text": itm.content[:600],
+                })
+
         else:
             t_title = "Neo4j Fuzzy Symbol Search"
             q = (
@@ -603,11 +671,10 @@ async def agent_chat_query(req: ChatRequest):
     # Step 1: Agent plans dynamic tool calls
     planned_calls = await llm_client.plan_tool_calls(user_query=req.message, repo_id=req.repo_id)
 
-    # Ensure vector search and hybrid search are included if no tools planned
-    has_vector_or_hybrid = any(c.get("tool_name") in ["hybrid_search", "vector_search"] for c in planned_calls)
-    if not has_vector_or_hybrid:
-        planned_calls.insert(0, {"tool_name": "vector_search", "args": {"query": req.message}})
-        planned_calls.insert(1, {"tool_name": "hybrid_search", "args": {"query": req.message}})
+    # Ensure governed context retrieval or hybrid search is included if no tools planned
+    has_retrieval = any(c.get("tool_name") in ["retrieve_context", "hybrid_search", "vector_search"] for c in planned_calls)
+    if not has_retrieval:
+        planned_calls.insert(0, {"tool_name": "retrieve_context", "args": {"query": req.message}})
 
     # Step 2: Parallel execution of all planned tools (zero sequential bottleneck)
     tasks = [
@@ -824,6 +891,198 @@ async def fix_pull_request_issues(req: PRFixRequest):
     }
 
 
+# ---------------------------------------------------------------------------
+# Curated Multi-Agent System Endpoints (Investigation, Issue, Doc, Code)
+# ---------------------------------------------------------------------------
+
+class InvestigationRequest(BaseModel):
+    query: str
+    repo_id: str
+    branch: Optional[str] = "main"
+    is_incident: bool = False
+    incident_context: Optional[Dict[str, Any]] = None
+    max_steps: Optional[int] = 8
+
+
+class IssueAnalyzeRequest(BaseModel):
+    repo_id: str
+    issue_number: int
+    title: str
+    body: Optional[str] = ""
+    author: Optional[str] = "unknown"
+    labels: Optional[List[str]] = []
+    existing_issues: Optional[List[Dict[str, Any]]] = None
+
+
+class DocGenerateRequest(BaseModel):
+    repo_id: str
+    doc_type: str = "workflow_guide"  # "workflow_guide", "onboarding_doc", "weekly_changelog"
+    topic: str
+    branch: Optional[str] = "main"
+    feed_to_kb: bool = True
+    merged_prs: Optional[List[Dict[str, Any]]] = None
+
+
+class CodePlanRequest(BaseModel):
+    repo_id: str
+    issue_title: str
+    issue_description: str
+    trigger_source: str = "review"
+    affected_files: Optional[List[str]] = None
+    branch: Optional[str] = "main"
+
+
+class CodeExecuteRequest(BaseModel):
+    plan: Dict[str, Any]
+    existing_file_contents: Dict[str, str]
+    maintainer_notes: Optional[str] = None
+
+
+@app.post("/api/investigate")
+async def investigate_codebase(req: InvestigationRequest):
+    """
+    Executes the Curated Investigation Agent:
+    - Fast single-shot path for informational questions
+    - Up to 8-step iterative hypothesis testing loop for root cause debugging & incidents
+    """
+    from src.agents import InvestigationAgent
+    agent = InvestigationAgent(
+        llm_client=DualLLMClient(),
+        graph_client=get_shared_graph_client(),
+        vector_client=get_shared_vector_client(),
+    )
+    result = await agent.run(
+        query=req.query,
+        repo_id=req.repo_id,
+        branch=req.branch or "main",
+        is_incident=req.is_incident,
+        incident_context=req.incident_context,
+        max_steps=req.max_steps or 8,
+    )
+    return result.to_dict()
+
+
+@app.post("/api/issue/analyze")
+async def analyze_github_issue(req: IssueAnalyzeRequest):
+    """
+    Executes the Curated Issue Agent:
+    - Spam detection
+    - Duplicate detection across open/closed issues
+    - Criticality scoring (1-10)
+    - Domain tagging
+    - AI Code Suspected flag
+    """
+    from src.agents import IssueAgent
+    agent = IssueAgent(
+        llm_client=DualLLMClient(),
+        graph_client=get_shared_graph_client(),
+        vector_client=get_shared_vector_client(),
+    )
+    result = await agent.run(
+        repo_id=req.repo_id,
+        issue_number=req.issue_number,
+        title=req.title,
+        body=req.body or "",
+        author=req.author or "unknown",
+        existing_labels=req.labels,
+        existing_issues=req.existing_issues,
+    )
+    return result.to_dict()
+
+
+@app.post("/api/doc/generate")
+async def generate_documentation(req: DocGenerateRequest):
+    """
+    Executes the Curated Doc Agent:
+    - Generates workflow guides, onboarding docs per domain, or weekly changelogs
+    - Automatically feeds generated docs back into the Vector KB
+    """
+    from src.agents import DocAgent
+    agent = DocAgent(
+        llm_client=DualLLMClient(),
+        graph_client=get_shared_graph_client(),
+        vector_client=get_shared_vector_client(),
+    )
+    if req.doc_type == "onboarding_doc":
+        res = await agent.generate_onboarding_doc(
+            repo_id=req.repo_id,
+            domain=req.topic,
+            branch=req.branch or "main",
+            feed_to_kb=req.feed_to_kb,
+        )
+    elif req.doc_type == "weekly_changelog":
+        res = await agent.generate_weekly_changelog(
+            repo_id=req.repo_id,
+            merged_prs=req.merged_prs or [],
+            week_label=req.topic or "This Week",
+        )
+    else:
+        res = await agent.generate_workflow_guide(
+            repo_id=req.repo_id,
+            feature_name=req.topic,
+            branch=req.branch or "main",
+            feed_to_kb=req.feed_to_kb,
+        )
+    return res.to_dict()
+
+
+@app.post("/api/code/plan")
+async def plan_code_fix(req: CodePlanRequest):
+    """
+    Executes Code Agent Stage 1:
+    - Generates a surgical fix plan (files to touch, approach, test strategy)
+    - Waits for maintainer approval before executing
+    """
+    from src.agents import CodeAgent
+    agent = CodeAgent(
+        llm_client=DualLLMClient(),
+        graph_client=get_shared_graph_client(),
+        vector_client=get_shared_vector_client(),
+    )
+    plan = await agent.generate_fix_plan(
+        repo_id=req.repo_id,
+        issue_title=req.issue_title,
+        issue_description=req.issue_description,
+        trigger_source=req.trigger_source,
+        affected_files=req.affected_files,
+        branch=req.branch or "main",
+    )
+    return plan.to_dict()
+
+
+@app.post("/api/code/execute")
+async def execute_code_fix(req: CodeExecuteRequest):
+    """
+    Executes Code Agent Stage 2:
+    - Synthesizes reproduction test and verified implementation patch for an approved plan
+    """
+    from src.agents import CodeAgent, FixPlan
+    agent = CodeAgent(
+        llm_client=DualLLMClient(),
+        graph_client=get_shared_graph_client(),
+        vector_client=get_shared_vector_client(),
+    )
+    p = req.plan
+    plan_obj = FixPlan(
+        plan_id=p.get("plan_id", "plan_1"),
+        repo_id=p.get("repo_id", ""),
+        trigger_source=p.get("trigger_source", "review"),
+        summary=p.get("summary", ""),
+        files_to_touch=p.get("files_to_touch", []),
+        approach=p.get("approach", ""),
+        test_strategy=p.get("test_strategy", ""),
+        risk_assessment=p.get("risk_assessment", "medium"),
+        needs_approval=False,
+        approved=True,
+    )
+    result = await agent.execute_approved_plan(
+        plan=plan_obj,
+        existing_file_contents=req.existing_file_contents,
+        maintainer_notes=req.maintainer_notes,
+    )
+    return result.to_dict()
+
+
 @app.post("/api/ingest-url")
 async def ingest_from_github_url(req: IngestUrlRequest):
     """
@@ -889,57 +1148,138 @@ async def ingest_from_github_url(req: IngestUrlRequest):
                 pass
 
 
-@app.post("/")
-@app.post("/webhooks")
-@app.post("/api/webhooks")
-@app.post("/api/github/webhooks")
-async def generic_github_webhook(request: Request):
-    """Fallback handler for GitHub webhooks hitting Python service directly."""
-    try:
-        payload = await request.json()
-        action = payload.get("action", "")
-        pr = payload.get("pull_request", {})
-        repo = payload.get("repository", {})
-        head = pr.get("head", {})
-        base = pr.get("base", {})
+@app.post("/api/reindex")
+async def reindex_repository(req: ReindexRequest):
+    """
+    Incremental or full reindexing endpoint for a repository codebase.
+    Driven securely by internal API calls from Bun.
+    Streams stage events as NDJSON for durable build tracking.
+    """
+    from src.indexer.pipeline import RepositoryIndexer
+    from src.indexer.contracts import IndexJobType
+    from src.repo.streamer import stream_and_parse_github_repo
 
-        if pr and repo:
-            repo_fullName = repo.get("full_name", "")
-            pr_num = pr.get("number", 1)
-            head_branch = head.get("ref", "main")
-            base_branch = base.get("ref", "main")
-            title = pr.get("title", "")
-            body = pr.get("body", "")
+    async def stream_progress():
+        graph_client = Neo4jClient()
+        try:
+            await graph_client.connect()
+        except Exception:
+            pass
+        vector_client = VectorKBClient()
+        queue = asyncio.Queue()
 
-            # Guardrail: skip AI fix PRs
-            if head_branch.startswith("ai-fix/") or title.lower().startswith("[ai fix]"):
-                return {"received": True, "action": "skipped_ai_fix"}
+        async def queue_cb(stage: str, status: str, stage_stats: Optional[Dict[str, Any]] = None, stage_error: Optional[str] = None):
+            await queue.put({
+                "stage": stage,
+                "status": status,
+                "stats": stage_stats or {},
+                "error": stage_error,
+                "timestamp": time.time(),
+            })
 
-            graph_client = Neo4jClient()
+        async def worker():
             try:
-                await graph_client.connect()
-            except Exception:
-                pass
-            vector_client = VectorKBClient()
-            llm_client = DualLLMClient()
+                indexer = RepositoryIndexer(
+                    graph_client=graph_client,
+                    vector_client=vector_client,
+                )
 
-            from src.agents.reviewer import run_agentic_pr_review
+                if req.repo_dir and Path(req.repo_dir).exists():
+                    target_dir = Path(req.repo_dir)
+                    if not req.force_full and req.base_commit_sha:
+                        job, state, report = await indexer.run_incremental(
+                            repo_dir=target_dir,
+                            repo_id=req.repo_id,
+                            target_commit_sha=req.target_commit_sha or "HEAD",
+                            base_commit_sha=req.base_commit_sha,
+                            branch=req.branch or "main",
+                        )
+                    else:
+                        job, state, report = await indexer.run(
+                            repo_dir=target_dir,
+                            repo_id=req.repo_id,
+                            target_commit_sha=req.target_commit_sha or "HEAD",
+                            branch=req.branch or "main",
+                            job_type=IndexJobType.FULL_REINDEX if req.force_full else IndexJobType.INITIAL,
+                            stage_callback=queue_cb,
+                        )
+                elif req.full_name:
+                    # In-memory remote tarball stream
+                    await queue_cb("SNAPSHOT", "RUNNING", {})
+                    parse_results = stream_and_parse_github_repo(
+                        full_name=req.full_name,
+                        token=req.access_token,
+                        branch=req.branch or "main",
+                    )
+                    job, state, report = await indexer.run(
+                        repo_id=req.repo_id,
+                        target_commit_sha=req.target_commit_sha or req.branch or "HEAD",
+                        branch=req.branch or "main",
+                        job_type=IndexJobType.FULL_REINDEX if req.force_full else IndexJobType.INITIAL,
+                        stage_callback=queue_cb,
+                        parse_results=parse_results,
+                    )
+                else:
+                    await queue_cb("FAILED", "FAILED", {}, "Must provide either valid 'repo_dir' or 'full_name'")
+                    return
 
-            res = await run_agentic_pr_review(
-                client=graph_client,
-                repo_id=repo_fullName,
-                branch=head_branch,
-                changed_symbols=[],
-                raw_diff_text=f"PR #{pr_num}: {title}\n{body}",
-                symbols=[],
-                vector_client=vector_client,
-                llm_client=llm_client,
-            )
-            return {"received": True, "verdict": res.decision.verdict, "issues": res.issues}
+                if not report.is_valid:
+                    err_msg = "; ".join(report.fatal_errors) or "Reindexing validation failed"
+                    await queue_cb("FAILED", "FAILED", {}, err_msg)
+                else:
+                    final_stats = job.stats.model_dump() if hasattr(job.stats, "model_dump") else {}
+                    await queue_cb("COMPLETED", "COMPLETED", final_stats)
+            except Exception as e:
+                logger.error(f"Reindexing worker error: {e}", exc_info=True)
+                await queue_cb("FAILED", "FAILED", {}, str(e))
+            finally:
+                await queue.put(None)
+                try:
+                    await graph_client.close()
+                except Exception:
+                    pass
 
-        return {"received": True, "action": action}
+        asyncio.create_task(worker())
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield json.dumps(item) + "\n"
+
+    return StreamingResponse(stream_progress(), media_type="application/x-ndjson")
+
+
+@app.get("/api/graph/{repo_id:path}")
+async def get_graph_data(repo_id: str, branch: str = "main", max_nodes: int = 500):
+    """
+    Returns actual Neo4j nodes and edges for the interactive knowledge graph.
+    """
+    graph_client = Neo4jClient()
+    try:
+        await graph_client.connect()
+        from src.graph.reader import get_entire_graph
+        from src.analysis.graph_analysis import compute_graph_presentation
+        raw_data = await get_entire_graph(graph_client, repo_id=repo_id, branch=branch, max_nodes=max_nodes)
+        presentation = compute_graph_presentation(raw_data)
+        return {
+            "status": "success",
+            "repo_id": repo_id,
+            "branch": branch,
+            "nodes": presentation["nodes"],
+            "edges": presentation["edges"],
+            "communities": presentation["communities"],
+            "stats": presentation["stats"],
+            "total_nodes": presentation["stats"]["nodeCount"],
+            "total_edges": presentation["stats"]["edgeCount"],
+        }
     except Exception as e:
-        return {"received": True, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            await graph_client.close()
+        except Exception:
+            pass
 
 
 @app.get("/api/graph-report/{repo_id:path}")
