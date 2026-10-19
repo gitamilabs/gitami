@@ -47,9 +47,27 @@ async def run_agentic_pr_review(
     if vector_client is None:
         vector_client = VectorKBClient()
 
+    # Delegate to autonomous ReAct PR Review Agent
+    try:
+        from ai_service.agent.react_reviewer import PrReviewReActAgent
+        react_reviewer = PrReviewReActAgent(llm_client=llm_client)
+        return await react_reviewer.review(
+            repo_id=repo_id,
+            branch=branch,
+            raw_diff_text=raw_diff_text,
+            changed_symbols=changed_symbols,
+            symbols=symbols,
+            graph_client=client,
+            vector_client=vector_client,
+            max_steps=4,
+        )
+    except Exception as e:
+        logger.warning(f"ReAct agent review fallback notice ({e}), proceeding with standard pipeline...")
+
     # 1. Parse raw diff text into hunks & extract changed symbols
     hunks = parse_git_diff(raw_diff_text)
     changed_files = list({h.file_path for h in hunks if h.file_path})
+
 
     if not changed_symbols:
         changed_symbols = extract_changed_symbols(hunks, raw_diff_text)

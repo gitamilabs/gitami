@@ -18,9 +18,11 @@ from ai_service.benchmark.report import BenchmarkReportGenerator
 from ai_service.benchmark.scorer import AggregateScore, BenchmarkScorer, TestCaseScore
 from ai_service.graph.client import Neo4jClient
 from ai_service.vector.client import VectorKBClient
-from ai_service.agent.llm_client import DualLLMClient
+from ai_service.agent.llm_client import DualLLMClient, is_rate_limit_error
 from ai_service.agent.reviewer import run_agentic_pr_review
 from ai_service.agent.diff_parser import parse_git_diff, extract_changed_symbols
+from ai_service.benchmark.checkpoint import BenchmarkCheckpointManager
+
 
 logger = logging.getLogger(__name__)
 
@@ -84,17 +86,25 @@ class BenchmarkRunner:
 
         return stage_dir
 
-    async def run(self, dataset_name: Optional[str] = None) -> BenchmarkRunResult:
-        """Execute the benchmark run over selected datasets."""
+    async def run(self, dataset_name: Optional[str] = None, resume: Optional[bool] = None) -> BenchmarkRunResult:
+        """Execute the benchmark run over selected datasets with checkpointing and resume support."""
         start_time = time.time()
-        logger.info("Initializing GitAmi Benchmark Runner...")
+        logger.info("Initializing GitAmi Benchmark Runner with ReAct Agent Reviewer...")
+
+        do_resume = self.config.resume if resume is None else resume
+        checkpoint_file = self.config.results_dir / "benchmark_checkpoint.json"
+        checkpoint_mgr = BenchmarkCheckpointManager(checkpoint_file)
 
         graph_client = Neo4jClient()
         await graph_client.connect()
         vector_client = VectorKBClient()
         llm_client = DualLLMClient()
 
-        target_datasets = [dataset_name] if dataset_name else self.config.datasets
+        # Enforce execution order: smaller benchmark (martian) first, then vulngym
+        target_datasets = [dataset_name] if dataset_name else list(self.config.datasets)
+        dataset_order = {"martian": 0, "vulngym": 1}
+        target_datasets.sort(key=lambda d: dataset_order.get(d.lower(), 99))
+
         all_cases: List[BenchmarkTestCase] = []
         errors: List[str] = []
 
@@ -114,12 +124,27 @@ class BenchmarkRunner:
         if self.config.sample_size and len(all_cases) > self.config.sample_size:
             all_cases = all_cases[: self.config.sample_size]
 
-        logger.info(f"Beginning evaluation of {len(all_cases)} total test cases...")
-
         case_scores: List[TestCaseScore] = []
+        if do_resume and checkpoint_mgr.completed_count > 0:
+            case_scores = checkpoint_mgr.get_scores()
+            logger.info(
+                f"[CHECKPOINT] Loaded {len(case_scores)} previously completed case(s) from {checkpoint_file.name}."
+            )
+
+        logger.info(
+            f"Beginning evaluation: {len(all_cases)} total test cases planned "
+            f"({len(case_scores)} already completed, {max(0, len(all_cases) - len(case_scores))} remaining)..."
+        )
+
+        completed_ids = checkpoint_mgr.completed_case_ids if do_resume else set()
+        rate_limit_paused = False
 
         # 2. Evaluate each test case
         for idx, case in enumerate(all_cases, start=1):
+            if do_resume and case.case_id in completed_ids:
+                logger.info(f"[{idx}/{len(all_cases)}] [RESUMED] Case '{case.case_id}' already evaluated. Skipping.")
+                continue
+
             logger.info(
                 f"\n[{idx}/{len(all_cases)}] Evaluating case '{case.case_id}' ({case.dataset_name} | {case.repo_name})..."
             )
@@ -127,7 +152,6 @@ class BenchmarkRunner:
             safe_id = self._sanitize_id(case.case_id)
             repo_id = f"{self.config.repo_id_prefix}{safe_id}"
 
-            # Determine directory for KB ingestion
             stage_dir: Optional[Path] = None
             if case.local_repo_dir and case.local_repo_dir.exists():
                 repo_dir = case.local_repo_dir
@@ -136,47 +160,73 @@ class BenchmarkRunner:
                 repo_dir = stage_dir
 
             predicted_issues: List[Dict[str, Any]] = []
+            case_success = False
 
-            try:
-                # Ingest into real Knowledge Base and guarantee cleanup via context manager
-                async with BenchmarkKBContext(
-                    repo_id=repo_id,
-                    branch=self.config.branch,
-                    repo_dir=repo_dir,
-                    graph_client=graph_client,
-                    vector_client=vector_client,
-                    cleanup=self.config.cleanup_kb,
-                ) as kb_ctx:
-                    # Parse diff hunks & extract changed symbols
-                    hunks = parse_git_diff(case.diff_text)
-                    changed_symbols = extract_changed_symbols(hunks, case.diff_text)
-
-                    # Execute Agentic PR Review
-                    review_result = await run_agentic_pr_review(
-                        client=kb_ctx.graph_client,
+            # Retry loop for API rate limits
+            for attempt in range(1, 4):
+                try:
+                    async with BenchmarkKBContext(
                         repo_id=repo_id,
                         branch=self.config.branch,
-                        changed_symbols=changed_symbols,
-                        raw_diff_text=case.diff_text,
-                        symbols=[],
-                        vector_client=kb_ctx.vector_client,
-                        llm_client=llm_client,
-                    )
+                        repo_dir=repo_dir,
+                        graph_client=graph_client,
+                        vector_client=vector_client,
+                        cleanup=self.config.cleanup_kb,
+                    ) as kb_ctx:
+                        hunks = parse_git_diff(case.diff_text)
+                        changed_symbols = extract_changed_symbols(hunks, case.diff_text)
 
-                    predicted_issues = review_result.issues
-                    logger.info(
-                        f"Review complete for '{case.case_id}': verdict={review_result.decision.verdict}, "
-                        f"predicted_issues={len(predicted_issues)}"
-                    )
+                        review_result = await run_agentic_pr_review(
+                            client=kb_ctx.graph_client,
+                            repo_id=repo_id,
+                            branch=self.config.branch,
+                            changed_symbols=changed_symbols,
+                            raw_diff_text=case.diff_text,
+                            symbols=[],
+                            vector_client=kb_ctx.vector_client,
+                            llm_client=llm_client,
+                        )
 
-            except Exception as e:
-                logger.error(f"Error during evaluation of '{case.case_id}': {e}")
-                errors.append(f"{case.case_id}: {e}")
-            finally:
-                # Clean up temporary staging directory if created
-                if stage_dir and stage_dir.exists():
-                    import shutil
-                    shutil.rmtree(stage_dir, ignore_errors=True)
+                        predicted_issues = review_result.issues
+                        logger.info(
+                            f"Review complete for '{case.case_id}': verdict={review_result.decision.verdict}, "
+                            f"predicted_issues={len(predicted_issues)}"
+                        )
+                        case_success = True
+                        break
+
+                except Exception as e:
+                    if is_rate_limit_error(e):
+                        backoff = 15 * attempt
+                        logger.warning(
+                            f"[API RATE LIMIT] Rate limit or quota warning on '{case.case_id}' (attempt {attempt}/3): {e}"
+                        )
+                        if attempt < 3:
+                            logger.info(f"Pausing for {backoff}s before retrying...")
+                            await asyncio.sleep(backoff)
+                        else:
+                            rate_limit_paused = True
+                            errors.append(f"{case.case_id}: Rate limit exceeded - {e}")
+                            break
+                    else:
+                        logger.error(f"Error during evaluation of '{case.case_id}': {e}")
+                        errors.append(f"{case.case_id}: {e}")
+                        break
+                finally:
+                    if stage_dir and stage_dir.exists():
+                        import shutil
+                        shutil.rmtree(stage_dir, ignore_errors=True)
+
+            if rate_limit_paused:
+                logger.warning(
+                    "\n" + "=" * 65 + "\n"
+                    "*** API RATE LIMIT / QUOTA EXHAUSTION DETECTED ***\n"
+                    f"Execution paused safely. Progress checkpointed ({len(case_scores)} cases completed).\n"
+                    "To resume later once limits reset, simply run:\n"
+                    f"  python -m ai_service.cli benchmark run --dataset {dataset_name or 'all'} --resume\n"
+                    + "=" * 65 + "\n"
+                )
+                break
 
             case_duration = round(time.time() - case_start, 3)
 
@@ -189,6 +239,10 @@ class BenchmarkRunner:
                 duration_seconds=case_duration,
             )
             case_scores.append(score)
+            completed_ids.add(case.case_id)
+
+            # Save immediately to disk checkpoint
+            checkpoint_mgr.record_case_score(score)
 
             logger.info(
                 f"Result '{case.case_id}': TP={score.true_positives}, FP={score.false_positives}, "
@@ -196,7 +250,7 @@ class BenchmarkRunner:
                 f"Recall={score.recall*100:.1f}%, F1={score.f1_score:.3f}"
             )
 
-            # Live checkpoint: continuously update latest report files on disk after each test case
+            # Live checkpoint: continuously update latest running report files on disk after each test case
             try:
                 running_agg = self.scorer.aggregate_scores(case_scores)
                 running_meta = {
@@ -236,6 +290,8 @@ class BenchmarkRunner:
                     ds_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
                     ds_md = self.config.results_dir / f"benchmark_report_{current_ds_name}_{ds_ts}.md"
                     ds_json = self.config.results_dir / f"benchmark_report_{current_ds_name}_{ds_ts}.json"
+                    ds_md_latest = self.config.results_dir / f"benchmark_report_{current_ds_name}_latest.md"
+                    ds_json_latest = self.config.results_dir / f"benchmark_report_{current_ds_name}_latest.json"
                     ds_meta = {
                         "dataset": current_ds_name,
                         "completed_cases": len(ds_scores),
@@ -244,26 +300,35 @@ class BenchmarkRunner:
                     }
                     BenchmarkReportGenerator.generate_markdown(ds_agg, ds_scores, ds_meta, ds_md)
                     BenchmarkReportGenerator.generate_json(ds_agg, ds_scores, ds_meta, ds_json)
+                    BenchmarkReportGenerator.generate_markdown(ds_agg, ds_scores, ds_meta, ds_md_latest)
+                    BenchmarkReportGenerator.generate_json(ds_agg, ds_scores, ds_meta, ds_json_latest)
                     logger.info(
-                        f"\n🎉 Saved dedicated benchmark report for '{current_ds_name}': "
+                        f"\n[DEDICATED REPORT] Saved dedicated benchmark report for '{current_ds_name}': "
                         f"{ds_md.name} (Cases: {len(ds_scores)}, F1: {ds_agg.f1_score:.4f})"
                     )
+
+            # Inter-case delay to protect free tier rate limits
+            if self.config.inter_case_delay > 0:
+                await asyncio.sleep(self.config.inter_case_delay)
 
         # 3. Aggregate metrics across all test cases
         aggregate = self.scorer.aggregate_scores(case_scores)
         total_duration = round(time.time() - start_time, 2)
+        status_label = "paused_due_to_rate_limit" if rate_limit_paused else "completed"
+
         logger.info(
-            f"\n=== Benchmark Complete in {total_duration}s ==="
-            f"\nTotal Cases: {aggregate.total_cases}"
+            f"\n=== Benchmark Run Status: {status_label.upper()} in {total_duration}s ==="
+            f"\nTotal Cases Evaluated: {aggregate.total_cases}"
             f"\nPrecision: {aggregate.precision*100:.1f}%"
             f"\nRecall: {aggregate.recall*100:.1f}%"
             f"\nF1 Score: {aggregate.f1_score:.4f}"
         )
 
-        # 4. Generate timestamped JSON and Markdown final reports
+        # 4. Generate timestamped and latest final reports (both individual and unified)
         timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-        md_file = self.config.results_dir / f"benchmark_report_{timestamp_str}.md"
-        json_file = self.config.results_dir / f"benchmark_report_{timestamp_str}.json"
+        prefix = "benchmark_report_combined_" if len(target_datasets) > 1 else f"benchmark_report_{target_datasets[0]}_"
+        md_file = self.config.results_dir / f"{prefix}{timestamp_str}.md"
+        json_file = self.config.results_dir / f"{prefix}{timestamp_str}.json"
 
         meta = {
             "datasets": target_datasets,
@@ -271,11 +336,19 @@ class BenchmarkRunner:
             "cleanup_kb": self.config.cleanup_kb,
             "repos_dir": str(self.config.repos_dir),
             "total_duration_seconds": total_duration,
-            "status": "completed",
+            "status": status_label,
         }
 
         BenchmarkReportGenerator.generate_markdown(aggregate, case_scores, meta, md_file)
         BenchmarkReportGenerator.generate_json(aggregate, case_scores, meta, json_file)
+
+        # Update latest reports
+        BenchmarkReportGenerator.generate_markdown(
+            aggregate, case_scores, meta, self.config.results_dir / "benchmark_report_latest.md"
+        )
+        BenchmarkReportGenerator.generate_json(
+            aggregate, case_scores, meta, self.config.results_dir / "benchmark_report_latest.json"
+        )
 
         await graph_client.close()
 
@@ -287,3 +360,4 @@ class BenchmarkRunner:
             json_report_path=json_file,
             errors=errors,
         )
+

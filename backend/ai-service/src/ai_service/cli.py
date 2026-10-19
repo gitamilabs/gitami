@@ -219,7 +219,10 @@ def analyze(repo_id: str, branch: str, out_dir: str):
 
 # Register Benchmark Subsystem Commands
 from ai_service.benchmark.cli import benchmark_group
+from ai_service.benchmark.competitors.cli import competitor_benchmark_group
 main.add_command(benchmark_group)
+main.add_command(competitor_benchmark_group)
+benchmark_group.add_command(competitor_benchmark_group, name="competitor")
 
 
 if __name__ == "__main__":

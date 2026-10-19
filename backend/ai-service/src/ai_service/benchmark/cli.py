@@ -55,6 +55,11 @@ def benchmark_group():
     help="Purge Knowledge Base entries (Neo4j & Vector DB) after each testcase.",
 )
 @click.option(
+    "--resume/--no-resume",
+    default=True,
+    help="Resume from disk checkpoint if available, skipping already-scored test cases.",
+)
+@click.option(
     "--language",
     "-l",
     multiple=True,
@@ -66,9 +71,17 @@ def run_benchmark(
     repos_dir: str,
     results_dir: str,
     cleanup: bool,
+    resume: bool,
     language: tuple,
 ):
     """Execute benchmark evaluation across selected dataset suites."""
+    import sys
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
     cfg = BenchmarkConfig(
@@ -76,6 +89,7 @@ def run_benchmark(
         results_dir=Path(results_dir),
         sample_size=sample,
         cleanup_kb=cleanup,
+        resume=resume,
         datasets=["martian", "vulngym"] if dataset.lower() == "all" else [dataset.lower()],
         languages=list(language) if language else None,
     )
@@ -83,10 +97,10 @@ def run_benchmark(
     async def _exec():
         runner = BenchmarkRunner(cfg)
         target_ds = None if dataset.lower() == "all" else dataset.lower()
-        res = await runner.run(dataset_name=target_ds)
+        res = await runner.run(dataset_name=target_ds, resume=resume)
 
         click.echo("\n" + "=" * 60)
-        click.echo("🎉 BENCHMARK RUN COMPLETED")
+        click.echo("[FINISHED] BENCHMARK EXECUTION SUMMARY")
         click.echo("=" * 60)
         click.echo(f"Total Cases Evaluated: {res.aggregate_score.total_cases}")
         click.echo(f"Precision:            {res.aggregate_score.precision * 100:.1f}%")
@@ -94,12 +108,13 @@ def run_benchmark(
         click.echo(f"F1 Score:             {res.aggregate_score.f1_score:.4f}")
         click.echo(f"Mean Latency:         {res.aggregate_score.mean_duration_seconds:.2f}s per case")
         if res.markdown_report_path:
-            click.echo(f"\n📄 Markdown Report:    {res.markdown_report_path.resolve()}")
+            click.echo(f"\nMarkdown Report:      {res.markdown_report_path.resolve()}")
         if res.json_report_path:
-            click.echo(f"📊 JSON Report:        {res.json_report_path.resolve()}")
+            click.echo(f"JSON Report:          {res.json_report_path.resolve()}")
         click.echo("=" * 60)
 
     asyncio.run(_exec())
+
 
 
 @benchmark_group.command(name="compare")

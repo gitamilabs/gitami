@@ -27,8 +27,15 @@ class BenchmarkConfig:
     # Subsample test cases (e.g. 3 or 5 for quick testing, None for full suite)
     sample_size: Optional[int] = None
 
+    # Resume from checkpoint if available
+    resume: bool = True
+
+    # Inter-case delay in seconds to stay within free-tier API rate limits
+    inter_case_delay: float = 1.0
+
     # Automatically purge Knowledge Base entries (Neo4j & Vector DB) after each testcase/run
     cleanup_kb: bool = True
+
 
     # Which benchmark datasets to evaluate ("martian", "vulngym", or both)
     datasets: List[str] = field(default_factory=lambda: ["martian", "vulngym"])

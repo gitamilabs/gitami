@@ -8,19 +8,31 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 GEMINI_MODELS = [
-    "gemini-3.6-flash",
-    "gemini-3.5-flash",
+    "gemini-flash-lite-latest",
     "gemini-3.5-flash-lite",
+    "gemini-flash-latest",
     "gemini-3.1-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-3.7-flash",
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
 ]
 GROQ_MODELS = [
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "qwen/qwen3.6-27b",
     "qwen/qwen3.8-27b",
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
 ]
+
+
+def is_rate_limit_error(error: Exception) -> bool:
+    """Check if exception represents an API rate limit or quota exhaustion (HTTP 429)."""
+    err_str = str(error).lower()
+    return (
+        "429" in err_str
+        or "resource_exhausted" in err_str
+        or "rate limit" in err_str
+        or "quota exceeded" in err_str
+        or "too many requests" in err_str
+    )
+
 
 
 

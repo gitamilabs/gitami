@@ -18,6 +18,7 @@ PROMPT_MODULES = {
     "pr_orchestrator": "ai_service.prompts.pr_orchestrator",
     "pr_worker": "ai_service.prompts.pr_worker",
     "pr_reviewer_worker": "ai_service.prompts.pr_reviewer_worker",
+    "react_pr_reviewer": "ai_service.prompts.react_pr_reviewer",
     "fixer_orchestrator": "ai_service.prompts.fixer_orchestrator",
     "fixer_worker": "ai_service.prompts.fixer_worker",
 }
@@ -116,5 +117,6 @@ from ai_service.prompts.tool_planner import PROMPT as TOOL_PLANNER_SYSTEM_PROMPT
 from ai_service.prompts.pr_orchestrator import PROMPT as PR_ORCHESTRATOR_SYSTEM_PROMPT
 from ai_service.prompts.pr_worker import PROMPT as PR_WORKER_SYSTEM_PROMPT
 from ai_service.prompts.pr_reviewer_worker import PROMPT as PR_REVIEWER_WORKER_SYSTEM_PROMPT
+from ai_service.prompts.react_pr_reviewer import PROMPT as REACT_PR_REVIEWER_SYSTEM_PROMPT
 from ai_service.prompts.fixer_orchestrator import PROMPT as FIXER_ORCHESTRATOR_SYSTEM_PROMPT
 from ai_service.prompts.fixer_worker import PROMPT as FIXER_WORKER_SYSTEM_PROMPT

@@ -6,6 +6,7 @@ Prompts are stored as modular files in `ai_service.prompts` and can be customize
 from ai_service.prompts import (
     get_prompt,
     REACT_AGENT_SYSTEM_PROMPT as _DEFAULT_REACT,
+    REACT_PR_REVIEWER_SYSTEM_PROMPT as _DEFAULT_REACT_PR,
     PR_ORCHESTRATOR_SYSTEM_PROMPT as _DEFAULT_PR_ORCH,
     PR_WORKER_SYSTEM_PROMPT as _DEFAULT_PR_WORKER,
 )
@@ -13,6 +14,10 @@ from ai_service.prompts import (
 
 def get_react_agent_prompt() -> str:
     return get_prompt("react_agent", _DEFAULT_REACT)
+
+
+def get_react_pr_reviewer_prompt() -> str:
+    return get_prompt("react_pr_reviewer", _DEFAULT_REACT_PR)
 
 
 def get_pr_orchestrator_prompt() -> str:
@@ -25,8 +30,10 @@ def get_pr_worker_prompt() -> str:
 
 # Module-level references for backwards-compatibility
 REACT_AGENT_SYSTEM_PROMPT = _DEFAULT_REACT
+REACT_PR_REVIEWER_SYSTEM_PROMPT = _DEFAULT_REACT_PR
 SYSTEM_ORCHESTRATOR_PROMPT = _DEFAULT_PR_ORCH
 SYSTEM_WORKER_PROMPT = _DEFAULT_PR_WORKER
+
 
 
 def build_orchestrator_prompt(
