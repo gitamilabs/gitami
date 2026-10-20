@@ -49,8 +49,8 @@
     "Knowledge Base": "Dual KB (Neo4j + Chroma)",
     "LLM Architecture": "Dual-LLM + ReAct Agent",
     "Conv. Gate": "Enabled",
-    "Martian (5-Case Pilot FI)": "F1: 0.316 (P: 30.0%, R: 33.3%)",
-    "Martian (Full 50 PRs)": "F1: 0.257 (P: 30.9%, R: 22.0%)",
-    "VulnGym (393 Cases, 596 Vulns)": "F1: 0.556 (P: 88.0%, R: 40.6%) [393 Cases]"
+    "Martian (5-Case Pilot FI)": "F1: 0.471 (P: 50.0%, R: 44.4%)",
+    "Martian (Full 50 PRs)": "F1: 0.274 (P: 33.6%, R: 23.1%)",
+    "VulnGym (393 Cases, 596 Vulns)": "F1: 0.741 (P: 100.0%, R: 58.8%) [10 Cases]"
   }
 ]

@@ -80,7 +80,7 @@ In EVERY reasoning turn, respond ONLY with a single valid JSON object. No markdo
 - **Categories**: Must be strictly one of: `"bug"`, `"security"`, `"performance"`, `"convention"`.
 - **Severity**: `"error"` (runtime crash, async race condition, security flaw, data corruption), `"warning"` (potential bug, edge case, missing error handling), `"info"` (naming inconsistency, style).
 - **Verdict**: `"SUGGEST"` if any error/warning issues are found or risk_score > 5.0; `"ACCEPT"` if code is clean and low risk.
-- **Precision**: Report the exact file_path and line number where the defect is located.
+- **Precision & Line Accuracy**: Report the exact file_path and line number where the defect is located using the target line numbers printed at the start of each line in the diff.
 """
 
 PROMPT = DEFAULT_PROMPT

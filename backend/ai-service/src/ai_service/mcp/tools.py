@@ -212,10 +212,11 @@ async def tool_get_file_content(repo_id: str, file_path: str) -> str:
     """Read actual raw source code, documentation, or configuration file contents from repository disk."""
     from pathlib import Path
     from ai_service.config import settings
-
+    import tempfile
     clean_path = file_path.strip().lstrip("/").lstrip("\\")
     repo_slug = repo_id.replace("/", "_")
     repos_base = Path(settings.chroma_persist_dir) / "repos"
+    temp_base = Path(tempfile.gettempdir())
 
     candidates = [
         repos_base / repo_slug / clean_path,
@@ -224,6 +225,13 @@ async def tool_get_file_content(repo_id: str, file_path: str) -> str:
         Path("./chroma_db/repos") / repo_id / clean_path,
         Path(".") / clean_path,
     ]
+
+    for p in temp_base.glob(f"gitami_stage_*{repo_slug}*"):
+        if p.is_dir():
+            candidates.append(p / clean_path)
+    for p in temp_base.glob("gitami_stage_*"):
+        if p.is_dir():
+            candidates.append(p / clean_path)
 
     target_file = None
     for cand in candidates:
@@ -254,8 +262,8 @@ async def tool_get_file_content(repo_id: str, file_path: str) -> str:
         return json.dumps({
             "file_path": file_path,
             "lines_count": len(lines),
-            "content": text[:5000],
-            "truncated": len(text) > 5000,
+            "content": text[:15000],
+            "truncated": len(text) > 15000,
         }, indent=2)
     except Exception as e:
         return json.dumps({"error": f"Failed to read file '{file_path}': {str(e)}"})

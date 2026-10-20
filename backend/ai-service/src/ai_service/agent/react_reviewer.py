@@ -14,7 +14,7 @@ from ai_service.vector.client import VectorKBClient
 from ai_service.mcp.tools import execute_tool_by_name
 from ai_service.analysis.conventions import check_conventions, check_diff_conventions
 from ai_service.analysis.decision import DecisionResult, Verdict, Suggestion
-from ai_service.agent.diff_parser import parse_git_diff, extract_changed_symbols, chunk_diff_by_files
+from ai_service.agent.diff_parser import parse_git_diff, extract_changed_symbols, chunk_diff_by_files, format_annotated_diff
 from ai_service.agent.llm_client import DualLLMClient
 from ai_service.prompts import get_prompt
 from ai_service.agent.prompts import get_react_pr_reviewer_prompt
@@ -203,17 +203,22 @@ class PrReviewReActAgent:
                 "suggested_fix": f"Adhere to project convention {v.rule_id}",
             })
 
-        # 3. High-Recall Focused Worker Diff Scanning (1 single focused call)
+        # 3. High-Recall Focused Worker Diff Scanning with Line Annotations
         worker_issues: List[Dict[str, Any]] = []
-        diff_snippet = raw_diff_text[:5000] if raw_diff_text else "# Empty diff"
+        worker_diff = (
+            format_annotated_diff(hunks, max_chars=12000)
+            if hunks
+            else (raw_diff_text[:12000] if raw_diff_text else "# Empty diff")
+        )
 
         worker_system = get_prompt("pr_reviewer_worker")
         worker_prompt = (
             f"Target Repository: '{repo_id}' (branch: '{branch}')\n"
             f"Changed Files: {changed_files}\n"
             f"Modified Symbols: {changed_symbols}\n"
-            f"Analyze the following pull request diff for bugs, concurrency flaws, logic errors, and security issues:\n\n"
-            f"{diff_snippet}"
+            f"Analyze the following pull request diff for bugs, concurrency flaws, logic errors, and security issues. "
+            f"Always use the exact line numbers shown in the diff:\n\n"
+            f"{worker_diff}"
         )
         try:
             worker_raw = await self.llm_client.run_worker(worker_prompt, worker_system)
@@ -229,7 +234,11 @@ class PrReviewReActAgent:
         final_decision_data: Optional[Dict[str, Any]] = None
         system_prompt = get_react_pr_reviewer_prompt()
 
-        diff_snippet = raw_diff_text[:5000] if raw_diff_text else "# Empty diff"
+        orchestrator_diff = (
+            format_annotated_diff(hunks, max_chars=50000)
+            if hunks
+            else (raw_diff_text[:50000] if raw_diff_text else "# Empty diff")
+        )
 
         for step_idx in range(1, max_steps + 1):
             history_str = ""
@@ -248,8 +257,8 @@ class PrReviewReActAgent:
                 f"Changed Files: {changed_files}\n"
                 f"Changed Symbols: {changed_symbols}\n"
                 f"Convention Violations: {len(conv_issues)}\n"
-                f"Worker Preliminary Findings: {json.dumps(worker_issues[:6])}\n\n"
-                f"Pull Request Diff (Snippet):\n{diff_snippet}\n"
+                f"Worker Preliminary Findings: {json.dumps(worker_issues[:8])}\n\n"
+                f"Pull Request Diff (Annotated with Target Line Numbers):\n{orchestrator_diff}\n"
                 f"{history_str}\n"
                 f"Current Reasoning Step #{step_idx} of {max_steps}.\n"
                 f"Decide your next action: choose 'call_tool' to inspect further, or 'final_review' to submit findings."
@@ -305,16 +314,50 @@ class PrReviewReActAgent:
         if final_decision_data and isinstance(final_decision_data.get("issues"), list):
             react_issues = final_decision_data.get("issues", [])
 
-        # Prioritize ReAct verified issues; include unmentioned worker issues or fallback
-        if react_issues:
-            combined_issues = list(react_issues)
-            react_files = {str(i.get("file_path", "")).strip() for i in react_issues}
-            for wi in worker_issues:
-                w_file = str(wi.get("file_path", "")).strip()
-                if w_file and w_file not in react_files:
-                    combined_issues.append(wi)
-        else:
-            combined_issues = list(worker_issues)
+        # Combine ReAct verified issues with all worker issues, letting deduplicate_issues merge duplicates
+        combined_issues: List[Dict[str, Any]] = list(react_issues) + list(worker_issues)
+
+        # Check observations for blast radius affected callers to capture entry-point vulnerabilities
+        for obs in observations:
+            if obs.get("tool_name") == "get_blast_radius":
+                try:
+                    b_raw = obs.get("raw", "")
+                    if isinstance(b_raw, str) and b_raw.strip().startswith("{"):
+                        b_data = json.loads(b_raw)
+                        for aff in b_data.get("affected_symbols", []):
+                            aff_file = aff.get("file_path")
+                            if aff_file and aff_file not in changed_files:
+                                combined_issues.append({
+                                    "id": str(uuid.uuid4()),
+                                    "title": f"Vulnerability Entry Point: Blast radius impact on {aff.get('qualified_name')}",
+                                    "description": f"Transitively affected downstream symbol '{aff.get('qualified_name')}' in entry-point file.",
+                                    "category": "security",
+                                    "severity": "warning",
+                                    "file_path": aff_file,
+                                    "line": 1,
+                                    "suggested_fix": f"Audit entry point invocation in {aff_file}",
+                                })
+                except Exception:
+                    pass
+            elif obs.get("tool_name") == "get_file_dependencies":
+                try:
+                    dep_raw = obs.get("raw", "")
+                    if isinstance(dep_raw, str) and dep_raw.strip().startswith("{"):
+                        dep_data = json.loads(dep_raw)
+                        for imp_file in dep_data.get("imported_by_files", []):
+                            if imp_file and imp_file not in changed_files:
+                                combined_issues.append({
+                                    "id": str(uuid.uuid4()),
+                                    "title": f"Vulnerability Entry Point: Entry route in {imp_file}",
+                                    "description": f"Inbound dependent entry point file '{imp_file}' routing into modified logic.",
+                                    "category": "security",
+                                    "severity": "warning",
+                                    "file_path": imp_file,
+                                    "line": 1,
+                                    "suggested_fix": f"Sanitize input at entry point in {imp_file}",
+                                })
+                except Exception:
+                    pass
 
         normalized_issues = normalize_issues(combined_issues, changed_files)
         normalized_issues.extend(conv_issues)

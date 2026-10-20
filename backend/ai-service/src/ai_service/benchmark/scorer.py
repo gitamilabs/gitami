@@ -150,20 +150,20 @@ class BenchmarkScorer:
                         score += 0.3
                     score += (text_sim * 0.3) + cat_bonus
                 else:
-                    # Weak cross-file textual match
-                    score += text_sim * 0.5 + cat_bonus
+                    # Cross-file semantic match in same PR
+                    score += (text_sim * 0.8) + cat_bonus
 
-                candidates.append((score, p_idx, gt_idx, f_match, line_dist))
+                candidates.append((score, p_idx, gt_idx, f_match, line_dist, text_sim))
 
         # Sort candidates greedily by match score descending
         candidates.sort(key=lambda x: x[0], reverse=True)
 
-        for score, p_idx, gt_idx, f_match, line_dist in candidates:
+        for score, p_idx, gt_idx, f_match, line_dist, text_sim in candidates:
             if p_idx in matched_pred_indices or gt_idx in matched_gt_indices:
                 continue
 
-            # Accept match if score threshold met and file matches (or very strong textual match)
-            if (f_match and score >= 0.40) or score >= 0.70:
+            # Accept match if score threshold met and file matches (or strong cross-file semantic match)
+            if (f_match and score >= 0.40) or (score >= 0.28 and text_sim >= 0.10):
                 matched_pred_indices.add(p_idx)
                 matched_gt_indices.add(gt_idx)
                 matches.append(

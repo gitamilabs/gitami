@@ -154,3 +154,69 @@ def extract_changed_symbols(hunks: List[DiffHunk], raw_diff_text: str) -> List[s
                     symbols.add(m)
 
     return list(symbols)
+
+
+def format_annotated_diff(hunks: List[DiffHunk], max_chars: int = 50000) -> str:
+    """
+    Format parsed git diff hunks with explicit 1-indexed target line numbers for LLM consumption.
+    Formats line numbers so the LLM directly outputs the accurate line number matching ground truth.
+    """
+    lines_out = []
+    total_len = 0
+    grouped = group_hunks_by_file(hunks)
+
+    def _is_test_path(p: str) -> bool:
+        low = p.lower()
+        return any(x in low for x in ("/test", "/__test", "test.", "spec.", "/mock", "/fixture"))
+
+    sorted_files = sorted(grouped.items(), key=lambda item: 1 if _is_test_path(item[0]) else 0)
+
+    for file_path, file_hunks in sorted_files:
+        header = f"\n=== File: {file_path} ===\n"
+        lines_out.append(header)
+        total_len += len(header)
+
+        for hunk in file_hunks:
+            if not hunk.patch_text:
+                continue
+
+            # Scope / function signature header if present
+            scope_match = re.search(r"@@\s+[^@]+@@\s*(.*)", hunk.patch_text)
+            if scope_match and scope_match.group(1).strip():
+                scope_line = f"--- Scope: {scope_match.group(1).strip()} ---\n"
+                lines_out.append(scope_line)
+                total_len += len(scope_line)
+
+            added_map = dict(hunk.added_lines)
+            curr_target_line = None
+            hunk_header_match = re.search(r"@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,(\d+))?\s+@@", hunk.patch_text)
+            if hunk_header_match:
+                curr_target_line = int(hunk_header_match.group(1))
+
+            for line in hunk.patch_text.splitlines():
+                if line.startswith("@@"):
+                    continue
+                if line.startswith("+++") or line.startswith("---"):
+                    continue
+
+                if line.startswith("+"):
+                    line_no = added_map.get(curr_target_line, curr_target_line) if curr_target_line is not None else ""
+                    formatted = f"{line_no}:+ {line[1:]}\n"
+                    if curr_target_line is not None:
+                        curr_target_line += 1
+                elif line.startswith("-"):
+                    formatted = f"   - {line[1:]}\n"
+                else:
+                    # Context line
+                    formatted = f"{curr_target_line}:  {line[1:] if len(line) > 0 else ''}\n" if curr_target_line is not None else f"    {line}\n"
+                    if curr_target_line is not None:
+                        curr_target_line += 1
+
+                if total_len + len(formatted) > max_chars:
+                    lines_out.append("\n[Diff truncated for maximum token budget]\n")
+                    return "".join(lines_out)
+                lines_out.append(formatted)
+                total_len += len(formatted)
+
+    return "".join(lines_out)
+

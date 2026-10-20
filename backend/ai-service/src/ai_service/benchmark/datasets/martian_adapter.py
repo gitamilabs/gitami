@@ -155,20 +155,47 @@ class MartianAdapter(BenchmarkDataset):
                     line_match = re.search(r"\b(?:line|lines)\s+(\d+)", comment_text, re.IGNORECASE)
                     line_start = int(line_match.group(1)) if line_match else None
 
-                    # Associate with file: look for exact filename in comment, else default to primary changed file
+                    # Associate with file: look for exact filename in comment, else diff token overlap
                     target_file = ""
                     for cf in changed_files:
                         fname = os.path.basename(cf)
                         if fname in comment_text or cf in comment_text:
                             target_file = cf
                             break
+
+                    file_hunks: Dict[str, list] = {}
+                    for h in hunks:
+                        file_hunks.setdefault(h.file_path, []).append(h)
+
+                    comment_tokens = set(re.findall(r"[a-zA-Z0-9_]{3,}", comment_text.lower()))
+                    stopwords = {"the", "and", "for", "with", "that", "this", "from", "should", "have", "not"}
+                    meaningful_tokens = comment_tokens - stopwords
+
+                    if not target_file and file_hunks:
+                        best_overlap = 0
+                        for cf, fh in file_hunks.items():
+                            file_code = " ".join(l[1] for h in fh for l in h.added_lines)
+                            file_tokens = set(re.findall(r"[a-zA-Z0-9_]{3,}", file_code.lower()))
+                            overlap = len(meaningful_tokens & file_tokens)
+                            if overlap > best_overlap:
+                                best_overlap = overlap
+                                target_file = cf
+
                     if not target_file and changed_files:
                         target_file = changed_files[0]
 
-                    # Fallback line number to first hunk line if not found
-                    if line_start is None and hunks:
-                        for h in hunks:
-                            if not target_file or h.file_path == target_file:
+                    # Determine best line number in target_file
+                    if line_start is None and target_file in file_hunks:
+                        best_line_overlap = 0
+                        for h in file_hunks[target_file]:
+                            for l_no, line_str in h.added_lines:
+                                l_tokens = set(re.findall(r"[a-zA-Z0-9_]{3,}", line_str.lower()))
+                                ov = len(meaningful_tokens & l_tokens)
+                                if ov > best_line_overlap:
+                                    best_line_overlap = ov
+                                    line_start = l_no
+                        if line_start is None:
+                            for h in file_hunks[target_file]:
                                 if h.added_lines:
                                     line_start = h.added_lines[0][0]
                                     break

@@ -84,7 +84,7 @@ The JSON output must strictly conform to this schema:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 - **Prioritize Real Defects with High Recall**: Flag all genuine bugs, async flaws, null dereferences, and security risks.
-- **Accurate File & Line Mapping**: Always report the exact relative file path from the diff hunk header and the closest line number.
+- **Accurate File & Line Mapping**: Always report the exact relative file path from the diff header. Each line in the provided diff is prefixed with its exact target line number (e.g. '107:+ const x = ...'). Always set 'line' to the exact line number printed at the beginning of the line where the defect occurs.
 """
 
 PROMPT = DEFAULT_PROMPT
