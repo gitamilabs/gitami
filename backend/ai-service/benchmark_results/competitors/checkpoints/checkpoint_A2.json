@@ -1,0 +1,3090 @@
+{
+  "version": "1.0",
+  "last_updated": "2026-10-20T03:05:56.995493+00:00",
+  "completed_case_ids": [
+    "martian_keycloak_5",
+    "martian_keycloak_7",
+    "martian_cal_dot_com_7",
+    "martian_sentry_10",
+    "martian_grafana_4",
+    "martian_discourse_10",
+    "martian_cal_dot_com_6",
+    "martian_cal_dot_com_8",
+    "martian_sentry_6",
+    "martian_cal_dot_com_9",
+    "martian_sentry_7",
+    "martian_discourse_4",
+    "martian_cal_dot_com_2",
+    "martian_cal_dot_com_1",
+    "martian_discourse_2",
+    "martian_sentry_5",
+    "martian_sentry_2",
+    "martian_grafana_3",
+    "martian_grafana_5",
+    "martian_sentry_3",
+    "martian_keycloak_8",
+    "martian_discourse_8",
+    "martian_sentry_4",
+    "martian_grafana_6",
+    "martian_keycloak_3",
+    "martian_keycloak_1",
+    "martian_sentry_8",
+    "martian_discourse_1",
+    "martian_grafana_1",
+    "martian_discourse_7",
+    "martian_grafana_2",
+    "martian_keycloak_9",
+    "martian_cal_dot_com_3",
+    "martian_grafana_7",
+    "martian_cal_dot_com_5",
+    "martian_discourse_3",
+    "martian_keycloak_4",
+    "martian_keycloak_2",
+    "martian_keycloak_6",
+    "martian_grafana_8",
+    "martian_discourse_6",
+    "martian_sentry_1",
+    "martian_sentry_9",
+    "martian_cal_dot_com_4",
+    "martian_cal_dot_com_10",
+    "martian_keycloak_10",
+    "martian_grafana_10",
+    "martian_grafana_9",
+    "martian_discourse_9",
+    "martian_discourse_5"
+  ],
+  "scores": [
+    {
+      "case_id": "martian_cal_dot_com_1",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 2.9,
+      "matched_pairs": [],
+      "unmatched_predictions": [
+        {
+          "id": "0bd0c4d7-3cb2-4cbb-96eb-b9e32c5eae57",
+          "title": "Unhandled Promise Rejection in forEach",
+          "description": "Using `forEach` with an `async` callback in `vital/lib/reschedule.ts` does not wait for the promises to resolve. This can lead to unhandled promise rejections and race conditions, as the function may exit before all async operations complete.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/vital/lib/reschedule.ts",
+          "line": 125,
+          "suggested_fix": ""
+        },
+        {
+          "id": "3028c6ba-98b3-4d40-b3d3-84e421d7db02",
+          "title": "Dynamic Import Performance Concern",
+          "description": "The `appStore` object now uses dynamic imports for all modules. This could lead to performance degradation if these imports are triggered frequently, as each call may result in a new module load. Consider caching the imported modules or using a lazy loading strategy.",
+          "category": "performance",
+          "severity": "warning",
+          "file_path": "packages/app-store/index.ts",
+          "line": 1,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Consider adding try-catch around the await to handle import failures gracefully",
+          "file_path": "packages/app-store/_utils/getCalendar.ts",
+          "line_start": 9,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "Consider adding try-catch around the await to handle import failures gracefully"
+        },
+        {
+          "title": "The code uses forEach with async callbacks, which causes asynchronous operations...",
+          "file_path": "packages/app-store/_utils/getCalendar.ts",
+          "line_start": 9,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The code uses forEach with async callbacks, which causes asynchronous operations (e.g., calendar/video event deletions, payment refunds) to run concurrently without being awaited. This 'fire-and-forget' behavior leads to unhandled promise rejections, race conditions, and incomplete cleanup, as surrounding try-catch blocks cannot properly handle errors from these unawaited promises. Replace forEach with for...of loops or Promise.all() with map() to ensure proper sequential execution and error handling."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_cal_dot_com_2",
+      "dataset_name": "martian",
+      "true_positives": 2,
+      "false_positives": 6,
+      "false_negatives": 3,
+      "precision": 0.25,
+      "recall": 0.4,
+      "f1_score": 0.3077,
+      "duration_seconds": 2.279,
+      "matched_pairs": [
+        {
+          "predicted": {
+            "id": "207fa5f9-d278-430c-8598-97ef9f9d06b5",
+            "title": "Component Name Mismatch",
+            "description": "The `BackupCode` component is exported as `TwoFactor` instead of `BackupCode`. This is a copy-paste error that will cause confusion and potential bugs if the wrong component is imported.",
+            "category": "bug",
+            "severity": "warning",
+            "file_path": "apps/web/components/auth/BackupCode.tsx",
+            "line": 7,
+            "suggested_fix": ""
+          },
+          "gt_title": "Backup code validation is case-sensitive due to the use of indexOf(). This cause...",
+          "gt_file": "apps/web/components/auth/BackupCode.tsx",
+          "gt_line_start": 1,
+          "gt_line_end": null,
+          "gt_severity": "warning",
+          "gt_category": "bug",
+          "gt_desc": "Backup code validation is case-sensitive due to the use of indexOf(). This causes validation to fail if a user enters uppercase hex characters, as backup codes should be case-insensitive for a better user experience.",
+          "match_score": 0.908,
+          "file_matched": true,
+          "line_distance": 6
+        },
+        {
+          "predicted": {
+            "id": "7b905cce-5ec5-4d1e-88ff-94c4b76bd1dc",
+            "title": "Input Validation Mismatch",
+            "description": "The `BackupCode` input has `minLength={10}` and `maxLength={11}`, but the placeholder is `XXXXX-XXXXX` (11 chars). If the user enters the code without the dash (10 chars), it passes validation, but the backend might expect the dash. This could lead to validation errors or security issues if the backend does not handle both formats.",
+            "category": "bug",
+            "severity": "warning",
+            "file_path": "apps/web/components/auth/BackupCode.tsx",
+            "line": 22,
+            "suggested_fix": ""
+          },
+          "gt_title": "Because backupCodes are decrypted and mutated in memory before being written bac...",
+          "gt_file": "apps/web/components/auth/BackupCode.tsx",
+          "gt_line_start": 1,
+          "gt_line_end": null,
+          "gt_severity": "error",
+          "gt_category": "bug",
+          "gt_desc": "Because backupCodes are decrypted and mutated in memory before being written back, two concurrent login requests using the same backupCode could both pass this check and update, so a single backup code may effectively be accepted more than once if used concurrently, weakening the intended one-time-use semantics.",
+          "match_score": 0.618,
+          "file_matched": true,
+          "line_distance": 21
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "1e81b7eb-cfdd-4c9e-970d-f7125b1e174a",
+          "title": "[RULE-006] Convention Violation",
+          "description": "Debug console statement left in code",
+          "category": "convention",
+          "severity": "warning",
+          "file_path": "apps/web/pages/api/auth/two-factor/totp/disable.ts",
+          "line": 50,
+          "suggested_fix": "Adhere to convention rule RULE-006"
+        },
+        {
+          "id": "d1c303bb-378a-475e-9a23-bcb709435d50",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 12,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "65f1e0cb-4c0a-4fe1-bf04-ad5b3b81c92e",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 50,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "d64d468b-f6e7-404e-b48a-b80cae65a817",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 117,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "4b2418e6-f712-496a-a2b0-74b6b4f1af45",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 122,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "6461609c-f653-4c6e-a289-c76d1f6fe464",
+          "title": "[RULE-006] Convention Violation",
+          "description": "Debug console statement left in code",
+          "category": "convention",
+          "severity": "warning",
+          "file_path": "packages/features/auth/lib/next-auth-options.ts",
+          "line": 133,
+          "suggested_fix": "Adhere to convention rule RULE-006"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The exported function TwoFactor handles backup codes and is in BackupCode.tsx. I...",
+          "file_path": "apps/web/components/auth/BackupCode.tsx",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "The exported function TwoFactor handles backup codes and is in BackupCode.tsx. Inconsistent naming."
+        },
+        {
+          "title": "Error message mentions 'backup code login' but this is a disable endpoint, not l...",
+          "file_path": "apps/web/components/auth/BackupCode.tsx",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "Error message mentions 'backup code login' but this is a disable endpoint, not login"
+        },
+        {
+          "title": "Object URL for backup codes is not revoked on component unmount, leading to a po...",
+          "file_path": "apps/web/components/auth/BackupCode.tsx",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "info",
+          "category": "performance",
+          "description": "Object URL for backup codes is not revoked on component unmount, leading to a potential memory leak. This can cause increased memory usage over time, especially if the component is mounted and unmounted frequently."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_cal_dot_com_3",
+      "dataset_name": "martian",
+      "true_positives": 1,
+      "false_positives": 6,
+      "false_negatives": 5,
+      "precision": 0.1429,
+      "recall": 0.1667,
+      "f1_score": 0.1538,
+      "duration_seconds": 3.511,
+      "matched_pairs": [
+        {
+          "predicted": {
+            "id": "19c440c5-b9c8-4434-9cc8-53ed20bb3ce2",
+            "title": "Type mismatch in bookingReminder.ts destinationCalendar assignment",
+            "description": "In `bookingReminder.ts`, `destinationCalendar` is now assigned as `selectedDestinationCalendar ? [selectedDestinationCalendar] : []`. This changes the type from a single object to an array. If other parts of the codebase (e.g., email templates, other handlers) still expect a single object, this will cause runtime errors or incorrect behavior. The `CalendarEvent` type definition in `packages/types/Calendar.d.ts` is not shown in the diff, so it's unclear if the type has been updated to reflect this change.",
+            "category": "bug",
+            "severity": "warning",
+            "file_path": "apps/web/pages/api/cron/bookingReminder.ts",
+            "line": 130,
+            "suggested_fix": ""
+          },
+          "gt_title": "The Calendar interface now requires createEvent(event, credentialId), but some i...",
+          "gt_file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "gt_line_start": 107,
+          "gt_line_end": null,
+          "gt_severity": "info",
+          "gt_category": "bug",
+          "gt_desc": "The Calendar interface now requires createEvent(event, credentialId), but some implementations (e.g., Lark/Office365) still declare createEvent(event) only\u2014this breaks the interface contract (also applies to other locations in the PR).",
+          "match_score": 0.621,
+          "file_matched": true,
+          "line_distance": 23
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "3bcf3518-2c3e-4a63-93b9-b114ce697999",
+          "title": "Incomplete diff prevents full audit of cross-service consistency",
+          "description": "The diff is truncated and does not show the full implementation of changes in `googlecalendar/lib/CalendarService.ts`, `larkcalendar/lib/CalendarService.ts`, `office365calendar/lib/CalendarService.ts`, or the core `CalendarService.ts`. This makes it impossible to verify that all calendar implementations correctly handle the new array-based `destinationCalendar` and the `credentialId` parameter. Inconsistent handling could lead to events being created in the wrong calendar or failing silently.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 142,
+          "suggested_fix": ""
+        },
+        {
+          "id": "f939880a-3044-4ddd-96fe-f08ff5ea949c",
+          "title": "Potential null/undefined access in destinationCalendar array handling",
+          "description": "In `googlecalendar/lib/CalendarService.ts`, the code uses `calEventRaw?.destinationCalendar?.find(...)` which is safe, but the destructuring `const [mainHostDestinationCalendar] = calEventRaw?.destinationCalendar && calEventRaw?.destinationCalendar.length > 0 ? calEventRaw.destinationCalendar : [];` assumes the first element is the 'main host' calendar. If the array is empty or the first element is not the intended one, `mainHostDestinationCalendar` will be undefined, and the fallback to `calEventRaw.organizer.email` may not be the desired behavior. The logic for selecting the 'main' calendar is ambiguous.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 100,
+          "suggested_fix": ""
+        },
+        {
+          "id": "a416ee85-39dc-46d4-82d4-7d9fc45cae4d",
+          "title": "Missing credentialId parameter in other calendar services",
+          "description": "The `createEvent` method in `googlecalendar/lib/CalendarService.ts` now requires a `credentialId` parameter. If other calendar services (Lark, Office365) or the base `CalendarService` interface have not been updated to include this parameter, calls to these services will fail or use incorrect credentials. The diff does not show changes to these files, suggesting they may not have been updated.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 87,
+          "suggested_fix": ""
+        },
+        {
+          "id": "fa0be7e0-7f83-42d3-9150-d666af6c41fa",
+          "title": "Inconsistent destinationCalendar handling in updateEvent",
+          "description": "In `googlecalendar/lib/CalendarService.ts`, the `updateEvent` method also destructures `mainHostDestinationCalendar` from the array, but the diff is cut off before showing how it's used. If the update logic doesn't correctly handle the array-based `destinationCalendar`, events may be updated in the wrong calendar or fail.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 198,
+          "suggested_fix": ""
+        },
+        {
+          "id": "ecef83d9-2801-4217-9545-332479b3bfb7",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "packages/core/CalendarManager.ts",
+          "line": 230,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "d7e23c17-7221-4408-95f3-5d89a5a8a83d",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "packages/core/CalendarManager.ts",
+          "line": 250,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "A null reference occurs in GoogleCalendarService.createEvent() and updateEvent()...",
+          "file_path": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line_start": 107,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "A null reference occurs in GoogleCalendarService.createEvent() and updateEvent() when mainHostDestinationCalendar is destructured from evt.destinationCalendar but evt.destinationCalendar is null or an empty array, causing mainHostDestinationCalendar to be undefined."
+        },
+        {
+          "title": "The optional chaining on mainHostDestinationCalendar?.integration is redundant s...",
+          "file_path": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line_start": 107,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "The optional chaining on mainHostDestinationCalendar?.integration is redundant since you already check mainHostDestinationCalendar in the ternary condition."
+        },
+        {
+          "title": "Logic error: when externalCalendarId is provided, you're searching for a calenda...",
+          "file_path": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line_start": 107,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Logic error: when externalCalendarId is provided, you're searching for a calendar where externalId === externalCalendarId, but this will always fail since you're looking for a calendar that matches itself. Should likely find by credentialId or use different logic."
+        },
+        {
+          "title": "Logic inversion in organization creation: The slug property is now conditionally...",
+          "file_path": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line_start": 107,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Logic inversion in organization creation: The slug property is now conditionally set when IS_TEAM_BILLING_ENABLED is true, instead of when it's false as originally intended. This change, combined with requestedSlug still being set when IS_TEAM_BILLING_ENABLED is true, results in both properties being set when billing is enabled, and neither when disabled"
+        },
+        {
+          "title": "The `credential` may be undefined when passed to `updateEvent` if `reference.cre...",
+          "file_path": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line_start": 107,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The `credential` may be undefined when passed to `updateEvent` if `reference.credentialId` is set but the credential is not found. This can lead to a runtime error when `updateEvent` is called with an undefined credential, which should be handled to prevent crashes."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_cal_dot_com_4",
+      "dataset_name": "martian",
+      "true_positives": 1,
+      "false_positives": 1,
+      "false_negatives": 1,
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1_score": 0.5,
+      "duration_seconds": 16.762,
+      "matched_pairs": [
+        {
+          "predicted": {
+            "id": "e1622b66-7783-4ade-830d-a4f99a88133f",
+            "title": "Fragile Test Assertions with Prisma.sql",
+            "description": "Using `expect(conditions).toEqual(Prisma.sql`...`)` is likely to fail or be unreliable because `Prisma.sql` objects are not simple data structures. `toEqual` performs a deep equality check, which may not correctly compare the internal state of `Prisma.sql` objects (e.g., the SQL string and parameters). It is recommended to use a custom matcher or compare the generated SQL string and parameters explicitly if the service is indeed returning `Prisma.sql` objects.",
+            "category": "bug",
+            "severity": "warning",
+            "file_path": "packages/lib/server/service/__tests__/insightsBooking.integration-test.ts",
+            "line": 210,
+            "suggested_fix": ""
+          },
+          "gt_title": "In getBaseConditions(), the else if (filterConditions) and final else branches a...",
+          "gt_file": "packages/lib/server/service/__tests__/insightsBooking.integration-test.ts",
+          "gt_line_start": 2,
+          "gt_line_end": null,
+          "gt_severity": "info",
+          "gt_category": "bug",
+          "gt_desc": "In getBaseConditions(), the else if (filterConditions) and final else branches are unreachable. This is because getAuthorizationConditions() always returns a non-null Prisma.Sql object, making authConditions always truthy, which means only the first two if/else if conditions are ever evaluated.",
+          "match_score": 0.63,
+          "file_matched": true,
+          "line_distance": 208
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "7832a04f-e375-4811-a9f3-8480578eeb0f",
+          "title": "Incomplete Diff",
+          "description": "The provided diff is truncated and does not include the changes to `packages/lib/server/service/insightsBooking.ts`. Without seeing the implementation changes, it is impossible to verify if the service is correctly returning `Prisma.sql` objects and if the test expectations are aligned with the new behavior.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/lib/server/service/insightsBooking.ts",
+          "line": 1,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Fetching userIdsFromOrg only when teamsFromOrg.length > 0 can exclude org-level ...",
+          "file_path": "packages/lib/server/service/__tests__/insightsBooking.integration-test.ts",
+          "line_start": 2,
+          "line_end": null,
+          "severity": "warning",
+          "category": "convention",
+          "description": "Fetching userIdsFromOrg only when teamsFromOrg.length > 0 can exclude org-level members for orgs without child teams; consider deriving from teamIds (which includes orgId) or removing the guard so org-only orgs still include member user bookings."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_cal_dot_com_5",
+      "dataset_name": "martian",
+      "true_positives": 2,
+      "false_positives": 2,
+      "false_negatives": 1,
+      "precision": 0.5,
+      "recall": 0.6667,
+      "f1_score": 0.5714,
+      "duration_seconds": 2.066,
+      "matched_pairs": [
+        {
+          "predicted": {
+            "id": "f3d6e13a-e7f6-41a4-b5bb-435bfcc6b17c",
+            "title": "Missing check for scheduled status before deleting reminders",
+            "description": "In `handleCancelBooking.ts`, the previous code checked `reminder.scheduled && reminder.referenceId` before attempting to delete the reminder. The new code removes this check, which could lead to attempting to delete reminders that were never scheduled. This might cause errors in the reminder manager functions or unnecessary API calls to external services.",
+            "category": "bug",
+            "severity": "warning",
+            "file_path": "packages/features/bookings/lib/handleCancelBooking.ts",
+            "line": 484,
+            "suggested_fix": ""
+          },
+          "gt_title": "The 'cancelled' field is nullable, which can lead to existing records having nul...",
+          "gt_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "gt_line_start": 484,
+          "gt_line_end": null,
+          "gt_severity": "warning",
+          "gt_category": "bug",
+          "gt_desc": "The 'cancelled' field is nullable, which can lead to existing records having null values instead of a default of false. This can cause incorrect behavior in the application when checking the cancellation status of reminders.",
+          "match_score": 0.929,
+          "file_matched": true,
+          "line_distance": 0
+        },
+        {
+          "predicted": {
+            "id": "ce0c3c65-22cb-416b-9aa1-22fb86d2da15",
+            "title": "Potential null/undefined referenceId not handled",
+            "description": "The code assumes `reminder.referenceId` is always defined when calling `deleteScheduledEmailReminder` and `deleteScheduledSMSReminder`. If `referenceId` is null or undefined, these functions might fail or behave unexpectedly. The previous code explicitly checked for `reminder.referenceId` before proceeding.",
+            "category": "bug",
+            "severity": "warning",
+            "file_path": "packages/features/bookings/lib/handleCancelBooking.ts",
+            "line": 485,
+            "suggested_fix": ""
+          },
+          "gt_title": "Asynchronous functions deleteScheduledEmailReminder and deleteScheduledSMSRemind...",
+          "gt_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "gt_line_start": 484,
+          "gt_line_end": null,
+          "gt_severity": "warning",
+          "gt_category": "bug",
+          "gt_desc": "Asynchronous functions deleteScheduledEmailReminder and deleteScheduledSMSReminder are called without await inside forEach loops. This occurs during booking rescheduling/cancellation, and workflow/workflow step deletion/updates. Consequently, scheduled workflow reminders may not be reliably cancelled, potentially leaving them active.",
+          "match_score": 0.917,
+          "file_matched": true,
+          "line_distance": 1
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "b6950cbc-5750-41bb-b080-d6a3ac998e51",
+          "title": "Inconsistent argument passing in deleteScheduledEmailReminder",
+          "description": "In `handleNewBooking.ts`, `deleteScheduledEmailReminder` is called with three arguments `(reminder.id, reminder.referenceId, true)`, while in `handleCancelBooking.ts` it is called with two arguments `(reminder.id, reminder.referenceId)`. This inconsistency suggests either a missing parameter in one of the calls or an incorrect extra argument. If the third argument is not supported by the function signature, it could be ignored or cause unexpected behavior.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/features/bookings/lib/handleNewBooking.ts",
+          "line": 965,
+          "suggested_fix": ""
+        },
+        {
+          "id": "31b20866-0509-4802-bea7-07f9ec794c41",
+          "title": "[RULE-006] Convention Violation",
+          "description": "Debug console statement left in code",
+          "category": "convention",
+          "severity": "warning",
+          "file_path": "packages/features/ee/workflows/api/scheduleEmailReminders.ts",
+          "line": 76,
+          "suggested_fix": "Adhere to convention rule RULE-006"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "When immediateDelete is true, the deleteScheduledEmailReminder function cancels ...",
+          "file_path": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "line_start": 484,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "When immediateDelete is true, the deleteScheduledEmailReminder function cancels the SendGrid email but fails to delete the corresponding WorkflowReminder record from the database. This creates orphaned database entries and is inconsistent with the immediateDelete: false path, which marks the record as cancelled. The SendGrid DELETE API call is also omitted in this path."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_cal_dot_com_6",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 3,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 3.452,
+      "matched_pairs": [],
+      "unmatched_predictions": [
+        {
+          "id": "00cd83b4-89e6-4d13-a1c2-a9927fd93b77",
+          "title": "Incorrect logic for date override availability check",
+          "description": "In `checkIfIsAvailable`, the variable `dateOverrideExist` is set to `true` inside the `find` callback. However, the logic immediately after the `find` call is flawed. If `find` returns a truthy value (meaning a matching override was found), the code returns `false` (unavailable). But if `find` returns `undefined` (no match), it checks `if (dateOverrideExist)`. Since `dateOverrideExist` is only set to `true` inside the callback, if the callback runs and sets it to `true` but the subsequent conditions in the callback return `false` (so `find` continues or returns undefined), the state of `dateOverrideExist` might be `true` even though no valid override was found, or the logic flow is simply inverted/confusing. Specifically, if a date override exists for the day, the slot should be checked against the override's start/end times. The current logic seems to mark the slot as unavailable if *any* override matches the day, which is incorrect if the slot is outside the override's specific time window but within the day.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/trpc/server/routers/viewer/slots.ts",
+          "line": 102,
+          "suggested_fix": ""
+        },
+        {
+          "id": "8db45489-c97d-42da-8ee4-35c225258e7d",
+          "title": "Potential timezone offset calculation error",
+          "description": "In `packages/lib/slots.ts`, the code calculates `organizerUtcOffset` and `inviteeUtcOffset` and then applies an `offset` to `override.start` and `override.end`. If `override.start` is already a UTC timestamp (which is typical for database storage), converting it to the organizer's timezone to get the offset, and then adding the difference to the UTC time, is a valid way to shift the time. However, the code uses `dayjs(override.start.toString())`. If `override.start` is a `Date` object, `.toString()` produces a string representation that might not be parsed correctly by dayjs in all environments or might lose precision. It is safer to use `dayjs(override.start)` directly. Furthermore, the logic assumes `override.start` is in UTC. If it's not, this calculation will be wrong.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/lib/slots.ts",
+          "line": 211,
+          "suggested_fix": ""
+        },
+        {
+          "id": "33dc2527-6196-49f2-a046-a5cd2c82a26e",
+          "title": "Incomplete working hours check",
+          "description": "The diff for `packages/trpc/server/routers/viewer/slots.ts` is cut off at `if (workingHour.days.includes(slotStartTim`. This suggests the code is incomplete or the diff is truncated. If the code is actually incomplete in the PR, it will cause a syntax error. If it's just truncated in the view, the logic needs to be verified to ensure it correctly handles the working hours check in conjunction with the date override logic.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/trpc/server/routers/viewer/slots.ts",
+          "line": 150,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Incorrect end time calculation using slotStartTime instead of slotEndTime",
+          "file_path": "apps/web/test/lib/getSchedule.test.ts",
+          "line_start": 787,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Incorrect end time calculation using slotStartTime instead of slotEndTime"
+        },
+        {
+          "title": "Using === for dayjs object comparison will always return false as it compares ob...",
+          "file_path": "apps/web/test/lib/getSchedule.test.ts",
+          "line_start": 787,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Using === for dayjs object comparison will always return false as it compares object references, not values. Use .isSame() method instead: dayjs(date.start).add(utcOffset, 'minutes').isSame(dayjs(date.end).add(utcOffset, minutes))"
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_cal_dot_com_7",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 4,
+      "false_negatives": 9,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 2.516,
+      "matched_pairs": [],
+      "unmatched_predictions": [
+        {
+          "id": "e789a390-6273-4cdf-bf9d-374318a4c826",
+          "title": "Timing Attack Vulnerability in Webhook Secret Verification",
+          "description": "The webhook secret is compared using the standard `!==` operator. This is vulnerable to timing attacks, where an attacker can measure the response time to guess the secret character by character. A timing-safe comparison function (e.g., `crypto.timingSafeEqual`) should be used instead.",
+          "category": "security",
+          "severity": "warning",
+          "file_path": "apps/web/pages/api/webhook/app-credential.ts",
+          "line": 24,
+          "suggested_fix": ""
+        },
+        {
+          "id": "6ab4876a-1f32-4aff-b511-473185923a3e",
+          "title": "Missing Error Handling for Decryption and JSON Parsing",
+          "description": "The code calls `symmetricDecrypt` and `JSON.parse` without a try-catch block. If the `keys` field is not valid base64, not encrypted with the correct key, or not valid JSON after decryption, the API will throw an unhandled exception, resulting in a 500 Internal Server Error. This can leak information about the failure mode and disrupt service availability.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "apps/web/pages/api/webhook/app-credential.ts",
+          "line": 52,
+          "suggested_fix": ""
+        },
+        {
+          "id": "56d531e5-a33d-4149-a156-74cc0ef393cc",
+          "title": "Potential Information Leakage in Error Messages",
+          "description": "The error messages returned by the API (e.g., 'User not found', 'App not found') can be used by an attacker to enumerate valid user IDs and app slugs. While this is a common pattern, it's worth noting that in a security-sensitive context, generic error messages might be preferred to prevent enumeration.",
+          "category": "security",
+          "severity": "info",
+          "file_path": "apps/web/pages/api/webhook/app-credential.ts",
+          "line": 35,
+          "suggested_fix": ""
+        },
+        {
+          "id": "3dea083c-f4f6-4b75-bd89-ed5271d8128f",
+          "title": "[RULE-009] Convention Violation",
+          "description": "Potential hardcoded credential or secret detected",
+          "category": "convention",
+          "severity": "error",
+          "file_path": "packages/app-store/_utils/oauth/parseRefreshTokenResponse.ts",
+          "line": 26,
+          "suggested_fix": "Adhere to convention rule RULE-009"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The parseRefreshTokenResponse function incorrectly sets refresh_token to the har...",
+          "file_path": ".env.example",
+          "line_start": 233,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The parseRefreshTokenResponse function incorrectly sets refresh_token to the hardcoded string 'refresh_token' when it's missing from the OAuth refresh token response. This invalidates the token, breaking subsequent token refreshes and causing authentication failures."
+        },
+        {
+          "title": "The Zod schema in parseRefreshTokenResponse uses computed property keys [z.strin...",
+          "file_path": ".env.example",
+          "line_start": 233,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The Zod schema in parseRefreshTokenResponse uses computed property keys [z.string().toString()] and [z.string().optional().toString()] in minimumTokenResponseSchema, which is invalid Zod syntax and will throw a runtime error."
+        },
+        {
+          "title": "parseRefreshTokenResponse returns a Zod safeParse result ({ success, data, error...",
+          "file_path": ".env.example",
+          "line_start": 233,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "parseRefreshTokenResponse returns a Zod safeParse result ({ success, data, error }), not the credential key object. Persisting that as key stores the wrapper instead of the token payload; we should store the parsed data or use schema parse."
+        },
+        {
+          "title": "When APP_CREDENTIAL_SHARING_ENABLED and CALCOM_CREDENTIAL_SYNC_ENDPOINT are set,...",
+          "file_path": ".env.example",
+          "line_start": 233,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "When APP_CREDENTIAL_SHARING_ENABLED and CALCOM_CREDENTIAL_SYNC_ENDPOINT are set, the refreshFunction helper returns the fetch Response, but several callers (for example GoogleCalendarService.refreshAccessToken expecting res.data, and HubspotCalendarService.refreshAccessToken expecting a HubspotToken) assume it returns the integration-specific token object. That mismatch will cause runtime errors in the sync-enabled path unless the return type or those call sites are adjusted."
+        },
+        {
+          "title": "When the sync endpoint path is used, res is a fetch Response and has no .data; r...",
+          "file_path": ".env.example",
+          "line_start": 233,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "When the sync endpoint path is used, res is a fetch Response and has no .data; res?.data will be undefined and token.access_token will throw at runtime. This relies on a consistent return shape from refreshOAuthTokens, which isn\u2019t guaranteed currently."
+        },
+        {
+          "title": "The `refreshOAuthTokens` function is passed `credentialId` instead of `userId`, ...",
+          "file_path": ".env.example",
+          "line_start": 233,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The `refreshOAuthTokens` function is passed `credentialId` instead of `userId`, which breaks the credential sync functionality by causing incorrect user lookups. This issue can lead to failures in syncing user credentials, impacting user experience."
+        },
+        {
+          "title": "The Salesforce integration checks `response.statusText` instead of `response.ok`...",
+          "file_path": ".env.example",
+          "line_start": 233,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The Salesforce integration checks `response.statusText` instead of `response.ok` when handling OAuth token refresh responses. This can lead to unreliable behavior, as a successful response may not be correctly identified, resulting in the use of stale credentials and potential authentication failures."
+        },
+        {
+          "title": "The `jsforce.Connection` is created using stale `credentialKey.access_token` and...",
+          "file_path": ".env.example",
+          "line_start": 233,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The `jsforce.Connection` is created using stale `credentialKey.access_token` and `credentialKey.instance_url` after a token refresh, which can lead to authentication failures and incorrect data access. Ensure that the connection is established using the refreshed token values instead."
+        },
+        {
+          "title": "The `appCredentialWebhookRequestBodySchema.parse` function can throw on invalid ...",
+          "file_path": ".env.example",
+          "line_start": 233,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The `appCredentialWebhookRequestBodySchema.parse` function can throw on invalid payloads, resulting in 500 Internal Server Errors instead of the expected 400 Bad Request responses. This can lead to confusion for clients and hinder proper error handling."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_cal_dot_com_8",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.705,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "Using retryCount: reminder.retryCount + 1 reads a possibly stale value and can l...",
+          "file_path": "packages/features/ee/workflows/api/scheduleSMSReminders.ts",
+          "line_start": 31,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Using retryCount: reminder.retryCount + 1 reads a possibly stale value and can lose increments under concurrency; consider an atomic increment via Prisma (increment: 1) to avoid race conditions (also applies to the similar update in the catch block)."
+        },
+        {
+          "title": "The deletion logic in scheduleSMSReminders.ts incorrectly deletes non-SMS workfl...",
+          "file_path": "packages/features/ee/workflows/api/scheduleSMSReminders.ts",
+          "line_start": 31,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The deletion logic in scheduleSMSReminders.ts incorrectly deletes non-SMS workflow reminders (e.g., Email, WhatsApp) that have retryCount > 1. This occurs because the retryCount condition within the OR clause for deletion lacks a method: WorkflowMethods.SMS filter, causing it to apply to all reminder types instead of only SMS reminders, which is the intended scope of this function."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_cal_dot_com_9",
+      "dataset_name": "martian",
+      "true_positives": 2,
+      "false_positives": 4,
+      "false_negatives": 4,
+      "precision": 0.3333,
+      "recall": 0.3333,
+      "f1_score": 0.3333,
+      "duration_seconds": 10.276,
+      "matched_pairs": [
+        {
+          "predicted": {
+            "id": "8d1b5681-3b4c-4b18-9314-2f01f1fd1319",
+            "title": "Alias import path may be unresolved in some build configurations",
+            "description": "`BookingListItem.tsx` imports `AddGuestsDialog` using `@components/dialog/AddGuestsDialog`. If the project\u2019s module alias does not include `@components`, this import could fail at compile time.",
+            "category": "bug",
+            "severity": "info",
+            "file_path": "apps/web/components/booking/BookingListItem.tsx",
+            "line": 44,
+            "suggested_fix": ""
+          },
+          "gt_title": "The `sendAddGuestsEmails` function does not check the `disableStandardEmails` fl...",
+          "gt_file": "apps/web/components/booking/BookingListItem.tsx",
+          "gt_line_start": 46,
+          "gt_line_end": null,
+          "gt_severity": "warning",
+          "gt_category": "bug",
+          "gt_desc": "The `sendAddGuestsEmails` function does not check the `disableStandardEmails` flags in the `EventType` metadata, which may result in sending emails to hosts/attendees even when standard emails are disabled for the event type.",
+          "match_score": 0.914,
+          "file_matched": true,
+          "line_distance": 2
+        },
+        {
+          "predicted": {
+            "id": "478a29d5-97f3-4479-8511-64271dc61a79",
+            "title": "[RULE-006] Convention Violation",
+            "description": "Debug console statement left in code",
+            "category": "convention",
+            "severity": "warning",
+            "file_path": "packages/trpc/server/routers/viewer/bookings/addGuests.handler.ts",
+            "line": 170,
+            "suggested_fix": "Adhere to convention rule RULE-006"
+          },
+          "gt_title": "The addGuests.handler.ts blacklist check uses blacklistedGuestEmails.includes(gu...",
+          "gt_file": "packages/trpc/server/routers/viewer/bookings/addGuests.handler.ts",
+          "gt_line_start": 1,
+          "gt_line_end": null,
+          "gt_severity": "error",
+          "gt_category": "security",
+          "gt_desc": "The addGuests.handler.ts blacklist check uses blacklistedGuestEmails.includes(guest) after lowercasing the blacklist but not the input guest emails, allowing attackers to bypass BLACKLISTED_GUEST_EMAILS restrictions by submitting emails with uppercase characters.",
+          "match_score": 0.4,
+          "file_matched": true,
+          "line_distance": 169
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "1bc2193e-0b23-427d-8b21-af498d097489",
+          "title": "Initial empty string in email list triggers false validation errors",
+          "description": "The component initializes `multiEmailValue` with `[\"\"]`. When the user opens the dialog without adding any email, the validation schema (`z.array(z.string().email())`) fails because an empty string is not a valid email. This results in an \"invalid email\" error being shown even though no input was provided.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "apps/web/components/dialog/AddGuestsDialog.tsx",
+          "line": 31,
+          "suggested_fix": ""
+        },
+        {
+          "id": "6ebeb74f-9ff4-4ca0-8303-43c0ff336f96",
+          "title": "Persistent `isInvalidEmail` flag after successful submission",
+          "description": "When validation fails, `isInvalidEmail` is set to `true`, but it is never reset to `false` after the user corrects the input or after a successful mutation. This can leave the error UI visible even after the issue is resolved.",
+          "category": "bug",
+          "severity": "info",
+          "file_path": "apps/web/components/dialog/AddGuestsDialog.tsx",
+          "line": 45,
+          "suggested_fix": ""
+        },
+        {
+          "id": "b8bbddaf-0706-421c-b158-04eb043c40e1",
+          "title": "Potential duplicate submission while mutation is loading",
+          "description": "The dialog does not disable the \"Add\" button or otherwise prevent multiple clicks while `addGuestsMutation` is in progress. Rapid clicks could fire multiple mutation requests, leading to race conditions or duplicate guest entries.",
+          "category": "bug",
+          "severity": "info",
+          "file_path": "apps/web/components/dialog/AddGuestsDialog.tsx",
+          "line": 57,
+          "suggested_fix": ""
+        },
+        {
+          "id": "44463e0d-2769-443a-85f2-de9b7d1801b1",
+          "title": "Validation does not differentiate between format errors and duplicate emails",
+          "description": "The `refine` check only ensures uniqueness, but the UI shows a generic \"invalid email\" message for any validation failure. Users won't know if the problem is an incorrectly formatted email or a duplicate entry.",
+          "category": "bug",
+          "severity": "info",
+          "file_path": "apps/web/components/dialog/AddGuestsDialog.tsx",
+          "line": 22,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The logic for checking team admin/owner permissions is incorrect. This condition...",
+          "file_path": "apps/web/components/booking/BookingListItem.tsx",
+          "line_start": 46,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The logic for checking team admin/owner permissions is incorrect. This condition uses AND (&&) which requires both isTeamAdmin AND isTeamOwner to be true, but it should use OR (||) since a user needs to be either an admin OR an owner to have permission."
+        },
+        {
+          "title": "The sendAddGuestsEmails function in email-manager.ts passes the full calendarEve...",
+          "file_path": "packages/emails/email-manager.ts",
+          "line_start": 21,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The sendAddGuestsEmails function in email-manager.ts passes the full calendarEvent.attendees array when determining which attendees receive AttendeeScheduledEmail vs AttendeeAddGuestsEmail, but checks if newGuests.includes(attendee.email) where newGuests is the input guests array."
+        },
+        {
+          "title": "uniqueGuests filters out existing attendees and blacklisted emails but does not ...",
+          "file_path": "apps/web/components/booking/BookingListItem.tsx",
+          "line_start": 46,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "uniqueGuests filters out existing attendees and blacklisted emails but does not deduplicate duplicates within the input; createMany can insert duplicate attendee rows if the client submits repeated emails."
+        },
+        {
+          "title": "Starting with an array containing an empty string may cause validation issues. C...",
+          "file_path": "apps/web/components/booking/BookingListItem.tsx",
+          "line_start": 46,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "Starting with an array containing an empty string may cause validation issues. Consider starting with an empty array [] and handling the empty state in the MultiEmail component instead."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_cal_dot_com_10",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 4,
+      "false_negatives": 4,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 2.813,
+      "matched_pairs": [],
+      "unmatched_predictions": [
+        {
+          "id": "f14fcd52-8201-4062-b41d-9a23e6421ead",
+          "title": "Missing import for SelectedCalendarRepository",
+          "description": "The file `packages/app-store/googlecalendar/lib/CalendarService.ts` uses `SelectedCalendarRepository` but the diff does not show an import statement for it. If it is not already imported at the top of the file, this will cause a runtime error or compilation failure.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 1023,
+          "suggested_fix": ""
+        },
+        {
+          "id": "381bc7b7-f686-4056-a801-d8ee6f488f8c",
+          "title": "Potential race condition in updateManyByCredentialId",
+          "description": "The call to `SelectedCalendarRepository.updateManyByCredentialId` is asynchronous and not awaited in a way that guarantees consistency if multiple requests are in flight. More importantly, it updates `updatedAt` for *all* calendars under the credential, which might be broader than intended if only specific calendars were fetched. However, the main concern is that if `fetchAvailability` fails, the code still proceeds to update the timestamp (depending on where the try/catch is, though not visible in diff, the placement suggests it's after the fetch). If `fetchAvailability` throws, the update should not happen. The current placement is after `setAvailabilityInCache`, so if that succeeds, it's likely fine, but the lack of explicit error handling around the repository call is a concern.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 1023,
+          "suggested_fix": ""
+        },
+        {
+          "id": "6d5389c8-64c4-49c0-9cdb-46c10c0254d6",
+          "title": "Incomplete component definition",
+          "description": "The file `packages/features/apps/components/CredentialActionsDropdown.tsx` is cut off in the diff at `const hasC`. This suggests the file is incomplete or the diff is truncated. If the file is actually incomplete in the repository, it will fail to compile. Assuming the diff is just truncated, the component logic needs to be verified for completeness.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/features/apps/components/CredentialActionsDropdown.tsx",
+          "line": 157,
+          "suggested_fix": ""
+        },
+        {
+          "id": "a035a8f1-95f9-47be-aa04-c72e0e40fd3b",
+          "title": "Missing error handling for cache deletion",
+          "description": "The `deleteCacheMutation` in `CredentialActionsDropdown.tsx` does not handle specific error cases or provide detailed error messages. The `onError` callback only shows a generic error toast. It would be better to handle specific errors (e.g., permission denied, network error) for better user experience.",
+          "category": "bug",
+          "severity": "info",
+          "file_path": "packages/features/apps/components/CredentialActionsDropdown.tsx",
+          "line": 48,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The updateManyByCredentialId call uses an empty data object, which prevents Pris...",
+          "file_path": "apps/web/package.json",
+          "line_start": 11,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The updateManyByCredentialId call uses an empty data object, which prevents Prisma's @updatedAt decorator from updating the updatedAt timestamp. This results in inaccurate cache status tracking, as the timestamp isn't updated when the cache is refreshed. To fix this, explicitly set the updatedAt field."
+        },
+        {
+          "title": "logic: macOS-specific sed syntax with empty string after -i flag will fail on Li...",
+          "file_path": "apps/web/package.json",
+          "line_start": 11,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "logic: macOS-specific sed syntax with empty string after -i flag will fail on Linux systems"
+        },
+        {
+          "title": "Throwing a generic Error for authentication failures results in a 500 response i...",
+          "file_path": "apps/web/package.json",
+          "line_start": 11,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Throwing a generic Error for authentication failures results in a 500 response in tRPC. Instead, it should return a structured TRPCError with an appropriate code, such as FORBIDDEN, to accurately reflect the error type."
+        },
+        {
+          "title": "Date is formatted with hardcoded 'en-US' locale instead of using the user's loca...",
+          "file_path": "apps/web/package.json",
+          "line_start": 11,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Date is formatted with hardcoded 'en-US' locale instead of using the user's locale from useLocale, which can lead to incorrect date representation for users in different locales."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_discourse_1",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 4,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.808,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The downsize method is defined twice. The second definition, which expects a sin...",
+          "file_path": "app/assets/javascripts/discourse/lib/utilities.js",
+          "line_start": 182,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The downsize method is defined twice. The second definition, which expects a single dimensions string parameter, overrides the first, which expected separate max_width and max_height parameters. This makes the original method unreachable and breaks existing code that calls it with separate width and height arguments."
+        },
+        {
+          "title": "Hardcoding maxSizeKB = 10 * 1024 ignores Discourse.SiteSettings['max_' + type + ...",
+          "file_path": "app/assets/javascripts/discourse/lib/utilities.js",
+          "line_start": 182,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "Hardcoding maxSizeKB = 10 * 1024 ignores Discourse.SiteSettings['max_' + type + '_size_kb'], so the client-side limit can diverge from server-side and per-type settings (also applies to the 413 handler below)."
+        },
+        {
+          "title": "Passing 80% as the dimensions can fail for animated GIFs when allow_animated_thu...",
+          "file_path": "app/assets/javascripts/discourse/lib/utilities.js",
+          "line_start": 182,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Passing 80% as the dimensions can fail for animated GIFs when allow_animated_thumbnails is true, since the animated path uses gifsicle --resize-fit which expects WxH geometry, not a percentage; downsizing would then silently fail."
+        },
+        {
+          "title": "The loop checking `tempfile.size` may never terminate correctly due to stale cac...",
+          "file_path": "app/assets/javascripts/discourse/lib/utilities.js",
+          "line_start": 182,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The loop checking `tempfile.size` may never terminate correctly due to stale cached size, leading to potential infinite loops or incorrect file handling after modifications."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_discourse_2",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.156,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "logic: Potential nil pointer exception - if no TopicUser record exists, tu will ...",
+          "file_path": "app/assets/javascripts/discourse/components/dropdown-button.js.es6",
+          "line_start": 27,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "logic: Potential nil pointer exception - if no TopicUser record exists, tu will be nil and calling methods on it will crash"
+        },
+        {
+          "title": "Typo in property name: 'stopNotificiationsText' should be 'stopNotificationsText...",
+          "file_path": "app/assets/javascripts/discourse/components/dropdown-button.js.es6",
+          "line_start": 27,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "Typo in property name: 'stopNotificiationsText' should be 'stopNotificationsText' (missing 'n' in 'Notifications')"
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_discourse_3",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.891,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "BlockedEmail.should_block_email? method has side effects during a read operation...",
+          "file_path": "app/assets/javascripts/discourse/controllers/create_account_controller.js",
+          "line_start": 17,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "BlockedEmail.should_block_email? method has side effects during a read operation - it updates statistics even when just checking if an email should be blocked. This could cause race conditions in concurrent environments and makes the method name misleading."
+        },
+        {
+          "title": "The regex pattern @(#{domains}) in email_in_restriction_setting? method only mat...",
+          "file_path": "app/assets/javascripts/discourse/controllers/create_account_controller.js",
+          "line_start": 17,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The regex pattern @(#{domains}) in email_in_restriction_setting? method only matches domain suffixes, not full domains with proper boundary anchoring. An attacker can register evil.example.com to bypass a whitelist entry for example.com."
+        },
+        {
+          "title": "The case-sensitive email lookup in `BlockedEmail.should_block?` creates a bypass...",
+          "file_path": "app/assets/javascripts/discourse/controllers/create_account_controller.js",
+          "line_start": 17,
+          "line_end": null,
+          "severity": "error",
+          "category": "security",
+          "description": "The case-sensitive email lookup in `BlockedEmail.should_block?` creates a bypass risk, allowing 'User@Example.com' to bypass a block on 'user@example.com'. This can lead to unauthorized access to blocked users."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_discourse_4",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 3,
+      "false_negatives": 8,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 3.072,
+      "matched_pairs": [],
+      "unmatched_predictions": [
+        {
+          "id": "07d78d58-3a3b-4b53-b0a4-7ebe427c7b3f",
+          "title": "Invalid X-Frame-Options Header",
+          "description": "The controller sets `response.headers['X-Frame-Options'] = \"ALLOWALL\"`. This is not a valid value for the X-Frame-Options header (valid values are DENY, SAMEORIGIN, or ALLOW-FROM). This likely results in the header being ignored or treated as invalid, leaving the application vulnerable to clickjacking attacks where the embed could be framed by malicious sites.",
+          "category": "security",
+          "severity": "warning",
+          "file_path": "app/controllers/embed_controller.rb",
+          "line": 28,
+          "suggested_fix": ""
+        },
+        {
+          "id": "724a7697-866d-4119-b45e-2ea1b1e194a6",
+          "title": "Insecure Referer Validation",
+          "description": "The `ensure_embeddable` filter validates the `request.referer` against `SiteSetting.embeddable_host`. The Referer header is not a secure mechanism for authentication or authorization as it can be easily spoofed by clients or stripped by proxies. This allows an attacker to bypass the host check by sending a crafted Referer header.",
+          "category": "security",
+          "severity": "warning",
+          "file_path": "app/controllers/embed_controller.rb",
+          "line": 25,
+          "suggested_fix": ""
+        },
+        {
+          "id": "957d0eaf-9844-4cdb-a9ae-44a1d10e313c",
+          "title": "Weak Origin Check in JavaScript",
+          "description": "In `embed.js`, the `postMessageReceived` function checks `if (discourseUrl.indexOf(e.origin) === -1)`. This is a weak check because `indexOf` checks for substring presence, not exact match. If `discourseUrl` is `https://example.com` and `e.origin` is `https://example.com.evil.com`, the check might pass if the URL structure allows it, or more commonly, it's just a poor practice. It should use strict equality `===` after normalizing the origin.",
+          "category": "security",
+          "severity": "warning",
+          "file_path": "app/assets/javascripts/embed.js",
+          "line": 16,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The PollFeed job calls open(SiteSetting.feed_polling_url) without validating the...",
+          "file_path": "Gemfile",
+          "line_start": 209,
+          "line_end": null,
+          "severity": "error",
+          "category": "security",
+          "description": "The PollFeed job calls open(SiteSetting.feed_polling_url) without validating the URL, allowing an attacker who controls the feed_polling_url site setting to make the server fetch arbitrary internal or external URLs."
+        },
+        {
+          "title": "The current origin validation using indexOf is insufficient and can be bypassed....",
+          "file_path": "Gemfile",
+          "line_start": 209,
+          "line_end": null,
+          "severity": "warning",
+          "category": "security",
+          "description": "The current origin validation using indexOf is insufficient and can be bypassed. An attacker could use a malicious domain like evil-discourseUrl.com to pass this check."
+        },
+        {
+          "title": "postMessage targetOrigin should be the origin (scheme+host+port), not the full r...",
+          "file_path": "Gemfile",
+          "line_start": 209,
+          "line_end": null,
+          "severity": "warning",
+          "category": "security",
+          "description": "postMessage targetOrigin should be the origin (scheme+host+port), not the full referrer URL; using the full URL will cause the message to be dropped and prevent resizing."
+        },
+        {
+          "title": "The code sets X-Frame-Options: ALLOWALL which completely disables clickjacking p...",
+          "file_path": "Gemfile",
+          "line_start": 209,
+          "line_end": null,
+          "severity": "warning",
+          "category": "security",
+          "description": "The code sets X-Frame-Options: ALLOWALL which completely disables clickjacking protection. The referer validation can be bypassed (referer headers are easily spoofed), and the fallback to empty string for nil referer masks validation failures."
+        },
+        {
+          "title": "The TopicEmbed.import method is susceptible to a NoMethodError if the contents p...",
+          "file_path": "Gemfile",
+          "line_start": 209,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The TopicEmbed.import method is susceptible to a NoMethodError if the contents parameter is nil when attempting to append a string, and an XSS vulnerability due to unescaped url interpolation in the generated HTML."
+        },
+        {
+          "title": "The ERB block closes with end if, which is invalid Ruby/ERB and will raise at re...",
+          "file_path": "Gemfile",
+          "line_start": 209,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The ERB block closes with end if, which is invalid Ruby/ERB and will raise at render; it should just be end to close the if block."
+        },
+        {
+          "title": "Calling `i.content.scrub` assumes that `i.content` is always populated. However,...",
+          "file_path": "Gemfile",
+          "line_start": 209,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Calling `i.content.scrub` assumes that `i.content` is always populated. However, many RSS feeds do not provide a `content` field, leading to a potential nil pointer exception when `i.content` is nil. A fallback to `description` should be implemented to prevent crashes."
+        },
+        {
+          "title": "An unescaped request header (request.referer) is interpolated into JavaScript wi...",
+          "file_path": "Gemfile",
+          "line_start": 209,
+          "line_end": null,
+          "severity": "error",
+          "category": "security",
+          "description": "An unescaped request header (request.referer) is interpolated into JavaScript without proper escaping, which can lead to XSS vulnerabilities if the referer contains malicious content. This issue can allow attackers to execute arbitrary scripts in the context of the application."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_discourse_5",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.704,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "Mixing float: left with flexbox causes layout issues. Further this PR removes th...",
+          "file_path": "app/assets/stylesheets/common/base/header.scss",
+          "line_start": 17,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "Mixing float: left with flexbox causes layout issues. Further this PR removes the float-based right alignment for .d-header .panel, which may cause the login panel in the non-Ember/noscript header (where .panel is nested inside .row and not a flex item) to stack under the title instead of remaining right-aligned."
+        },
+        {
+          "title": "-ms-align-items never existed in any version of IE/Edge; the correct legacy prop...",
+          "file_path": "app/assets/stylesheets/common/base/header.scss",
+          "line_start": 17,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "-ms-align-items never existed in any version of IE/Edge; the correct legacy property is -ms-flex-align."
+        },
+        {
+          "title": "-webkit-box-ordinal-group and -moz-box-ordinal-group require values starting fro...",
+          "file_path": "app/assets/stylesheets/common/base/header.scss",
+          "line_start": 17,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "-webkit-box-ordinal-group and -moz-box-ordinal-group require values starting from 1, not 0. If $val is 0, this will cause incorrect rendering in older browsers, leading to layout issues."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_discourse_6",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.786,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The include_website_name method is missing the required ? suffix. Rails serializ...",
+          "file_path": "app/assets/javascripts/discourse/controllers/user.js.es6",
+          "line_start": null,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The include_website_name method is missing the required ? suffix. Rails serializers expect include_ methods to end with ? for conditional attribute inclusion, a convention followed by other methods in this serializer. Without it, the website_name attribute may not be conditionally included as intended. Additionally, the '.' << website_host string concatenation should be replaced with '.' + website_host or '.#{website_host}' to avoid mutating string literals, which can lead to issues."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_discourse_7",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.2,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "In .topic-meta-data h5 a, the original code had color: scale-color($primary, $li...",
+          "file_path": "app/assets/stylesheets/common/admin/admin_base.scss",
+          "line_start": 385,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "In .topic-meta-data h5 a, the original code had color: scale-color($primary, $lightness: 30%) but was changed to dark-light-choose(scale-color($primary, $lightness: 70%), scale-color($secondary, $lightness: 30%)). The lightness for the light theme changed from 30% to 70%, which is a dramatic inversion"
+        },
+        {
+          "title": "This change for desktop/user.css changes $primary from 30% to 50% for the light ...",
+          "file_path": "app/assets/stylesheets/common/admin/admin_base.scss",
+          "line_start": 385,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "This change for desktop/user.css changes $primary from 30% to 50% for the light theme; most other changes preserve the original $primary value and move the complement to $secondary for dark. Consider reviewing this (also applies to a similar .name change in the mobile variant)."
+        },
+        {
+          "title": "In topic-post.css the original code used $lightness: 70% but the replacement use...",
+          "file_path": "app/assets/stylesheets/common/admin/admin_base.scss",
+          "line_start": 385,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "In topic-post.css the original code used $lightness: 70% but the replacement uses $lightness: 30% for the light theme. This makes the text significantly darker than intended."
+        },
+        {
+          "title": "The light theme color for `.topic-meta-data h5 a` was changed from `scale-color(...",
+          "file_path": "app/assets/stylesheets/common/admin/admin_base.scss",
+          "line_start": 385,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The light theme color for `.topic-meta-data h5 a` was changed from `scale-color($primary, $lightness: 30%)` to `scale-color($primary, $lightness: 70%)`, which may unintentionally reduce contrast and affect readability. This change should be reviewed to ensure it aligns with design intentions."
+        },
+        {
+          "title": "In mobile/user.scss line 497, the lightness value for dark themes should be inve...",
+          "file_path": "app/assets/stylesheets/common/base/user.scss",
+          "line_start": 497,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "In mobile/user.scss line 497, the lightness value for dark themes should be inverted to 70% instead of being changed to 50%. This change may lead to unintended visual regressions in light themes."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_discourse_8",
+      "dataset_name": "martian",
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 5,
+      "precision": 1.0,
+      "recall": 0.1667,
+      "f1_score": 0.2857,
+      "duration_seconds": 1.11,
+      "matched_pairs": [
+        {
+          "predicted": {
+            "id": "41f41bb8-b8e5-4910-9976-d5f7c7288458",
+            "title": "[RULE-008] Convention Violation",
+            "description": "TODO/FIXME marker introduced in PR diff",
+            "category": "convention",
+            "severity": "info",
+            "file_path": "app/assets/javascripts/admin/controllers/admin-group.js.es6",
+            "line": 62,
+            "suggested_fix": "Adhere to convention rule RULE-008"
+          },
+          "gt_title": " The findMembers() call is now asynchronous and unhandled. The controller may no...",
+          "gt_file": "app/assets/javascripts/admin/controllers/admin-group.js.es6",
+          "gt_line_start": 4,
+          "gt_line_end": null,
+          "gt_severity": "error",
+          "gt_category": "bug",
+          "gt_desc": " The findMembers() call is now asynchronous and unhandled. The controller may not have member data immediately available, creating a race condition.",
+          "match_score": 0.4,
+          "file_matched": true,
+          "line_distance": 58
+        }
+      ],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "In the next action, capping the next offset at user_count can produce an empty p...",
+          "file_path": "app/assets/javascripts/admin/controllers/admin-group.js.es6",
+          "line_start": 4,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "In the next action, capping the next offset at user_count can produce an empty page (e.g., total equal to limit results in offset == total, showing 2/2 with no members). This can cause confusing UX on the last page."
+        },
+        {
+          "title": "The remove_member test uses xhr :put to call the remove_member action, but the r...",
+          "file_path": "app/assets/javascripts/admin/controllers/admin-group.js.es6",
+          "line_start": 4,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The remove_member test uses xhr :put to call the remove_member action, but the route defines delete 'members' => 'groups#remove_member' requiring DELETE method."
+        },
+        {
+          "title": "The `totalPages` calculation using `Math.floor(user_count / limit) + 1` produces...",
+          "file_path": "app/assets/javascripts/admin/controllers/admin-group.js.es6",
+          "line_start": 4,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The `totalPages` calculation using `Math.floor(user_count / limit) + 1` produces an extra page when `user_count` is an exact multiple of `limit`, leading to incorrect pagination. For example, with 100 users and a limit of 50, it reports 3 pages instead of 2, allowing navigation to an empty page."
+        },
+        {
+          "title": "Expected to return a value at the end of function - code paths without explicit ...",
+          "file_path": "app/assets/javascripts/admin/controllers/admin-group.js.es6",
+          "line_start": 4,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Expected to return a value at the end of function - code paths without explicit returns will return undefined"
+        },
+        {
+          "title": "The route provides the group's ID in params[:id], but the code attempts to read ...",
+          "file_path": "app/assets/javascripts/admin/controllers/admin-group.js.es6",
+          "line_start": 4,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The route provides the group's ID in params[:id], but the code attempts to read it from params[:group_id], causing the action to fail. This results in a broken feature when trying to access group memberships."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_discourse_9",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.786,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The @loaded_locales instance variable in translate_accelerator.rb is lazily init...",
+          "file_path": "lib/freedom_patches/translate_accelerator.rb",
+          "line_start": 62,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "The @loaded_locales instance variable in translate_accelerator.rb is lazily initialized and accessed by multiple concurrent threads without synchronization."
+        },
+        {
+          "title": "Consider normalizing the input locale (e.g., to a symbol) when checking/loading ...",
+          "file_path": "app/controllers/application_controller.rb",
+          "line_start": 158,
+          "line_end": null,
+          "severity": "info",
+          "category": "performance",
+          "description": "Consider normalizing the input locale (e.g., to a symbol) when checking/loading here to avoid double-loading if the same locale is passed as a String vs Symbol (also applies to other locations in the PR)."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_discourse_10",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 7,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.27,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The EmbeddableHost model's before_validation callback calls self.host.sub! to st...",
+          "file_path": "app/assets/javascripts/admin/adapters/embedding.js.es6",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The EmbeddableHost model's before_validation callback calls self.host.sub! to strip http://, https://, and path segments, but if self.host is nil, this raises NoMethodError."
+        },
+        {
+          "title": "The update and destroy methods in Admin::EmbeddableHostsController do not valida...",
+          "file_path": "app/assets/javascripts/admin/adapters/embedding.js.es6",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The update and destroy methods in Admin::EmbeddableHostsController do not validate the existence of the EmbeddableHost record retrieved by ID. If EmbeddableHost.where(id: params[:id]).first returns nil (i.e., the host does not exist), attempting to call methods on the nil object (e.g., save_host or destroy) will result in a NoMethodError."
+        },
+        {
+          "title": "record_for_host compares lower(host) = ? but does not normalize the parameter\u2019s ...",
+          "file_path": "app/assets/javascripts/admin/adapters/embedding.js.es6",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "record_for_host compares lower(host) = ? but does not normalize the parameter\u2019s case, so mixed\u2011case referer hosts may fail to match even though comparison intends to be case\u2011insensitive."
+        },
+        {
+          "title": "Because this migration inserts embeddable_hosts rows with raw SQL, any existing ...",
+          "file_path": "app/assets/javascripts/admin/adapters/embedding.js.es6",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Because this migration inserts embeddable_hosts rows with raw SQL, any existing embeddable_hosts values that include http:// or /https:// or path segments won\u2019t go through the EmbeddableHost model\u2019s normalization, so the new host lookup (which compares only the bare host) may fail for migrated data. Consider ensuring that migrated hosts are normalized to the same format as newly created EmbeddableHost records so existing embedding configurations keep working."
+        },
+        {
+          "title": "The contents of `category_fabricator.rb` and `embeddable_host_fabricator.rb` hav...",
+          "file_path": "spec/fabricators/category_fabricator.rb",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The contents of `category_fabricator.rb` and `embeddable_host_fabricator.rb` have been swapped, resulting in the loss of original category fabricators and potentially causing errors in fabricator usage."
+        },
+        {
+          "title": "The SQL query in the `app/controllers/admin/embeddable_hosts_controller.rb` file...",
+          "file_path": "app/controllers/admin/embeddable_hosts_controller.rb",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "error",
+          "category": "security",
+          "description": "The SQL query in the `app/controllers/admin/embeddable_hosts_controller.rb` file uses string interpolation (`'#{h}'`) to insert values, which is vulnerable to SQL injection. It should use parameter binding or proper quoting to prevent this security vulnerability."
+        },
+        {
+          "title": "The migration accesses execute(...)[0]['id'] without checking if the query retur...",
+          "file_path": "app/assets/javascripts/admin/adapters/embedding.js.es6",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The migration accesses execute(...)[0]['id'] without checking if the query returned any rows, which causes a crash when no embed_category setting exists. This can lead to a broken feature when attempting to edit category/host relationships."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_grafana_1",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.905,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "Race condition: Multiple concurrent requests could pass the device count check s...",
+          "file_path": "packages/grafana-data/src/types/config.ts",
+          "line_start": 200,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Race condition: Multiple concurrent requests could pass the device count check simultaneously and create devices beyond the limit. Consider using a database transaction or lock."
+        },
+        {
+          "title": "Anonymous authentication now fails entirely if anonDeviceService.TagDevice retur...",
+          "file_path": "packages/grafana-data/src/types/config.ts",
+          "line_start": 200,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Anonymous authentication now fails entirely if anonDeviceService.TagDevice returns ErrDeviceLimitReached. Previously, device tagging was asynchronous and non-blocking. This change prevents anonymous users from authenticating when the device limit is reached."
+        },
+        {
+          "title": "The updateDevice function returns ErrDeviceLimitReached when rowsAffected == 0, ...",
+          "file_path": "packages/grafana-data/src/types/config.ts",
+          "line_start": 200,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "The updateDevice function returns ErrDeviceLimitReached when rowsAffected == 0, but zero affected rows means the device doesn't exist or falls outside the time window, not that a limit was reached."
+        },
+        {
+          "title": "Time window calculation inconsistency: Using device.UpdatedAt.UTC().Add(-anonymo...",
+          "file_path": "packages/grafana-data/src/types/config.ts",
+          "line_start": 200,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "Time window calculation inconsistency: Using device.UpdatedAt.UTC().Add(-anonymousDeviceExpiration) as the lower bound but device.UpdatedAt as the current time may not match the intended logic. Consider using time.Now().UTC() consistently."
+        },
+        {
+          "title": "The `tagDeviceUI` function populates the local cache with the device ID before t...",
+          "file_path": "packages/grafana-data/src/types/config.ts",
+          "line_start": 200,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The `tagDeviceUI` function populates the local cache with the device ID before the `CreateOrUpdateDevice` call. If `ErrDeviceLimitReached` is returned, the cache entry remains set, allowing subsequent requests to bypass the device limit until the cache expires after 29 minutes."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_grafana_2",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.81,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The Check operation exhibits asymmetric cache trust logic: cached permission gra...",
+          "file_path": "pkg/services/authz/rbac.go",
+          "line_start": 101,
+          "line_end": null,
+          "severity": "error",
+          "category": "security",
+          "description": "The Check operation exhibits asymmetric cache trust logic: cached permission grants are trusted and returned immediately, but cached denials from the same permission cache are ignored, leading to a fresh database lookup. This allows stale cached grants to provide access to revoked resources, posing a security risk. "
+        },
+        {
+          "title": "The test comment says the cached permissions 'allow access', but the map stores ...",
+          "file_path": "pkg/services/authz/rbac.go",
+          "line_start": 101,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "The test comment says the cached permissions 'allow access', but the map stores false for dashboards:uid:dash1, so checkPermission will still treat this scope as not allowed."
+        },
+        {
+          "title": "The cache key construction in `userPermDenialCacheKey` uses simple string concat...",
+          "file_path": "pkg/services/authz/rbac.go",
+          "line_start": 101,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The cache key construction in `userPermDenialCacheKey` uses simple string concatenation with underscores, which can lead to ambiguous keys and collision risks when any component contains underscores or is empty. This could result in incorrect denial cache hits, affecting user permissions."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_grafana_3",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.931,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The ContextualLoggerMiddleware methods (QueryData, CallResource, CheckHealth, Co...",
+          "file_path": "pkg/plugins/log/fake.go",
+          "line_start": 3,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The ContextualLoggerMiddleware methods (QueryData, CallResource, CheckHealth, CollectMetrics) panic when a nil request is received. This occurs because they directly access req.PluginContext (via the instrumentContext function) without first checking if req is nil. This is a regression, as previous middleware layers gracefully handled nil requests."
+        },
+        {
+          "title": "The traceID is no longer logged for plugin requests. During a refactoring, the t...",
+          "file_path": "pkg/plugins/log/fake.go",
+          "line_start": 3,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "The traceID is no longer logged for plugin requests. During a refactoring, the tracing import and the logic to extract and add traceID from the context to log parameters were removed from the LoggerMiddleware. The newly introduced ContextualLoggerMiddleware does not add this information, resulting in missing traceID in plugin request logs and impacting debugging and request tracing capabilities."
+        },
+        {
+          "title": "The `TestLogger.FromContext` method returns a new `TestLogger` instance via `New...",
+          "file_path": "pkg/plugins/log/fake.go",
+          "line_start": 3,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The `TestLogger.FromContext` method returns a new `TestLogger` instance via `NewTestLogger()` instead of returning the receiver (f). This causes logs to be recorded on an un-referenced instance, leading to broken test assertions that expect logs to be recorded on the original logger."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_grafana_4",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 2,
+      "false_negatives": 1,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.695,
+      "matched_pairs": [],
+      "unmatched_predictions": [
+        {
+          "id": "58d9db5b-2a17-4a84-8e3e-06533634477e",
+          "title": "Incomplete diff for shardQuerySplitting.ts",
+          "description": "The diff for `shardQuerySplitting.ts` is truncated and does not show the actual implementation changes. This makes it impossible to verify that the interpolation logic is correctly applied before shard splitting. The test expects `count_over_time({a=\"b\", __stream_shard__=~\"20|10\"} | drop __stream_shard__[5m])`, which suggests interpolation happens before shard filter injection, but this cannot be confirmed without seeing the full implementation.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "public/app/plugins/datasource/loki/shardQuerySplitting.ts",
+          "line": 1,
+          "suggested_fix": ""
+        },
+        {
+          "id": "1d388006-252a-4156-95d7-3da83f9880e0",
+          "title": "Potential mutation of query objects",
+          "description": "In `querySplitting.ts`, the `.map()` call with `datasource.applyTemplateVariables` may mutate the original query objects if `applyTemplateVariables` modifies them in place rather than returning new objects. This could cause side effects if the original `request.targets` array is used elsewhere. Consider ensuring that `applyTemplateVariables` returns new objects or explicitly cloning queries before modification.",
+          "category": "bug",
+          "severity": "info",
+          "file_path": "public/app/plugins/datasource/loki/querySplitting.ts",
+          "line": 296,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The applyTemplateVariables method is called with request.filters as the third pa...",
+          "file_path": "public/app/plugins/datasource/loki/querySplitting.test.ts",
+          "line_start": 75,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "The applyTemplateVariables method is called with request.filters as the third parameter, but this parameter is not used in the corresponding test setup."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_grafana_5",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.098,
+      "matched_pairs": [],
+      "unmatched_predictions": [
+        {
+          "id": "eb996f10-e6d8-4bae-83d3-29ab43a9263f",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "public/app/features/alerting/unified/hooks/useAbilities.ts",
+          "line": 243,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The rendered GrafanaRuleListItem is missing the required key prop for React list...",
+          "file_path": "public/app/features/alerting/unified/components/rule-viewer/AlertRuleMenu.tsx",
+          "line_start": 13,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The rendered GrafanaRuleListItem is missing the required key prop for React list items. This can cause rendering issues when the list order changes."
+        },
+        {
+          "title": "RuleActionsButtons is invoked with only promRule, but SilenceGrafanaRuleDrawer i...",
+          "file_path": "public/app/features/alerting/unified/components/rule-viewer/AlertRuleMenu.tsx",
+          "line_start": 13,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "RuleActionsButtons is invoked with only promRule, but SilenceGrafanaRuleDrawer inside RuleActionsButtons still depends on a Grafana Ruler rule being present, so for Grafana rules coming from list views the 'Silence notifications' menu entry (now driven by Grafana Prom abilities) will toggle showSilenceDrawer without ever rendering the drawer. This means clicking 'Silence notifications' for these rules has no visible effect, even when abilities indicate silencing is allowed."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_grafana_6",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.775,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The context is being created with d.Log instead of the log variable that was ini...",
+          "file_path": "go.work.sum",
+          "line_start": 405,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The context is being created with d.Log instead of the log variable that was initialized with additional context values (name, kind, method). This means those values won't be propagated to the logging context."
+        },
+        {
+          "title": "In DualWriterMode3's DeleteCollection method, when a storage operation fails, re...",
+          "file_path": "go.work.sum",
+          "line_start": 405,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "In DualWriterMode3's DeleteCollection method, when a storage operation fails, recordStorageDuration is incorrectly called with recordLegacyDuration instead."
+        },
+        {
+          "title": "Inconsistency: using name instead of options.Kind for metrics recording differs ...",
+          "file_path": "go.work.sum",
+          "line_start": 405,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Inconsistency: using name instead of options.Kind for metrics recording differs from other methods."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_grafana_7",
+      "dataset_name": "martian",
+      "true_positives": 2,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "duration_seconds": 1.616,
+      "matched_pairs": [
+        {
+          "predicted": {
+            "id": "65acc25b-773f-43c3-be87-bf62d4875ad5",
+            "title": "Potential resource exhaustion in large batch test",
+            "description": "The test case 'should not fail if batch size is larger than SQLITE_MAX_VARIABLE_NUMBER' creates 40,003 annotations. This may cause significant memory usage or slow down CI pipelines. Consider reducing the number or ensuring the test is skipped in short mode (which it is, but still worth noting for full runs).",
+            "category": "performance",
+            "severity": "warning",
+            "file_path": "pkg/services/annotations/annotationsimpl/cleanup_test.go",
+            "line": 100,
+            "suggested_fix": ""
+          },
+          "gt_title": "The code uses Error log level for what appears to be debugging information. This...",
+          "gt_file": "pkg/services/annotations/annotationsimpl/cleanup_test.go",
+          "gt_line_start": 5,
+          "gt_line_end": null,
+          "gt_severity": "info",
+          "gt_category": "performance",
+          "gt_desc": "The code uses Error log level for what appears to be debugging information. This will pollute error logs in production. Consider using Debug or Info level instead.",
+          "match_score": 0.606,
+          "file_matched": true,
+          "line_distance": 95
+        },
+        {
+          "predicted": {
+            "id": "41697a49-9a78-4b10-85dd-6c41328492b8",
+            "title": "Incomplete error handling in test cleanup",
+            "description": "The diff shows `return errors.Join(deleteAnnotationErr, deleteA` which is truncated. If the second error variable is not properly defined or joined, this will cause a compilation error or silent failure in test cleanup. Ensure both `deleteAnnotationErr` and `deleteAnnotationTagErr` are correctly joined.",
+            "category": "bug",
+            "severity": "warning",
+            "file_path": "pkg/services/annotations/annotationsimpl/cleanup_test.go",
+            "line": 130,
+            "suggested_fix": ""
+          },
+          "gt_title": "The cleanup job ticker was changed from 10 minutes to 1 minute, which can lead t...",
+          "gt_file": "pkg/services/annotations/annotationsimpl/cleanup_test.go",
+          "gt_line_start": 5,
+          "gt_line_end": null,
+          "gt_severity": "info",
+          "gt_category": "performance",
+          "gt_desc": "The cleanup job ticker was changed from 10 minutes to 1 minute, which can lead to increased database load and contention due to more frequent execution of cleanup tasks. This change should be reviewed to ensure it aligns with performance expectations.",
+          "match_score": 0.418,
+          "file_matched": true,
+          "line_distance": 125
+        }
+      ],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_grafana_8",
+      "dataset_name": "martian",
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1_score": 0.6667,
+      "duration_seconds": 0.784,
+      "matched_pairs": [
+        {
+          "predicted": {
+            "id": "5b2b2731-151b-43ab-9e8e-1826d00a32bc",
+            "title": "[RULE-008] Convention Violation",
+            "description": "TODO/FIXME marker introduced in PR diff",
+            "category": "convention",
+            "severity": "info",
+            "file_path": "pkg/api/webassets/webassets.go",
+            "line": 37,
+            "suggested_fix": "Adhere to convention rule RULE-008"
+          },
+          "gt_title": "The GetWebAssets function implements an incomplete double-checked locking patter...",
+          "gt_file": "pkg/api/webassets/webassets.go",
+          "gt_line_start": 11,
+          "gt_line_end": null,
+          "gt_severity": "warning",
+          "gt_category": "bug",
+          "gt_desc": "The GetWebAssets function implements an incomplete double-checked locking pattern for caching web assets. The function first checks if the cache is populated using a read lock (RLock), and if the cache is empty, it acquires a write lock to populate it. However, it fails to re-check whether the cache was populated by another goroutine while waiting to acquire the write lock.",
+          "match_score": 0.4,
+          "file_matched": true,
+          "line_distance": 26
+        }
+      ],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "In addition to the missing double-check, the function has a critical flaw in its...",
+          "file_path": "pkg/api/webassets/webassets.go",
+          "line_start": 69,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "In addition to the missing double-check, the function has a critical flaw in its error handling: it unconditionally assigns the fetch result to the cache (line 69: entryPointAssetsCache = result) regardless of whether the fetch succeeded or failed. When an error occurs during asset fetching, result is nil, and this nil value overwrites any previously valid cache entry."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_grafana_9",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.782,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The enableSqlExpressions function has flawed logic that always returns false, ef...",
+          "file_path": "go.mod",
+          "line_start": null,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The enableSqlExpressions function has flawed logic that always returns false, effectively disabling SQL expressions unconditionally:"
+        },
+        {
+          "title": "The DB methods NewInMemoryDB().RunCommands, DB.QueryFramesInto, and DB.TablesLis...",
+          "file_path": "pkg/expr/sql/db.go",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The DB methods NewInMemoryDB().RunCommands, DB.QueryFramesInto, and DB.TablesList in pkg/expr/sql/db.go return hardcoded 'not implemented' errors after removing the go-duck dependency."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_grafana_10",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.789,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "A race condition in BuildIndex allows multiple goroutines to concurrently build ...",
+          "file_path": "pkg/server/module_server_test.go",
+          "line_start": 35,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "A race condition in BuildIndex allows multiple goroutines to concurrently build the same expensive index for the same key. This is caused by moving the b.cacheMu lock from protecting the entire function to only protecting the final cache assignment. "
+        },
+        {
+          "title": "Calling s.search.TotalDocs() here may race with concurrent index creation: Total...",
+          "file_path": "pkg/server/module_server_test.go",
+          "line_start": 35,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Calling s.search.TotalDocs() here may race with concurrent index creation: TotalDocs iterates b.cache without synchronization, and the event watcher goroutine started just above could trigger BuildIndex writes concurrently, potentially causing a concurrent map read/write panic."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_keycloak_1",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.012,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "In UsernameForm.authenticate(), isConditionalPasskeysEnabled() is called without...",
+          "file_path": "services/src/main/java/org/keycloak/authentication/authenticators/browser/AbstractUsernameFormAuthenticator.java",
+          "line_start": 58,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "In UsernameForm.authenticate(), isConditionalPasskeysEnabled() is called without passing the required UserModel parameter."
+        },
+        {
+          "title": "With isConditionalPasskeysEnabled(UserModel user) requiring user != null, authen...",
+          "file_path": "services/src/main/java/org/keycloak/authentication/authenticators/browser/AbstractUsernameFormAuthenticator.java",
+          "line_start": 58,
+          "line_end": null,
+          "severity": "warning",
+          "category": "convention",
+          "description": "With isConditionalPasskeysEnabled(UserModel user) requiring user != null, authenticate(...) will not call webauthnAuth.fillContextForm(context) on the initial login page where context.getUser() is still null, so conditional passkey UI will not be set up for first-time passkey login. Consider whether this should also be enabled when no user has been selected yet so ID-less passkey authentication on the initial login form continues to work."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_keycloak_2",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.786,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "InfinispanIdentityProviderStorageProvider.getForLogin() recursively calls sessio...",
+          "file_path": "model/infinispan/src/main/java/org/keycloak/models/cache/infinispan/idp/InfinispanIdentityProviderStorageProvider.java",
+          "line_start": 21,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "InfinispanIdentityProviderStorageProvider.getForLogin() recursively calls session.identityProviders().getById() instead of idpDelegate.getById(), causing the cache lookup to re-enter the same caching layer."
+        },
+        {
+          "title": "Cleanup reference uses incorrect alias - should be 'idp-alias-' + i instead of '...",
+          "file_path": "model/infinispan/src/main/java/org/keycloak/models/cache/infinispan/idp/InfinispanIdentityProviderStorageProvider.java",
+          "line_start": 21,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Cleanup reference uses incorrect alias - should be 'idp-alias-' + i instead of 'alias'."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_keycloak_3",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 4,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.08,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "Returns wrong provider (default keystore instead of BouncyCastle)",
+          "file_path": "authz/client/pom.xml",
+          "line_start": 61,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Returns wrong provider (default keystore instead of BouncyCastle)"
+        },
+        {
+          "title": "Dead code exists where ASN1Encoder instances are created and written to, but the...",
+          "file_path": "authz/client/pom.xml",
+          "line_start": 61,
+          "line_end": null,
+          "severity": "info",
+          "category": "performance",
+          "description": "Dead code exists where ASN1Encoder instances are created and written to, but their results are immediately discarded. The actual encoding is performed by new ASN1Encoder instances created in the subsequent return statement, rendering the earlier operations useless."
+        },
+        {
+          "title": "When length starts at -1 from indefinite-length encoding, the arithmetic 'length...",
+          "file_path": "authz/client/pom.xml",
+          "line_start": 61,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "When length starts at -1 from indefinite-length encoding, the arithmetic 'length = length - bytes.length' will behave unexpectedly, potentially leading to incorrect processing of encoded data."
+        },
+        {
+          "title": "Abstract order() method on CryptoProvider may break backward compatibility with ...",
+          "file_path": "authz/client/pom.xml",
+          "line_start": 61,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "Abstract order() method on CryptoProvider may break backward compatibility with existing implementations"
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_keycloak_4",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.008,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "Incorrect method call for exit codes. The picocli.exit() method calls System.exi...",
+          "file_path": "common/src/main/java/org/keycloak/common/Profile.java",
+          "line_start": 134,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Incorrect method call for exit codes. The picocli.exit() method calls System.exit() directly, which is problematic:"
+        },
+        {
+          "title": "Need to add changelog/release notes documenting the exit code change and migrati...",
+          "file_path": "common/src/main/java/org/keycloak/common/Profile.java",
+          "line_start": 134,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "Need to add changelog/release notes documenting the exit code change and migration guidance"
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_keycloak_5",
+      "dataset_name": "martian",
+      "true_positives": 2,
+      "false_positives": 2,
+      "false_negatives": 3,
+      "precision": 0.5,
+      "recall": 0.4,
+      "f1_score": 0.4444,
+      "duration_seconds": 2.395,
+      "matched_pairs": [
+        {
+          "predicted": {
+            "id": "e92f57cc-6f71-42fc-9c09-d33921438075",
+            "title": "Inconsistent Scope Naming",
+            "description": "The new scopes `MAP_ROLES_CLIENT_SCOPE` and `MAP_ROLES_COMPOSITE` use hyphens, while other scopes like `MANAGE_GROUP_MEMBERSHIP` also use hyphens. However, the constant names use underscores. This is consistent with Java conventions, but the scope values should be carefully documented to avoid confusion with existing scopes. Additionally, ensure that these scopes are properly mapped in the UI and API documentation.",
+            "category": "bug",
+            "severity": "info",
+            "file_path": "server-spi-private/src/main/java/org/keycloak/authorization/AdminPermissionsSchema.java",
+            "line": 63,
+            "suggested_fix": ""
+          },
+          "gt_title": "Inconsistent feature flag bug causing orphaned permissions. The AdminPermissions...",
+          "gt_file": "server-spi-private/src/main/java/org/keycloak/authorization/AdminPermissionsSchema.java",
+          "gt_line_start": 53,
+          "gt_line_end": null,
+          "gt_severity": "error",
+          "gt_category": "bug",
+          "gt_desc": "Inconsistent feature flag bug causing orphaned permissions. The AdminPermissions event listener, responsible for cleaning up permissions upon role, client, or group removal, is incorrectly guarded by the ADMIN_FINE_GRAINED_AUTHZ (V1) feature flag. This is inconsistent with other methods in the class that use ADMIN_FINE_GRAINED_AUTHZ_V2. Consequently, if ADMIN_FINE_GRAINED_AUTHZ_V2 is enabled but V1 is not, the permission cleanup logic will not execute, leading to orphaned permission data. Cleanup should occur regardless of which fine-grained authorization version is enabled.",
+          "match_score": 0.916,
+          "file_matched": true,
+          "line_distance": 10
+        },
+        {
+          "predicted": {
+            "id": "b22dbdaf-a09d-48a4-9e11-870e873084d0",
+            "title": "Potential Null Pointer Exception in resolveClient",
+            "description": "The `resolveClient` method calls `session.getContext().getRealm()`. If the context realm is null (e.g., during certain administrative operations or if the session is not properly initialized), this will throw a NullPointerException. It is safer to check for null or handle the case where the realm is not available.",
+            "category": "bug",
+            "severity": "warning",
+            "file_path": "server-spi-private/src/main/java/org/keycloak/authorization/AdminPermissionsSchema.java",
+            "line": 175,
+            "suggested_fix": ""
+          },
+          "gt_title": "In ClientPermissionsV2.hasPermission, the method getResourceTypeResource could r...",
+          "gt_file": "server-spi-private/src/main/java/org/keycloak/authorization/AdminPermissionsSchema.java",
+          "gt_line_start": 53,
+          "gt_line_end": null,
+          "gt_severity": "error",
+          "gt_category": "bug",
+          "gt_desc": "In ClientPermissionsV2.hasPermission, the method getResourceTypeResource could return null, leading to a NullPointerException in findByResource. Defensive null checks are needed to prevent this issue.",
+          "match_score": 0.623,
+          "file_matched": true,
+          "line_distance": 122
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "e507ce57-7346-4c06-ba1b-0973cb0eadaf",
+          "title": "Missing Cleanup for Client Resources on Deletion",
+          "description": "The `AdminPermissions` class registers a listener for `RoleRemovedEvent` to clean up permissions when roles are removed. However, there is no corresponding logic to clean up the `CLIENTS` resource and its associated policies when a client is deleted. This could lead to orphaned resources in the authorization store, causing potential security or performance issues.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "services/src/main/java/org/keycloak/services/resources/admin/permissions/AdminPermissions.java",
+          "line": 74,
+          "suggested_fix": ""
+        },
+        {
+          "id": "f89a0f12-023f-4b66-8c86-ece17f97a02d",
+          "title": "Test Coverage for Client Permission Evaluation",
+          "description": "The test files `PermissionClientTest.java` and `UserResourceTypeEvaluationTest.java` are modified, but the diff does not show the full content. Ensure that these tests cover all new scopes (`CONFIGURE`, `MAP_ROLES_CLIENT_SCOPE`, `MAP_ROLES_COMPOSITE`) and edge cases such as client deletion, role removal, and permission inheritance.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "tests/base/src/test/java/org/keycloak/tests/admin/authz/fgap/PermissionClientTest.java",
+          "line": 1,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "In hasPermission(ClientModel client, String scope), the resource lookup uses fin...",
+          "file_path": "server-spi-private/src/main/java/org/keycloak/authorization/AdminPermissionsSchema.java",
+          "line_start": 53,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "In hasPermission(ClientModel client, String scope), the resource lookup uses findByName(server, client.getId(), server.getId()), but AdminPermissionsSchema.getOrCreateResource creates per-client resources with the owner set to resourceServer.getClientId(), so this lookup will never find those resources and will always fall back to the 'all-clients' resource, effectively ignoring client-specific permissions."
+        },
+        {
+          "title": "In getClientsWithPermission(String scope), iterating resourceStore.findByType(se...",
+          "file_path": "server-spi-private/src/main/java/org/keycloak/authorization/AdminPermissionsSchema.java",
+          "line_start": 53,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "In getClientsWithPermission(String scope), iterating resourceStore.findByType(server, AdminPermissionsSchema.CLIENTS_RESOURCE_TYPE) and returning resource.getName() will only ever consider the type-level 'Clients' resource (per-client resources have no type) and return its name, while AvailableRoleMappingResource#getRoleIdsWithPermissions expects actual client IDs to pass to realm.getClientById, which can lead to incorrect behavior or a null client and subsequent failures."
+        },
+        {
+          "title": "Remove unused getEvaluationContext private method in ClientPermissionsV2 - it is...",
+          "file_path": "server-spi-private/src/main/java/org/keycloak/authorization/AdminPermissionsSchema.java",
+          "line_start": 53,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "Remove unused getEvaluationContext private method in ClientPermissionsV2 - it is defined but never called"
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_keycloak_6",
+      "dataset_name": "martian",
+      "true_positives": 1,
+      "false_positives": 1,
+      "false_negatives": 1,
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1_score": 0.5,
+      "duration_seconds": 2.322,
+      "matched_pairs": [
+        {
+          "predicted": {
+            "id": "a0f6c2ab-97d3-41d1-85d6-8cf090e4f5ca",
+            "title": "Potential Authorization Bypass in BruteForceUsersResource",
+            "description": "The code removes the explicit check `if (!auth.users().canView())` before setting the `UserModel.GROUPS` attribute. Previously, this attribute was only set if the user did not have global view permission but had specific group view permissions. Now, it is set whenever `getGroupIdsWithViewPermission()` returns non-empty results, regardless of global view permission. If `searchForUserStream` does not strictly enforce these group permissions, this could allow users to see users in groups they shouldn't have access to, or it might be redundant if the search method handles it. This change requires careful verification that the underlying search logic correctly filters based on these attributes.",
+            "category": "security",
+            "severity": "warning",
+            "file_path": "rest/admin-ui-ext/src/main/java/org/keycloak/admin/ui/rest/BruteForceUsersResource.java",
+            "line": 147,
+            "suggested_fix": ""
+          },
+          "gt_title": "In GroupPermissionsV2.canManage(), the permission fallback checks for both VIEW ...",
+          "gt_file": "rest/admin-ui-ext/src/main/java/org/keycloak/admin/ui/rest/BruteForceUsersResource.java",
+          "gt_line_start": 147,
+          "gt_line_end": null,
+          "gt_severity": "error",
+          "gt_category": "bug",
+          "gt_desc": "In GroupPermissionsV2.canManage(), the permission fallback checks for both VIEW and MANAGE scopes (hasPermission(null, AdminPermissionsSchema.VIEW, AdminPermissionsSchema.MANAGE)), but canManage() should only grant access for MANAGE scope, not VIEW. This means users with only VIEW permission on groups can pass the canManage() check, granting them write access they should not have. The canView() method correctly checks both VIEW and MANAGE, but canManage() should only check MANAGE.",
+          "match_score": 0.744,
+          "file_matched": true,
+          "line_distance": 0
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "039eee8b-bc66-415c-807c-489777c1716f",
+          "title": "Incomplete Constructor Call in AdminPermissionsSchema",
+          "description": "The diff for `AdminPermissionsSchema.java` shows the `super` constructor call being modified to include `GROUPS_RESOURCE_TYPE`, but the diff ends abruptly. If the closing parenthesis and semicolon are missing in the actual file, this will cause a compilation error. Even if present, the change needs to ensure all resource types are correctly registered.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "server-spi-private/src/main/java/org/keycloak/authorization/AdminPermissionsSchema.java",
+          "line": 82,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "In getGroupIdsWithViewPermission, hasPermission is called with groupResource.get...",
+          "file_path": "rest/admin-ui-ext/src/main/java/org/keycloak/admin/ui/rest/BruteForceUsersResource.java",
+          "line_start": 147,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "In getGroupIdsWithViewPermission, hasPermission is called with groupResource.getId() and the same groupResource.getId() is added to granted, but hasPermission resolves resources by name (treating the argument as a group id) and the GroupPermissionEvaluator contract says this method returns group IDs that are later used as UserModel.GROUPS and in getUsersCount group filters. This mismatch means per-group VIEW_MEMBERS/MANAGE_MEMBERS permissions may not yield the expected group IDs for filtering and counts, and evaluation may effectively only look at the type-level 'all-groups' resource; consider revisiting whether this should operate on the underlying group ids (resource names) instead so it aligns with the JPA queries and the interface contract."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_keycloak_7",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.718,
+      "matched_pairs": [],
+      "unmatched_predictions": [
+        {
+          "id": "57e0ef7b-4195-46ce-98df-46bb22fad4d5",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "misc/theme-verifier/src/main/java/org/keycloak/themeverifier/VerifyMessageProperties.java",
+          "line": 133,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The translation is in Italian instead of Lithuanian. This should be translated t...",
+          "file_path": "themes/src/main/resources-community/theme/base/account/messages/messages_lt.properties",
+          "line_start": 101,
+          "line_end": null,
+          "severity": "warning",
+          "category": "convention",
+          "description": "The translation is in Italian instead of Lithuanian. This should be translated to Lithuanian to match the file's locale (messages_lt.properties)."
+        },
+        {
+          "title": "The totpStep1 value uses Traditional Chinese terms in the Simplified Chinese fil...",
+          "file_path": "js/apps/account-ui/maven-resources/theme/keycloak.v3/account/messages/messages_en.properties",
+          "line_start": 188,
+          "line_end": null,
+          "severity": "warning",
+          "category": "convention",
+          "description": "The totpStep1 value uses Traditional Chinese terms in the Simplified Chinese file (zh_CN), which is likely incorrect for this locale. Please verify the locale\u2011appropriate translation."
+        },
+        {
+          "title": "The anchor sanitization logic has a potential issue where it consumes English ma...",
+          "file_path": "js/apps/account-ui/maven-resources/theme/keycloak.v3/account/messages/messages_en.properties",
+          "line_start": 188,
+          "line_end": null,
+          "severity": "info",
+          "category": "security",
+          "description": "The anchor sanitization logic has a potential issue where it consumes English matcher groups without proper validation. If the translated text has more anchor tags than the English text, this could lead to incorrect validation results."
+        },
+        {
+          "title": "The method name 'santizeAnchors' should be 'sanitizeAnchors' (missing 'i').",
+          "file_path": "js/apps/account-ui/maven-resources/theme/keycloak.v3/account/messages/messages_en.properties",
+          "line_start": 188,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "The method name 'santizeAnchors' should be 'sanitizeAnchors' (missing 'i')."
+        },
+        {
+          "title": "Field HTML_TAGS should be declared as 'private static final' following Java nami...",
+          "file_path": "js/apps/account-ui/maven-resources/theme/keycloak.v3/account/messages/messages_en.properties",
+          "line_start": 188,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "Field HTML_TAGS should be declared as 'private static final' following Java naming conventions for constants"
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_keycloak_8",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 4,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.288,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "In AccessTokenContext constructor, the fourth Objects.requireNonNull validates g...",
+          "file_path": "server-spi-private/src/main/java/org/keycloak/models/Constants.java",
+          "line_start": 206,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "In AccessTokenContext constructor, the fourth Objects.requireNonNull validates grantType twice instead of validating rawTokenId, allowing null rawTokenId values to pass validation."
+        },
+        {
+          "title": "In isAccessTokenId, the substring for the grant shortcut and the equality check ...",
+          "file_path": "server-spi-private/src/main/java/org/keycloak/models/Constants.java",
+          "line_start": 206,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "In isAccessTokenId, the substring for the grant shortcut and the equality check look inverted: the grant shortcut occupies indices 4\u20135 (substring(4,6)), and a match should return true (combined with UUID check), not false."
+        },
+        {
+          "title": "Javadoc mentions \"usually like 3-letters shortcut\" but some implementations use ...",
+          "file_path": "server-spi-private/src/main/java/org/keycloak/models/Constants.java",
+          "line_start": 206,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "Javadoc mentions \"usually like 3-letters shortcut\" but some implementations use 2-letter shortcuts (\"ac\", \"cc\", \"rt\", \"te\", \"pc\", \"ci\", \"ro\"). Consider updating documentation to reflect actual usage pattern."
+        },
+        {
+          "title": " Catching generic RuntimeException is too broad. The implementation throws Illeg...",
+          "file_path": "server-spi-private/src/main/java/org/keycloak/models/Constants.java",
+          "line_start": 206,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": " Catching generic RuntimeException is too broad. The implementation throws IllegalArgumentException specifically - catch that instead for more precise testing."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_keycloak_9",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.953,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "Unsafe raw List deserialization without type safety. Calling Optional.get() dire...",
+          "file_path": "server-spi-private/src/main/java/org/keycloak/utils/CredentialHelper.java",
+          "line_start": 36,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Unsafe raw List deserialization without type safety. Calling Optional.get() directly on the Optional returned by RecoveryAuthnCodesUtils.getCredential(user) without checking isPresent() can lead to a NoSuchElementException if the Optional is empty."
+        },
+        {
+          "title": "After creating the RecoveryAuthnCodesCredentialModel, consider setting its id fr...",
+          "file_path": "server-spi-private/src/main/java/org/keycloak/utils/CredentialHelper.java",
+          "line_start": 36,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "After creating the RecoveryAuthnCodesCredentialModel, consider setting its id from the stored credential (e.g., myUser.recoveryCodes.getId()); otherwise getId() will be null and downstream removal by id (e.g., removeStoredCredentialById in the authenticator flow) may not work."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_keycloak_10",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.736,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "Returning null from getSubGroupsCount() violates the GroupModel contract (Javado...",
+          "file_path": "model/infinispan/src/main/java/org/keycloak/models/cache/infinispan/GroupAdapter.java",
+          "line_start": 274,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Returning null from getSubGroupsCount() violates the GroupModel contract (Javadoc says it never returns null) and may lead to NPEs in callers that expect a non-null count."
+        },
+        {
+          "title": "The reader thread isn\u2019t waited for; flipping deletedAll to true and asserting im...",
+          "file_path": "model/infinispan/src/main/java/org/keycloak/models/cache/infinispan/GroupAdapter.java",
+          "line_start": 274,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The reader thread isn\u2019t waited for; flipping deletedAll to true and asserting immediately can race and miss exceptions added just after the flag change, making this test flaky."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_sentry_1",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 4,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.698,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The OptimizedCursorPaginator in organization_auditlogs.py attempts to use negati...",
+          "file_path": "src/sentry/api/endpoints/organization_auditlogs.py",
+          "line_start": 11,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The OptimizedCursorPaginator in organization_auditlogs.py attempts to use negative slice offsets on Django querysets, but Django querysets do not support negative slicing and will raise an AssertionError."
+        },
+        {
+          "title": "When requests are authenticated with API keys or org auth tokens (which have use...",
+          "file_path": "src/sentry/api/endpoints/organization_auditlogs.py",
+          "line_start": 71,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "When requests are authenticated with API keys or org auth tokens (which have user_id=None), organization_context.member is None. Line 71 attempts to access organization_context.member.has_global_access without checking if member is None, causing an AttributeError crash when optimized_pagination=true is used, even though the request passed all permission checks with valid org:write scope."
+        },
+        {
+          "title": "get_item_key assumes a numeric key, but the paginator is used with order_by=-dat...",
+          "file_path": "src/sentry/api/endpoints/organization_auditlogs.py",
+          "line_start": 11,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "get_item_key assumes a numeric key, but the paginator is used with order_by=-datetime in the audit logs endpoint; calling math.floor/ceil on a datetime will raise a TypeError."
+        },
+        {
+          "title": "Importing non-existent OptimizedCursorPaginator",
+          "file_path": "src/sentry/api/endpoints/organization_auditlogs.py",
+          "line_start": 11,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "Importing non-existent OptimizedCursorPaginator"
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_sentry_2",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 4,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.957,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "OptimizedCursorPaginator's negative-offset branch in get_result() passes cursor....",
+          "file_path": "src/sentry/api/endpoints/organization_auditlogs.py",
+          "line_start": 11,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "OptimizedCursorPaginator's negative-offset branch in get_result() passes cursor.offset directly as start_offset to queryset slicing when enable_advanced_features is True and cursor.offset < 0."
+        },
+        {
+          "title": "In BasePaginator.get_result(), when cursor.is_prev is True, it sets start_offset...",
+          "file_path": "src/sentry/api/endpoints/organization_auditlogs.py",
+          "line_start": 11,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "In BasePaginator.get_result(), when cursor.is_prev is True, it sets start_offset = offset without clamping, allowing negative offset values to be passed to queryset slicing."
+        },
+        {
+          "title": "OptimizedCursorPaginator.get_item_key uses floor/ceil on a datetime key (order_b...",
+          "file_path": "src/sentry/api/endpoints/organization_auditlogs.py",
+          "line_start": 11,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "OptimizedCursorPaginator.get_item_key uses floor/ceil on a datetime key (order_by='-datetime'), causing TypeError."
+        },
+        {
+          "title": "Accessing .has_global_access on organization_context.member can raise an Attribu...",
+          "file_path": "src/sentry/api/endpoints/organization_auditlogs.py",
+          "line_start": 11,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Accessing .has_global_access on organization_context.member can raise an AttributeError when organization_context is None, particularly for non-superuser non-member users."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_sentry_3",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.904,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "In _set_sample_rate_from_error_sampling(), the check `if client_sample_rate:` tr...",
+          "file_path": "pyproject.toml",
+          "line_start": 176,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "In _set_sample_rate_from_error_sampling(), the check `if client_sample_rate:` treats 0.0 as falsy, so a sample_rate of 0.0 is silently skipped and never set on normalized_data."
+        },
+        {
+          "title": "Using Python\u2019s built-in hash() to build cache keys is non-deterministic across p...",
+          "file_path": "pyproject.toml",
+          "line_start": 176,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "Using Python\u2019s built-in hash() to build cache keys is non-deterministic across processes (hash randomization), so keys won\u2019t match across workers and invalidate_upsampling_cache may fail to delete them. Use a deterministic serialization of project_ids for the cache key."
+        },
+        {
+          "title": "The upsampling eligibility check passes the outer dataset instead of the actual ...",
+          "file_path": "pyproject.toml",
+          "line_start": 176,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The upsampling eligibility check passes the outer dataset instead of the actual dataset used by scoped_dataset. In paths where the query ultimately runs against discover (e.g., dashboard split) while the original dataset is metrics, upsampling may be skipped even when all projects are allowlisted."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_sentry_4",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 1,
+      "false_negatives": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.819,
+      "matched_pairs": [],
+      "unmatched_predictions": [
+        {
+          "id": "59612eb9-5c53-407b-882c-2e8f9cbc23c2",
+          "title": "[RULE-009] Convention Violation",
+          "description": "Potential hardcoded credential or secret detected",
+          "category": "convention",
+          "severity": "error",
+          "file_path": "tests/sentry/integrations/github/test_integration.py",
+          "line": 116,
+          "suggested_fix": "Adhere to convention rule RULE-009"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Null reference if github_authenticated_user state is missing",
+          "file_path": "src/sentry/integrations/github/integration.py",
+          "line_start": 7,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Null reference if github_authenticated_user state is missing"
+        },
+        {
+          "title": "OAuth state uses pipeline.signature (static) instead of a per-request random val...",
+          "file_path": "src/sentry/integrations/github/integration.py",
+          "line_start": 7,
+          "line_end": null,
+          "severity": "warning",
+          "category": "security",
+          "description": "OAuth state uses pipeline.signature (static) instead of a per-request random value"
+        },
+        {
+          "title": "The code attempts to access integration.metadata[sender][login] without checking...",
+          "file_path": "src/sentry/integrations/github/integration.py",
+          "line_start": 7,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The code attempts to access integration.metadata[sender][login] without checking for the existence of the sender key. This causes a KeyError for integrations where the sender metadata was not set during creation"
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_sentry_5",
+      "dataset_name": "martian",
+      "true_positives": 1,
+      "false_positives": 1,
+      "false_negatives": 5,
+      "precision": 0.5,
+      "recall": 0.1667,
+      "f1_score": 0.25,
+      "duration_seconds": 4.947,
+      "matched_pairs": [
+        {
+          "predicted": {
+            "id": "d170aee3-9d3e-45cd-b1ad-9cc104ec7d33",
+            "title": "Resource-intensive devservice profile",
+            "description": "The new 'tracing' profile in `devservices/config.yml` starts a large number of services and consumers (e.g., `eap-spans-subscription-results`, `metrics-subscription-results`). This could lead to high resource usage in local development environments, potentially causing performance issues or instability.",
+            "category": "performance",
+            "severity": "info",
+            "file_path": "devservices/config.yml",
+            "line": 157,
+            "suggested_fix": ""
+          },
+          "gt_title": "Hardcoded empty data passed to TableWidgetVisualization causes it to always rend...",
+          "gt_file": "devservices/config.yml",
+          "gt_line_start": 23,
+          "gt_line_end": null,
+          "gt_severity": "warning",
+          "gt_category": "bug",
+          "gt_desc": "Hardcoded empty data passed to TableWidgetVisualization causes it to always render an empty table instead of displaying actual results when the feature flag is enabled.",
+          "match_score": 0.406,
+          "file_matched": true,
+          "line_distance": 134
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "d9334c6e-4856-418c-a04b-a04540264fd7",
+          "title": "Potential degradation of LLM prompt quality",
+          "description": "In `src/sentry/feedback/usecases/feedback_summaries.py`, the `feedbacks_string` is now created by joining raw feedback strings with `\\n------\\n` instead of formatting them as a list with `- ` prefixes. This change might make it harder for the LLM to distinguish between individual feedback items, potentially leading to less accurate summaries.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "src/sentry/feedback/usecases/feedback_summaries.py",
+          "line": 13,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The BrowserReportingCollectorEndpoint returns HttpResponse objects but the endpo...",
+          "file_path": "devservices/config.yml",
+          "line_start": 23,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The BrowserReportingCollectorEndpoint returns HttpResponse objects but the endpoint inherits from Endpoint which expects rest_framework.response.Response objects."
+        },
+        {
+          "title": "In BaseDetectorTypeValidator.update(), the validator incorrectly updates instanc...",
+          "file_path": "devservices/config.yml",
+          "line_start": 23,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "In BaseDetectorTypeValidator.update(), the validator incorrectly updates instance.type using validated_data.get('detector_type') instead of validated_data.get('type')."
+        },
+        {
+          "title": "Using zip(error_ids, events.values()) assumes the get_multi result preserves the...",
+          "file_path": "devservices/config.yml",
+          "line_start": 23,
+          "line_end": null,
+          "severity": "info",
+          "category": "bug",
+          "description": "Using zip(error_ids, events.values()) assumes the get_multi result preserves the input order; dict value order is not guaranteed to match error_ids, so event data can be paired with the wrong ID (missing nodes also shift alignment)."
+        },
+        {
+          "title": "Validation logic incorrectly uses .get('timestamp'), which treats a timestamp of...",
+          "file_path": "devservices/config.yml",
+          "line_start": 23,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Validation logic incorrectly uses .get('timestamp'), which treats a timestamp of 0 as absent. It should directly check 'timestamp' in self.initial_data to ensure proper field presence detection, preventing both 'age=0' and 'timestamp' from passing mutual-exclusion validation."
+        },
+        {
+          "title": "Analytics events are recorded before the feature flag check, resulting in analyt...",
+          "file_path": "devservices/config.yml",
+          "line_start": 23,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Analytics events are recorded before the feature flag check, resulting in analytics being logged for all requests, including those that return 404 due to the feature being disabled. This can lead to misleading analytics data."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_sentry_6",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.783,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "In the SpanFlusher flush loop, metric tags inconsistently use 'shard' (e.g., in ...",
+          "file_path": "CLAUDE.md",
+          "line_start": 448,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "In the SpanFlusher flush loop, metric tags inconsistently use 'shard' (e.g., in spans.buffer.flusher.produce and spans.buffer.segment_size_bytes) and 'shards' (in spans.buffer.flusher.wait_produce) for the same shard identifier value. This prevents correct metric aggregation across flush stages \u2014 dashboards and alerts filtering by tag 'shard' will miss data tagged as 'shards' and vice versa."
+        },
+        {
+          "title": "The test_basic function in test_consumer.py uses a monkeypatched time.sleep that...",
+          "file_path": "tests/sentry/spans/consumers/process/test_consumer.py",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "The test_basic function in test_consumer.py uses a monkeypatched time.sleep that returns immediately, but then calls time.sleep(0.1) expecting it to actually wait."
+        },
+        {
+          "title": "Because flusher processes are created via multiprocessing.get_context('spawn').P...",
+          "file_path": "CLAUDE.md",
+          "line_start": 448,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "Because flusher processes are created via multiprocessing.get_context('spawn').Process, they are instances of multiprocessing.context.SpawnProcess, which on POSIX is not a subclass of multiprocessing.Process, so this isinstance check will always be false and hung processes won't be killed here."
+        },
+        {
+          "title": "Sleep in test_consumer.py won\u2019t actually wait because time.sleep was monkeypatch...",
+          "file_path": "tests/sentry/spans/consumers/process/test_consumer.py",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "warning",
+          "category": "convention",
+          "description": "Sleep in test_consumer.py won\u2019t actually wait because time.sleep was monkeypatched above; consider restoring sleep or using a different sync to ensure the flusher has time to process."
+        },
+        {
+          "title": "Breaking out of the loop when the deadline has elapsed can skip terminating rema...",
+          "file_path": "CLAUDE.md",
+          "line_start": 448,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "Breaking out of the loop when the deadline has elapsed can skip terminating remaining flusher processes, potentially leaving them running after shutdown; consider ensuring termination is attempted even if the deadline is exceeded."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_sentry_7",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 4,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.936,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The AssignmentSource dataclass uses queued: datetime = timezone.now() as a defau...",
+          "file_path": "src/sentry/integrations/mixins/issues.py",
+          "line_start": 15,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "The AssignmentSource dataclass uses queued: datetime = timezone.now() as a default field value, which evaluates timezone.now() once at class definition time and shares that single datetime instance across all objects."
+        },
+        {
+          "title": "The method name has a typo: test_from_dict_inalid_data should be test_from_dict_...",
+          "file_path": "src/sentry/integrations/mixins/issues.py",
+          "line_start": 15,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "The method name has a typo: test_from_dict_inalid_data should be test_from_dict_invalid_data."
+        },
+        {
+          "title": "Method name says 'empty_array' but tests empty dict - consider renaming to 'test...",
+          "file_path": "src/sentry/integrations/mixins/issues.py",
+          "line_start": 15,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "Method name says 'empty_array' but tests empty dict - consider renaming to 'test_from_dict_empty_dict' for clarity."
+        },
+        {
+          "title": "to_dict() returns a datetime for queued; if this dict is passed in task kwargs (...",
+          "file_path": "src/sentry/integrations/mixins/issues.py",
+          "line_start": 15,
+          "line_end": null,
+          "severity": "warning",
+          "category": "bug",
+          "description": "to_dict() returns a datetime for queued; if this dict is passed in task kwargs (e.g., via apply_async), JSON serialization may fail depending on the serializer, which can cause enqueue errors."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_sentry_8",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.795,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The function modifies the config variable to include display values but then ret...",
+          "file_path": "src/sentry/monitors/logic/incident_occurrence.py",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "The function modifies the config variable to include display values but then returns the original monitor.config instead of the modified version."
+        },
+        {
+          "title": "The code fetches MonitorCheckIn objects by ID when the required data already exi...",
+          "file_path": "src/sentry/monitors/logic/incident_occurrence.py",
+          "line_start": 1,
+          "line_end": null,
+          "severity": "info",
+          "category": "performance",
+          "description": "The code fetches MonitorCheckIn objects by ID when the required data already exists in previous_checkins. This creates an unnecessary database query."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_sentry_9",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.929,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The magic number 50 for max_wait is used repeatedly throughout the tests. Consid...",
+          "file_path": "src/sentry/consumers/__init__.py",
+          "line_start": 121,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "The magic number 50 for max_wait is used repeatedly throughout the tests. Consider extracting this as a named constant to improve maintainability."
+        },
+        {
+          "title": "The test test_thread_queue_parallel_error_handling has a docstring that doesn't ...",
+          "file_path": "src/sentry/consumers/__init__.py",
+          "line_start": 121,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "The test test_thread_queue_parallel_error_handling has a docstring that doesn't match the test implementation."
+        }
+      ],
+      "category_scores": {}
+    },
+    {
+      "case_id": "martian_sentry_10",
+      "dataset_name": "martian",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 0.821,
+      "matched_pairs": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "MetricAlertDetectorHandler inherits from StatefulDetectorHandler but only contai...",
+          "file_path": "src/sentry/incidents/grouptype.py",
+          "line_start": 7,
+          "line_end": null,
+          "severity": "error",
+          "category": "bug",
+          "description": "MetricAlertDetectorHandler inherits from StatefulDetectorHandler but only contains pass, failing to implement its required abstract methods: counter_names (property), get_dedupe_value(), get_group_key_values(), and build_occurrence_and_event_data(). This will cause a TypeError at runtime when the class is instantiated."
+        },
+        {
+          "title": "Docstring says this returns a list of DetectorEvaluationResult, but the method n...",
+          "file_path": "src/sentry/incidents/grouptype.py",
+          "line_start": 7,
+          "line_end": null,
+          "severity": "info",
+          "category": "convention",
+          "description": "Docstring says this returns a list of DetectorEvaluationResult, but the method now returns a dict keyed by DetectorGroupKey. Consider updating the docstring to match the new return type."
+        },
+        {
+          "title": "Wrong value `6` passed for `group_2` occurrence \u2014 the data packet specifies `\"gr...",
+          "file_path": "src/sentry/incidents/grouptype.py",
+          "line_start": 7,
+          "line_end": null,
+          "severity": "warning",
+          "category": "convention",
+          "description": "Wrong value `6` passed for `group_2` occurrence \u2014 the data packet specifies `\"group_2\": 10`. Should be `10` to accurately reflect the test scenario, which will ensure the test produces the correct occurrence data."
+        }
+      ],
+      "category_scores": {}
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+[
+  {
+    "Configuration ID": "B1",
+    "Knowledge Base": "None (Raw Diff Only)",
+    "LLM Architecture": "Single (Gemini 2.0 Flash)",
+    "Conv. Gate": "Disabled",
+    "Martian (5-Case Pilot FI)": "F1: 0.000 (P: 0.0%, R: 0.0%)",
+    "Martian (Full 50 PRs)": "F1: 0.031 (P: 14.3%, R: 1.7%)",
+    "VulnGym (393 Cases, 596 Vulns)": "F1: 0.197 (P: 100.0%, R: 10.9%)"
+  },
+  {
+    "Configuration ID": "B2",
+    "Knowledge Base": "ChromA (Only)",
+    "LLM Architecture": "Dual-LLM",
+    "Conv. Gate": "Enabled",
+    "Martian (5-Case Pilot FI)": "F1: 0.324 (P: 31.6%, R: 33.3%)",
+    "Martian (Full 50 PRs)": "F1: 0.215 (P: 28.3%, R: 17.3%)",
+    "VulnGym (393 Cases, 596 Vulns)": "F1: 0.288 (P: 96.2%, R: 17.0%)"
+  },
+  {
+    "Configuration ID": "A1",
+    "Knowledge Base": "Neo4j Only (No Vector)",
+    "LLM Architecture": "Dual-LLM",
+    "Conv. Gate": "Enabled",
+    "Martian (5-Case Pilot FI)": "F1: 0.216 (P: 21.1%, R: 22.2%)",
+    "Martian (Full 50 PRs)": "F1: 0.191 (P: 30.4%, R: 13.9%)",
+    "VulnGym (393 Cases, 596 Vulns)": "[TO BE MEASURED]"
+  },
+  {
+    "Configuration ID": "A2",
+    "Knowledge Base": "Dual KB (Neo4j + Chroma)",
+    "LLM Architecture": "Worker Only (Llama-70B)",
+    "Conv. Gate": "Enabled",
+    "Martian (5-Case Pilot FI)": "F1: 0.293 (P: 26.1%, R: 33.3%)",
+    "Martian (Full 50 PRs)": "F1: 0.137 (P: 26.7%, R: 9.2%)",
+    "VulnGym (393 Cases, 596 Vulns)": "[TO BE MEASURED]"
+  },
+  {
+    "Configuration ID": "A3",
+    "Knowledge Base": "Dual KB (Neo4j + Chroma)",
+    "LLM Architecture": "Orch. Only (Gemini 2.0)",
+    "Conv. Gate": "Enabled",
+    "Martian (5-Case Pilot FI)": "[TO BE MEASURED]",
+    "Martian (Full 50 PRs)": "[TO BE MEASURED]",
+    "VulnGym (393 Cases, 596 Vulns)": "[TO BE MEASURED]"
+  },
+  {
+    "Configuration ID": "GitAmi (Proposed)",
+    "Knowledge Base": "Dual KB (Neo4j + Chroma)",
+    "LLM Architecture": "Dual-LLM + ReAct Agent",
+    "Conv. Gate": "Enabled",
+    "Martian (5-Case Pilot FI)": "[TO BE MEASURED]",
+    "Martian (Full 50 PRs)": "F1: 0.083 (P: 20.9%, R: 5.2%) [50 PRs]",
+    "VulnGym (393 Cases, 596 Vulns)": "F1: 0.556 (P: 88.0%, R: 40.6%) [393 Cases]"
+  }
+]

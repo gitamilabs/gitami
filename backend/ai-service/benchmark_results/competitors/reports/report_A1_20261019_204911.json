@@ -1,0 +1,83 @@
+{
+  "metadata": {
+    "config_id": "A1",
+    "config_name": "Ablation 1: Graph Only (No Vector)",
+    "kb": "Neo4j Only (No Vector)",
+    "llm_architecture": "Dual-LLM",
+    "convention_gate": "Enabled",
+    "total_duration_seconds": 6.5,
+    "status": "completed",
+    "generated_at": "2026-10-19T15:19:11.512835+00:00"
+  },
+  "aggregate": {
+    "total_cases": 1,
+    "total_ground_truth": 2,
+    "total_predicted": 1,
+    "true_positives": 0,
+    "false_positives": 1,
+    "false_negatives": 2,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1_score": 0.0,
+    "mean_duration_seconds": 4.93,
+    "category_breakdown": {
+      "convention": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      },
+      "bug": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      }
+    },
+    "severity_detection_rates": {
+      "info": 0.0,
+      "error": 0.0
+    }
+  },
+  "cases": [
+    {
+      "case_id": "martian_cal_dot_com_1",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 1,
+      "fn": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 4.931,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [
+        {
+          "id": "4d77c926-855f-4b1c-a32a-dea1f85ba674",
+          "title": "Unhandled Promise in forEach loop",
+          "description": "The `forEach` callback is now `async`, but `forEach` does not await the returned Promises. This means the asynchronous operations inside the loop will run concurrently without being awaited, potentially leading to race conditions, unhandled promise rejections, or incomplete processing before the function exits. The `try/catch` block will not catch errors from the async callbacks.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/vital/lib/reschedule.ts",
+          "line": 125,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Consider adding try-catch around the await to handle import failures gracefully",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "The code uses forEach with async callbacks, which causes asynchronous operations...",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    }
+  ]
+}

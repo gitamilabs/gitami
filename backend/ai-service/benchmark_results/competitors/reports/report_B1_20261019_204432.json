@@ -1,0 +1,93 @@
+{
+  "metadata": {
+    "config_id": "B1",
+    "config_name": "Baseline 1: Standard LLM (Raw Diff Only)",
+    "kb": "None (Raw Diff Only)",
+    "llm_architecture": "Single (Gemini 2.0 Flash)",
+    "convention_gate": "Disabled",
+    "total_duration_seconds": 6.07,
+    "status": "completed",
+    "generated_at": "2026-10-19T15:14:32.113071+00:00"
+  },
+  "aggregate": {
+    "total_cases": 1,
+    "total_ground_truth": 2,
+    "total_predicted": 2,
+    "true_positives": 0,
+    "false_positives": 2,
+    "false_negatives": 2,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1_score": 0.0,
+    "mean_duration_seconds": 4.54,
+    "category_breakdown": {
+      "convention": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      },
+      "bug": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      }
+    },
+    "severity_detection_rates": {
+      "info": 0.0,
+      "error": 0.0
+    }
+  },
+  "cases": [
+    {
+      "case_id": "martian_cal_dot_com_1",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 2,
+      "fn": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 4.54,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [
+        {
+          "id": "979b6676-f354-4850-b56f-5bf8d9048bb6",
+          "title": "Async/Await inside Array.forEach does not await promises",
+          "description": "Using `async/await` inside a standard `Array.prototype.forEach` callback does not pause execution of the loop or outer function. The promises returned by `getCalendar` or `deleteMeeting` will be unawaited, leading to unhandled promise execution order or background execution without error handling.",
+          "category": "bug",
+          "severity": "error",
+          "file_path": "packages/app-store/vital/lib/reschedule.ts",
+          "line": 125,
+          "suggested_fix": "Replace `bookingRefsFiltered.forEach(async ...)` with a `for...of` loop: `for (const bookingRef of bookingRefsFiltered) { ... }`"
+        },
+        {
+          "id": "56f30522-e4c5-409e-8f0b-a01bb0b02bf6",
+          "title": "Async/Await inside Array.forEach does not await promises",
+          "description": "Using `async/await` inside a standard `Array.prototype.forEach` callback does not pause execution of the loop or outer function.",
+          "category": "bug",
+          "severity": "error",
+          "file_path": "packages/app-store/wipemycalother/lib/reschedule.ts",
+          "line": 125,
+          "suggested_fix": "Replace `bookingRefsFiltered.forEach(async ...)` with a `for...of` loop."
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Consider adding try-catch around the await to handle import failures gracefully",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "The code uses forEach with async callbacks, which causes asynchronous operations...",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    }
+  ]
+}

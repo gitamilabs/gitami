@@ -1,0 +1,72 @@
+{
+  "metadata": {
+    "config_id": "B1",
+    "config_name": "Baseline 1: Standard LLM (Raw Diff Only)",
+    "kb": "None (Raw Diff Only)",
+    "llm_architecture": "Single (Gemini 2.0 Flash)",
+    "convention_gate": "Disabled",
+    "total_duration_seconds": 7.49,
+    "status": "completed",
+    "generated_at": "2026-10-19T15:13:44.860041+00:00"
+  },
+  "aggregate": {
+    "total_cases": 1,
+    "total_ground_truth": 2,
+    "total_predicted": 0,
+    "true_positives": 0,
+    "false_positives": 0,
+    "false_negatives": 2,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1_score": 0.0,
+    "mean_duration_seconds": 5.94,
+    "category_breakdown": {
+      "convention": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      },
+      "bug": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      }
+    },
+    "severity_detection_rates": {
+      "info": 0.0,
+      "error": 0.0
+    }
+  },
+  "cases": [
+    {
+      "case_id": "martian_cal_dot_com_1",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 0,
+      "fn": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 5.942,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "Consider adding try-catch around the await to handle import failures gracefully",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "The code uses forEach with async callbacks, which causes asynchronous operations...",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    }
+  ]
+}

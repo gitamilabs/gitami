@@ -1,0 +1,93 @@
+{
+  "metadata": {
+    "config_id": "B2",
+    "config_name": "Baseline 2: Vector RAG Only",
+    "kb": "ChromA (Only)",
+    "llm_architecture": "Dual-LLM",
+    "convention_gate": "Enabled",
+    "total_duration_seconds": 13.54,
+    "status": "completed",
+    "generated_at": "2026-10-19T15:17:10.943731+00:00"
+  },
+  "aggregate": {
+    "total_cases": 1,
+    "total_ground_truth": 2,
+    "total_predicted": 2,
+    "true_positives": 0,
+    "false_positives": 2,
+    "false_negatives": 2,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1_score": 0.0,
+    "mean_duration_seconds": 7.84,
+    "category_breakdown": {
+      "convention": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      },
+      "bug": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      }
+    },
+    "severity_detection_rates": {
+      "info": 0.0,
+      "error": 0.0
+    }
+  },
+  "cases": [
+    {
+      "case_id": "martian_cal_dot_com_1",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 2,
+      "fn": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 7.843,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [
+        {
+          "id": "750d3713-2e0a-42e3-b32f-fd698b34eb21",
+          "title": "Unhandled Promise in forEach loop",
+          "description": "The `forEach` callback is now `async`, which returns a Promise. `forEach` does not await these promises, meaning the asynchronous operations inside the loop will run concurrently and their completion is not tracked. This can lead to race conditions, unhandled promise rejections, or the function returning before all rescheduling operations are complete. `for...of` with `await` or `Promise.all` should be used instead.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/vital/lib/reschedule.ts",
+          "line": 125,
+          "suggested_fix": ""
+        },
+        {
+          "id": "94f83c16-424b-4a85-b182-829e1aefccd9",
+          "title": "Dynamic imports in object literal cause immediate execution",
+          "description": "Using `import()` inside an object literal (e.g., `applecalendar: import(\"./applecalendar\")`) triggers the dynamic import immediately when the module is loaded, rather than lazily. This defeats the purpose of dynamic imports for code splitting or lazy loading. If the intent is lazy loading, the values should be functions that return the promise (e.g., `applecalendar: () => import(\"./applecalendar\")`) or the object should be populated asynchronously.",
+          "category": "performance",
+          "severity": "warning",
+          "file_path": "packages/app-store/index.ts",
+          "line": 2,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Consider adding try-catch around the await to handle import failures gracefully",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "The code uses forEach with async callbacks, which causes asynchronous operations...",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    }
+  ]
+}

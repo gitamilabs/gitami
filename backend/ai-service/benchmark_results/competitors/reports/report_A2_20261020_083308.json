@@ -1,0 +1,445 @@
+{
+  "metadata": {
+    "config_id": "A2",
+    "config_name": "Ablation 2: Worker Only (Llama-70B)",
+    "kb": "Dual KB (Neo4j + Chroma)",
+    "llm_architecture": "Worker Only (Llama-70B)",
+    "convention_gate": "Enabled",
+    "total_duration_seconds": 42.21,
+    "status": "completed",
+    "generated_at": "2026-10-20T03:03:08.809056+00:00"
+  },
+  "aggregate": {
+    "total_cases": 5,
+    "total_ground_truth": 18,
+    "total_predicted": 23,
+    "true_positives": 6,
+    "false_positives": 17,
+    "false_negatives": 12,
+    "precision": 0.2609,
+    "recall": 0.3333,
+    "f1_score": 0.2927,
+    "mean_duration_seconds": 5.5,
+    "category_breakdown": {
+      "convention": {
+        "detected": 0,
+        "total": 5,
+        "recall": 0.0
+      },
+      "bug": {
+        "detected": 6,
+        "total": 12,
+        "recall": 0.5
+      },
+      "performance": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      }
+    },
+    "severity_detection_rates": {
+      "info": 0.2857,
+      "error": 0.1667,
+      "warning": 0.6
+    }
+  },
+  "cases": [
+    {
+      "case_id": "martian_cal_dot_com_1",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 2,
+      "fn": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 2.9,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [
+        {
+          "id": "0bd0c4d7-3cb2-4cbb-96eb-b9e32c5eae57",
+          "title": "Unhandled Promise Rejection in forEach",
+          "description": "Using `forEach` with an `async` callback in `vital/lib/reschedule.ts` does not wait for the promises to resolve. This can lead to unhandled promise rejections and race conditions, as the function may exit before all async operations complete.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/vital/lib/reschedule.ts",
+          "line": 125,
+          "suggested_fix": ""
+        },
+        {
+          "id": "3028c6ba-98b3-4d40-b3d3-84e421d7db02",
+          "title": "Dynamic Import Performance Concern",
+          "description": "The `appStore` object now uses dynamic imports for all modules. This could lead to performance degradation if these imports are triggered frequently, as each call may result in a new module load. Consider caching the imported modules or using a lazy loading strategy.",
+          "category": "performance",
+          "severity": "warning",
+          "file_path": "packages/app-store/index.ts",
+          "line": 1,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Consider adding try-catch around the await to handle import failures gracefully",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "The code uses forEach with async callbacks, which causes asynchronous operations...",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_2",
+      "dataset": "martian",
+      "tp": 2,
+      "fp": 6,
+      "fn": 3,
+      "precision": 0.25,
+      "recall": 0.4,
+      "f1_score": 0.3077,
+      "duration_seconds": 2.279,
+      "matched_count": 2,
+      "matched_issues": [
+        {
+          "predicted_title": "Component Name Mismatch",
+          "predicted_file": "apps/web/components/auth/BackupCode.tsx",
+          "predicted_line": 7,
+          "gt_title": "Backup code validation is case-sensitive due to the use of indexOf(). This cause...",
+          "gt_file": "apps/web/components/auth/BackupCode.tsx",
+          "gt_line": 1,
+          "match_score": 0.908
+        },
+        {
+          "predicted_title": "Input Validation Mismatch",
+          "predicted_file": "apps/web/components/auth/BackupCode.tsx",
+          "predicted_line": 22,
+          "gt_title": "Because backupCodes are decrypted and mutated in memory before being written bac...",
+          "gt_file": "apps/web/components/auth/BackupCode.tsx",
+          "gt_line": 1,
+          "match_score": 0.618
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "1e81b7eb-cfdd-4c9e-970d-f7125b1e174a",
+          "title": "[RULE-006] Convention Violation",
+          "description": "Debug console statement left in code",
+          "category": "convention",
+          "severity": "warning",
+          "file_path": "apps/web/pages/api/auth/two-factor/totp/disable.ts",
+          "line": 50,
+          "suggested_fix": "Adhere to convention rule RULE-006"
+        },
+        {
+          "id": "d1c303bb-378a-475e-9a23-bcb709435d50",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 12,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "65f1e0cb-4c0a-4fe1-bf04-ad5b3b81c92e",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 50,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "d64d468b-f6e7-404e-b48a-b80cae65a817",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 117,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "4b2418e6-f712-496a-a2b0-74b6b4f1af45",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 122,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "6461609c-f653-4c6e-a289-c76d1f6fe464",
+          "title": "[RULE-006] Convention Violation",
+          "description": "Debug console statement left in code",
+          "category": "convention",
+          "severity": "warning",
+          "file_path": "packages/features/auth/lib/next-auth-options.ts",
+          "line": 133,
+          "suggested_fix": "Adhere to convention rule RULE-006"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The exported function TwoFactor handles backup codes and is in BackupCode.tsx. I...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Error message mentions 'backup code login' but this is a disable endpoint, not l...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Object URL for backup codes is not revoked on component unmount, leading to a po...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "performance",
+          "severity": "info"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_3",
+      "dataset": "martian",
+      "tp": 1,
+      "fp": 6,
+      "fn": 5,
+      "precision": 0.1429,
+      "recall": 0.1667,
+      "f1_score": 0.1538,
+      "duration_seconds": 3.511,
+      "matched_count": 1,
+      "matched_issues": [
+        {
+          "predicted_title": "Type mismatch in bookingReminder.ts destinationCalendar assignment",
+          "predicted_file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "predicted_line": 130,
+          "gt_title": "The Calendar interface now requires createEvent(event, credentialId), but some i...",
+          "gt_file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "gt_line": 107,
+          "match_score": 0.621
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "3bcf3518-2c3e-4a63-93b9-b114ce697999",
+          "title": "Incomplete diff prevents full audit of cross-service consistency",
+          "description": "The diff is truncated and does not show the full implementation of changes in `googlecalendar/lib/CalendarService.ts`, `larkcalendar/lib/CalendarService.ts`, `office365calendar/lib/CalendarService.ts`, or the core `CalendarService.ts`. This makes it impossible to verify that all calendar implementations correctly handle the new array-based `destinationCalendar` and the `credentialId` parameter. Inconsistent handling could lead to events being created in the wrong calendar or failing silently.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 142,
+          "suggested_fix": ""
+        },
+        {
+          "id": "f939880a-3044-4ddd-96fe-f08ff5ea949c",
+          "title": "Potential null/undefined access in destinationCalendar array handling",
+          "description": "In `googlecalendar/lib/CalendarService.ts`, the code uses `calEventRaw?.destinationCalendar?.find(...)` which is safe, but the destructuring `const [mainHostDestinationCalendar] = calEventRaw?.destinationCalendar && calEventRaw?.destinationCalendar.length > 0 ? calEventRaw.destinationCalendar : [];` assumes the first element is the 'main host' calendar. If the array is empty or the first element is not the intended one, `mainHostDestinationCalendar` will be undefined, and the fallback to `calEventRaw.organizer.email` may not be the desired behavior. The logic for selecting the 'main' calendar is ambiguous.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 100,
+          "suggested_fix": ""
+        },
+        {
+          "id": "a416ee85-39dc-46d4-82d4-7d9fc45cae4d",
+          "title": "Missing credentialId parameter in other calendar services",
+          "description": "The `createEvent` method in `googlecalendar/lib/CalendarService.ts` now requires a `credentialId` parameter. If other calendar services (Lark, Office365) or the base `CalendarService` interface have not been updated to include this parameter, calls to these services will fail or use incorrect credentials. The diff does not show changes to these files, suggesting they may not have been updated.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 87,
+          "suggested_fix": ""
+        },
+        {
+          "id": "fa0be7e0-7f83-42d3-9150-d666af6c41fa",
+          "title": "Inconsistent destinationCalendar handling in updateEvent",
+          "description": "In `googlecalendar/lib/CalendarService.ts`, the `updateEvent` method also destructures `mainHostDestinationCalendar` from the array, but the diff is cut off before showing how it's used. If the update logic doesn't correctly handle the array-based `destinationCalendar`, events may be updated in the wrong calendar or fail.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 198,
+          "suggested_fix": ""
+        },
+        {
+          "id": "ecef83d9-2801-4217-9545-332479b3bfb7",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "packages/core/CalendarManager.ts",
+          "line": 230,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "d7e23c17-7221-4408-95f3-5d89a5a8a83d",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "packages/core/CalendarManager.ts",
+          "line": 250,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "A null reference occurs in GoogleCalendarService.createEvent() and updateEvent()...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "error"
+        },
+        {
+          "title": "The optional chaining on mainHostDestinationCalendar?.integration is redundant s...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Logic error: when externalCalendarId is provided, you're searching for a calenda...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "error"
+        },
+        {
+          "title": "Logic inversion in organization creation: The slug property is now conditionally...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "warning"
+        },
+        {
+          "title": "The `credential` may be undefined when passed to `updateEvent` if `reference.cre...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_4",
+      "dataset": "martian",
+      "tp": 1,
+      "fp": 1,
+      "fn": 1,
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1_score": 0.5,
+      "duration_seconds": 16.762,
+      "matched_count": 1,
+      "matched_issues": [
+        {
+          "predicted_title": "Fragile Test Assertions with Prisma.sql",
+          "predicted_file": "packages/lib/server/service/__tests__/insightsBooking.integration-test.ts",
+          "predicted_line": 210,
+          "gt_title": "In getBaseConditions(), the else if (filterConditions) and final else branches a...",
+          "gt_file": "packages/lib/server/service/__tests__/insightsBooking.integration-test.ts",
+          "gt_line": 2,
+          "match_score": 0.63
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "7832a04f-e375-4811-a9f3-8480578eeb0f",
+          "title": "Incomplete Diff",
+          "description": "The provided diff is truncated and does not include the changes to `packages/lib/server/service/insightsBooking.ts`. Without seeing the implementation changes, it is impossible to verify if the service is correctly returning `Prisma.sql` objects and if the test expectations are aligned with the new behavior.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/lib/server/service/insightsBooking.ts",
+          "line": 1,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Fetching userIdsFromOrg only when teamsFromOrg.length > 0 can exclude org-level ...",
+          "file": "packages/lib/server/service/__tests__/insightsBooking.integration-test.ts",
+          "line": 2,
+          "category": "convention",
+          "severity": "warning"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_5",
+      "dataset": "martian",
+      "tp": 2,
+      "fp": 2,
+      "fn": 1,
+      "precision": 0.5,
+      "recall": 0.6667,
+      "f1_score": 0.5714,
+      "duration_seconds": 2.066,
+      "matched_count": 2,
+      "matched_issues": [
+        {
+          "predicted_title": "Missing check for scheduled status before deleting reminders",
+          "predicted_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "predicted_line": 484,
+          "gt_title": "The 'cancelled' field is nullable, which can lead to existing records having nul...",
+          "gt_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "gt_line": 484,
+          "match_score": 0.929
+        },
+        {
+          "predicted_title": "Potential null/undefined referenceId not handled",
+          "predicted_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "predicted_line": 485,
+          "gt_title": "Asynchronous functions deleteScheduledEmailReminder and deleteScheduledSMSRemind...",
+          "gt_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "gt_line": 484,
+          "match_score": 0.917
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "b6950cbc-5750-41bb-b080-d6a3ac998e51",
+          "title": "Inconsistent argument passing in deleteScheduledEmailReminder",
+          "description": "In `handleNewBooking.ts`, `deleteScheduledEmailReminder` is called with three arguments `(reminder.id, reminder.referenceId, true)`, while in `handleCancelBooking.ts` it is called with two arguments `(reminder.id, reminder.referenceId)`. This inconsistency suggests either a missing parameter in one of the calls or an incorrect extra argument. If the third argument is not supported by the function signature, it could be ignored or cause unexpected behavior.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/features/bookings/lib/handleNewBooking.ts",
+          "line": 965,
+          "suggested_fix": ""
+        },
+        {
+          "id": "31b20866-0509-4802-bea7-07f9ec794c41",
+          "title": "[RULE-006] Convention Violation",
+          "description": "Debug console statement left in code",
+          "category": "convention",
+          "severity": "warning",
+          "file_path": "packages/features/ee/workflows/api/scheduleEmailReminders.ts",
+          "line": 76,
+          "suggested_fix": "Adhere to convention rule RULE-006"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "When immediateDelete is true, the deleteScheduledEmailReminder function cancels ...",
+          "file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "line": 484,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    }
+  ]
+}

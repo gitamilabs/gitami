@@ -1,0 +1,402 @@
+{
+  "metadata": {
+    "config_id": "B2",
+    "config_name": "Baseline 2: Vector RAG Only",
+    "kb": "ChromA (Only)",
+    "llm_architecture": "Dual-LLM",
+    "convention_gate": "Enabled",
+    "total_duration_seconds": 44.24,
+    "status": "completed",
+    "generated_at": "2026-10-19T15:21:11.820385+00:00"
+  },
+  "aggregate": {
+    "total_cases": 5,
+    "total_ground_truth": 18,
+    "total_predicted": 19,
+    "true_positives": 6,
+    "false_positives": 13,
+    "false_negatives": 12,
+    "precision": 0.3158,
+    "recall": 0.3333,
+    "f1_score": 0.3243,
+    "mean_duration_seconds": 8.41,
+    "category_breakdown": {
+      "convention": {
+        "detected": 0,
+        "total": 5,
+        "recall": 0.0
+      },
+      "bug": {
+        "detected": 6,
+        "total": 12,
+        "recall": 0.5
+      },
+      "performance": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      }
+    },
+    "severity_detection_rates": {
+      "info": 0.0,
+      "error": 0.5,
+      "warning": 0.6
+    }
+  },
+  "cases": [
+    {
+      "case_id": "martian_cal_dot_com_1",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 2,
+      "fn": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 7.843,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [
+        {
+          "id": "750d3713-2e0a-42e3-b32f-fd698b34eb21",
+          "title": "Unhandled Promise in forEach loop",
+          "description": "The `forEach` callback is now `async`, which returns a Promise. `forEach` does not await these promises, meaning the asynchronous operations inside the loop will run concurrently and their completion is not tracked. This can lead to race conditions, unhandled promise rejections, or the function returning before all rescheduling operations are complete. `for...of` with `await` or `Promise.all` should be used instead.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/vital/lib/reschedule.ts",
+          "line": 125,
+          "suggested_fix": ""
+        },
+        {
+          "id": "94f83c16-424b-4a85-b182-829e1aefccd9",
+          "title": "Dynamic imports in object literal cause immediate execution",
+          "description": "Using `import()` inside an object literal (e.g., `applecalendar: import(\"./applecalendar\")`) triggers the dynamic import immediately when the module is loaded, rather than lazily. This defeats the purpose of dynamic imports for code splitting or lazy loading. If the intent is lazy loading, the values should be functions that return the promise (e.g., `applecalendar: () => import(\"./applecalendar\")`) or the object should be populated asynchronously.",
+          "category": "performance",
+          "severity": "warning",
+          "file_path": "packages/app-store/index.ts",
+          "line": 2,
+          "suggested_fix": ""
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Consider adding try-catch around the await to handle import failures gracefully",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "The code uses forEach with async callbacks, which causes asynchronous operations...",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_2",
+      "dataset": "martian",
+      "tp": 2,
+      "fp": 7,
+      "fn": 3,
+      "precision": 0.2222,
+      "recall": 0.4,
+      "f1_score": 0.2857,
+      "duration_seconds": 6.68,
+      "matched_count": 2,
+      "matched_issues": [
+        {
+          "predicted_title": "Component Name Mismatch",
+          "predicted_file": "apps/web/components/auth/BackupCode.tsx",
+          "predicted_line": 7,
+          "gt_title": "Because backupCodes are decrypted and mutated in memory before being written bac...",
+          "gt_file": "apps/web/components/auth/BackupCode.tsx",
+          "gt_line": 1,
+          "match_score": 0.906
+        },
+        {
+          "predicted_title": "Missing Validation for Backup Code Format",
+          "predicted_file": "apps/web/components/auth/BackupCode.tsx",
+          "predicted_line": 22,
+          "gt_title": "Backup code validation is case-sensitive due to the use of indexOf(). This cause...",
+          "gt_file": "apps/web/components/auth/BackupCode.tsx",
+          "gt_line": 1,
+          "match_score": 0.631
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "9aa9d478-8672-4e26-b258-65353faebd1f",
+          "title": "Inconsistent Error Handling Logic",
+          "description": "The error handling in `handleDisable` uses `if` statements instead of `else if` for some conditions, which could lead to multiple error messages being set if multiple conditions are true.",
+          "category": "bug",
+          "severity": "info",
+          "file_path": "apps/web/components/settings/DisableTwoFactorModal.tsx",
+          "line": 66,
+          "suggested_fix": ""
+        },
+        {
+          "id": "51decc90-f25a-475c-ac3a-212d732d6f37",
+          "title": "[RULE-006] Convention Violation",
+          "description": "Debug console statement left in code",
+          "category": "convention",
+          "severity": "warning",
+          "file_path": "apps/web/pages/api/auth/two-factor/totp/disable.ts",
+          "line": 50,
+          "suggested_fix": "Adhere to convention rule RULE-006"
+        },
+        {
+          "id": "709389bd-8710-4de3-a327-483e718e660c",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 12,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "88e58c6b-b7fa-4ec3-9c2f-b56116ca0fe6",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 50,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "c3c190db-120d-4640-a1b6-fe4d44bca0d1",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 117,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "f168eadd-3a8d-4712-ae3b-c3b9237ed4d3",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "apps/web/playwright/login.2fa.e2e.ts",
+          "line": 122,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "eacda78e-4e49-4a08-8dd9-c3bd75215140",
+          "title": "[RULE-006] Convention Violation",
+          "description": "Debug console statement left in code",
+          "category": "convention",
+          "severity": "warning",
+          "file_path": "packages/features/auth/lib/next-auth-options.ts",
+          "line": 133,
+          "suggested_fix": "Adhere to convention rule RULE-006"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The exported function TwoFactor handles backup codes and is in BackupCode.tsx. I...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Error message mentions 'backup code login' but this is a disable endpoint, not l...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Object URL for backup codes is not revoked on component unmount, leading to a po...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "performance",
+          "severity": "info"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_3",
+      "dataset": "martian",
+      "tp": 1,
+      "fp": 3,
+      "fn": 5,
+      "precision": 0.25,
+      "recall": 0.1667,
+      "f1_score": 0.2,
+      "duration_seconds": 14.357,
+      "matched_count": 1,
+      "matched_issues": [
+        {
+          "predicted_title": "Inconsistent handling of destinationCalendar in bookingReminder.ts",
+          "predicted_file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "predicted_line": 130,
+          "gt_title": "A null reference occurs in GoogleCalendarService.createEvent() and updateEvent()...",
+          "gt_file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "gt_line": 107,
+          "match_score": 0.629
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "c1c9418a-ac59-40ec-8eb4-c3d3601d2ed3",
+          "title": "Potential fallback and calendar matching logic issue in GoogleCalendarService",
+          "description": "In `GoogleCalendarService.createEvent`, `mainHostDestinationCalendar` is extracted from `calEventRaw.destinationCalendar`. If no calendar matches or the array is empty, it evaluates to undefined. Ensure robust validation when mapping `credentialId` to destination calendars to prevent events from being silently created in unintended calendars.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "packages/app-store/googlecalendar/lib/CalendarService.ts",
+          "line": 97,
+          "suggested_fix": ""
+        },
+        {
+          "id": "ff87c83a-ddae-4494-a556-2c650018b45a",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "packages/core/CalendarManager.ts",
+          "line": 230,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        },
+        {
+          "id": "22981db4-bf98-4045-8be5-fc12e3064e20",
+          "title": "[RULE-008] Convention Violation",
+          "description": "TODO/FIXME marker introduced in PR diff",
+          "category": "convention",
+          "severity": "info",
+          "file_path": "packages/core/CalendarManager.ts",
+          "line": 250,
+          "suggested_fix": "Adhere to convention rule RULE-008"
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "The optional chaining on mainHostDestinationCalendar?.integration is redundant s...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Logic error: when externalCalendarId is provided, you're searching for a calenda...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "error"
+        },
+        {
+          "title": "Logic inversion in organization creation: The slug property is now conditionally...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "warning"
+        },
+        {
+          "title": "The Calendar interface now requires createEvent(event, credentialId), but some i...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "info"
+        },
+        {
+          "title": "The `credential` may be undefined when passed to `updateEvent` if `reference.cre...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_4",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 0,
+      "fn": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 5.64,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "In getBaseConditions(), the else if (filterConditions) and final else branches a...",
+          "file": "packages/lib/server/service/__tests__/insightsBooking.integration-test.ts",
+          "line": 2,
+          "category": "bug",
+          "severity": "info"
+        },
+        {
+          "title": "Fetching userIdsFromOrg only when teamsFromOrg.length > 0 can exclude org-level ...",
+          "file": "packages/lib/server/service/__tests__/insightsBooking.integration-test.ts",
+          "line": 2,
+          "category": "convention",
+          "severity": "warning"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_5",
+      "dataset": "martian",
+      "tp": 3,
+      "fp": 1,
+      "fn": 0,
+      "precision": 0.75,
+      "recall": 1.0,
+      "f1_score": 0.8571,
+      "duration_seconds": 7.537,
+      "matched_count": 3,
+      "matched_issues": [
+        {
+          "predicted_title": "Missing error handling for asynchronous reminder deletions",
+          "predicted_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "predicted_line": 486,
+          "gt_title": "Asynchronous functions deleteScheduledEmailReminder and deleteScheduledSMSRemind...",
+          "gt_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "gt_line": 484,
+          "match_score": 0.933
+        },
+        {
+          "predicted_title": "Potential null reference error in deleteScheduledSMSReminder",
+          "predicted_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "predicted_line": 486,
+          "gt_title": "The 'cancelled' field is nullable, which can lead to existing records having nul...",
+          "gt_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "gt_line": 484,
+          "match_score": 0.921
+        },
+        {
+          "predicted_title": "Inconsistent argument passing to deleteScheduledEmailReminder",
+          "predicted_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "predicted_line": 486,
+          "gt_title": "When immediateDelete is true, the deleteScheduledEmailReminder function cancels ...",
+          "gt_file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "gt_line": 484,
+          "match_score": 0.917
+        }
+      ],
+      "unmatched_predictions": [
+        {
+          "id": "111fdca4-67a2-436e-8597-cade02290b93",
+          "title": "[RULE-006] Convention Violation",
+          "description": "Debug console statement left in code",
+          "category": "convention",
+          "severity": "warning",
+          "file_path": "packages/features/ee/workflows/api/scheduleEmailReminders.ts",
+          "line": 76,
+          "suggested_fix": "Adhere to convention rule RULE-006"
+        }
+      ],
+      "unmatched_ground_truth": []
+    }
+  ]
+}

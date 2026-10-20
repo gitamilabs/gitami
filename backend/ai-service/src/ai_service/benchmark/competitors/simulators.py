@@ -196,7 +196,7 @@ async def call_groq_with_rotation(
         key = rotator.get_current_key()
         try:
             from groq import Groq
-            client = Groq(api_key=key)
+            client = Groq(api_key=key, max_retries=0)
 
             for model_name in GROQ_BENCHMARK_MODELS:
                 try:

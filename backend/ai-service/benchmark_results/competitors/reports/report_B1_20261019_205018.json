@@ -1,0 +1,286 @@
+{
+  "metadata": {
+    "config_id": "B1",
+    "config_name": "Baseline 1: Standard LLM (Raw Diff Only)",
+    "kb": "None (Raw Diff Only)",
+    "llm_architecture": "Single (Gemini 2.0 Flash)",
+    "convention_gate": "Disabled",
+    "total_duration_seconds": 21.99,
+    "status": "completed",
+    "generated_at": "2026-10-19T15:20:18.747312+00:00"
+  },
+  "aggregate": {
+    "total_cases": 5,
+    "total_ground_truth": 18,
+    "total_predicted": 3,
+    "true_positives": 0,
+    "false_positives": 3,
+    "false_negatives": 18,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1_score": 0.0,
+    "mean_duration_seconds": 4.07,
+    "category_breakdown": {
+      "convention": {
+        "detected": 0,
+        "total": 5,
+        "recall": 0.0
+      },
+      "bug": {
+        "detected": 0,
+        "total": 12,
+        "recall": 0.0
+      },
+      "performance": {
+        "detected": 0,
+        "total": 1,
+        "recall": 0.0
+      }
+    },
+    "severity_detection_rates": {
+      "info": 0.0,
+      "error": 0.0,
+      "warning": 0.0
+    }
+  },
+  "cases": [
+    {
+      "case_id": "martian_cal_dot_com_1",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 2,
+      "fn": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 4.54,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [
+        {
+          "id": "979b6676-f354-4850-b56f-5bf8d9048bb6",
+          "title": "Async/Await inside Array.forEach does not await promises",
+          "description": "Using `async/await` inside a standard `Array.prototype.forEach` callback does not pause execution of the loop or outer function. The promises returned by `getCalendar` or `deleteMeeting` will be unawaited, leading to unhandled promise execution order or background execution without error handling.",
+          "category": "bug",
+          "severity": "error",
+          "file_path": "packages/app-store/vital/lib/reschedule.ts",
+          "line": 125,
+          "suggested_fix": "Replace `bookingRefsFiltered.forEach(async ...)` with a `for...of` loop: `for (const bookingRef of bookingRefsFiltered) { ... }`"
+        },
+        {
+          "id": "56f30522-e4c5-409e-8f0b-a01bb0b02bf6",
+          "title": "Async/Await inside Array.forEach does not await promises",
+          "description": "Using `async/await` inside a standard `Array.prototype.forEach` callback does not pause execution of the loop or outer function.",
+          "category": "bug",
+          "severity": "error",
+          "file_path": "packages/app-store/wipemycalother/lib/reschedule.ts",
+          "line": 125,
+          "suggested_fix": "Replace `bookingRefsFiltered.forEach(async ...)` with a `for...of` loop."
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Consider adding try-catch around the await to handle import failures gracefully",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "The code uses forEach with async callbacks, which causes asynchronous operations...",
+          "file": "packages/app-store/_utils/getCalendar.ts",
+          "line": 9,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_2",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 0,
+      "fn": 5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 3.461,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "The exported function TwoFactor handles backup codes and is in BackupCode.tsx. I...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Error message mentions 'backup code login' but this is a disable endpoint, not l...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Backup code validation is case-sensitive due to the use of indexOf(). This cause...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "bug",
+          "severity": "warning"
+        },
+        {
+          "title": "Because backupCodes are decrypted and mutated in memory before being written bac...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "bug",
+          "severity": "error"
+        },
+        {
+          "title": "Object URL for backup codes is not revoked on component unmount, leading to a po...",
+          "file": "apps/web/components/auth/BackupCode.tsx",
+          "line": 1,
+          "category": "performance",
+          "severity": "info"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_3",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 0,
+      "fn": 6,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.815,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "A null reference occurs in GoogleCalendarService.createEvent() and updateEvent()...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "error"
+        },
+        {
+          "title": "The optional chaining on mainHostDestinationCalendar?.integration is redundant s...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "convention",
+          "severity": "info"
+        },
+        {
+          "title": "Logic error: when externalCalendarId is provided, you're searching for a calenda...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "error"
+        },
+        {
+          "title": "Logic inversion in organization creation: The slug property is now conditionally...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "warning"
+        },
+        {
+          "title": "The Calendar interface now requires createEvent(event, credentialId), but some i...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "info"
+        },
+        {
+          "title": "The `credential` may be undefined when passed to `updateEvent` if `reference.cre...",
+          "file": "apps/web/pages/api/cron/bookingReminder.ts",
+          "line": 107,
+          "category": "bug",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_4",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 0,
+      "fn": 2,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 1.321,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [],
+      "unmatched_ground_truth": [
+        {
+          "title": "In getBaseConditions(), the else if (filterConditions) and final else branches a...",
+          "file": "packages/lib/server/service/__tests__/insightsBooking.integration-test.ts",
+          "line": 2,
+          "category": "bug",
+          "severity": "info"
+        },
+        {
+          "title": "Fetching userIdsFromOrg only when teamsFromOrg.length > 0 can exclude org-level ...",
+          "file": "packages/lib/server/service/__tests__/insightsBooking.integration-test.ts",
+          "line": 2,
+          "category": "convention",
+          "severity": "warning"
+        }
+      ]
+    },
+    {
+      "case_id": "martian_cal_dot_com_5",
+      "dataset": "martian",
+      "tp": 0,
+      "fp": 1,
+      "fn": 3,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "duration_seconds": 9.237,
+      "matched_count": 0,
+      "matched_issues": [],
+      "unmatched_predictions": [
+        {
+          "id": "6319ad4f-0e95-4cf3-9d9e-5aa4a5cd5afb",
+          "title": "Incomplete code file / Truncated diff",
+          "description": "The diff for `packages/features/ee/workflows/api/scheduleEmailReminders.ts` is truncated mid-statement (`const workflowReminderToDelete = prisma.workflowRemi`), which will cause a compilation error.",
+          "category": "bug",
+          "severity": "error",
+          "file_path": "packages/features/ee/workflows/api/scheduleEmailReminders.ts",
+          "line": 78,
+          "suggested_fix": "Ensure the complete file content is added and properly closed."
+        }
+      ],
+      "unmatched_ground_truth": [
+        {
+          "title": "Asynchronous functions deleteScheduledEmailReminder and deleteScheduledSMSRemind...",
+          "file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "line": 484,
+          "category": "bug",
+          "severity": "warning"
+        },
+        {
+          "title": "When immediateDelete is true, the deleteScheduledEmailReminder function cancels ...",
+          "file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "line": 484,
+          "category": "bug",
+          "severity": "error"
+        },
+        {
+          "title": "The 'cancelled' field is nullable, which can lead to existing records having nul...",
+          "file": "packages/features/bookings/lib/handleCancelBooking.ts",
+          "line": 484,
+          "category": "bug",
+          "severity": "warning"
+        }
+      ]
+    }
+  ]
+}
