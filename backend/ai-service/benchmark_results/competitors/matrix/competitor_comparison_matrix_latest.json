@@ -24,7 +24,7 @@
     "Conv. Gate": "Enabled",
     "Martian (5-Case Pilot FI)": "F1: 0.216 (P: 21.1%, R: 22.2%)",
     "Martian (Full 50 PRs)": "F1: 0.191 (P: 30.4%, R: 13.9%)",
-    "VulnGym (393 Cases, 596 Vulns)": "[TO BE MEASURED]"
+    "VulnGym (393 Cases, 596 Vulns)": "F1: 0.500 (P: 43.5%, R: 58.8%) [10/393 cases]"
   },
   {
     "Configuration ID": "A2",

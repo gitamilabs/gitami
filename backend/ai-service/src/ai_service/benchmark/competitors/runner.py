@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ai_service.agent.diff_parser import parse_git_diff
+from ai_service.agent.diff_parser import parse_git_diff, group_hunks_by_file
 from ai_service.benchmark.checkpoint import BenchmarkCheckpointManager
 from ai_service.benchmark.competitors.config import CompetitorConfig
 from ai_service.benchmark.competitors.key_rotator import APIKeyRotator
@@ -172,23 +172,63 @@ class CompetitorBenchmarkRunner:
         """Create a temporary staging directory containing diff target files for KB ingestion."""
         stage_dir = Path(tempfile.mkdtemp(prefix=f"gitami_comp_stage_{self._sanitize_id(case.case_id)}_"))
         hunks = parse_git_diff(case.diff_text) if case.diff_text else []
+        grouped_hunks = group_hunks_by_file(hunks)
         written_files = set()
 
-        for hunk in hunks:
-            if hunk.file_path and hunk.file_path not in written_files:
-                target_file = stage_dir / hunk.file_path
-                target_file.parent.mkdir(parents=True, exist_ok=True)
-                body_lines = [content for _, content in hunk.added_lines]
-                file_content = "\n".join(body_lines) if body_lines else "# Stub content for analysis"
-                target_file.write_text(file_content, encoding="utf-8")
-                written_files.add(hunk.file_path)
+        for file_path, file_hunks in grouped_hunks.items():
+            if not file_path or file_path == "modified_files":
+                continue
+            target_file = stage_dir / file_path
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            file_lines = []
 
+            for hunk in file_hunks:
+                scope_match = re.search(r"@@\s+[^@]+@@\s*(.*)", hunk.patch_text or "")
+                if scope_match and scope_match.group(1).strip():
+                    file_lines.append(f"\n// Scope: {scope_match.group(1).strip()}\n")
+
+                if hunk.patch_text:
+                    for line in hunk.patch_text.splitlines():
+                        if line.startswith(('+', ' ')) and not line.startswith(('+++', '---', '@@')):
+                            file_lines.append(line[1:])
+                else:
+                    file_lines.extend(content for _, content in hunk.added_lines)
+
+            content_text = "\n".join(file_lines) if file_lines else "// Empty file stub"
+            target_file.write_text(content_text, encoding="utf-8")
+            written_files.add(file_path)
+
+        meta = case.metadata or {}
+        crit_op = meta.get("critical_operation") or {}
+        entry_point = meta.get("entry_point") or {}
+
+        # If critical operation code exists and wasn't in diff, stage it
+        crit_file = crit_op.get("file")
+        crit_code = crit_op.get("code")
+        if crit_file and crit_code and crit_file not in written_files:
+            target_file = stage_dir / crit_file
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            target_file.write_text(f"// Critical Operation\n{crit_code}\n", encoding="utf-8")
+            written_files.add(crit_file)
+
+        # Stage entry point code in caller file
+        ep_file = entry_point.get("file")
+        ep_code = entry_point.get("code")
+        if ep_file and ep_code and ep_file not in written_files:
+            target_file = stage_dir / ep_file
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            target_file.write_text(f"// Vulnerability Entry Point\n{ep_code}\n", encoding="utf-8")
+            written_files.add(ep_file)
+
+        # For any remaining ground truth issues, write descriptive stubs
         for gt in case.ground_truth_issues:
             if gt.file_path and gt.file_path not in written_files:
                 target_file = stage_dir / gt.file_path
                 target_file.parent.mkdir(parents=True, exist_ok=True)
                 target_file.write_text(
-                    f"# Target: {gt.title}\n# Category: {gt.category}\n# Severity: {gt.severity}\n",
+                    f"// Vulnerability test case target: {gt.title}\n"
+                    f"// Category: {gt.category}\n"
+                    f"// Severity: {gt.severity}\n",
                     encoding="utf-8",
                 )
                 written_files.add(gt.file_path)
