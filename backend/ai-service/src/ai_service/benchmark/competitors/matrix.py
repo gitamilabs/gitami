@@ -54,7 +54,30 @@ class CompetitorMatrixGenerator:
                 p = agg.get("precision", 0.209)
                 r = agg.get("recall", 0.052)
                 cases = agg.get("total_cases", 50)
-                martian_str = f"F1: {f1:.3f} (P: {p*100:.1f}%, R: {r*100:.1f}%) [{cases} PRs]"
+                if cases <= 5:
+                    pilot_str = f"F1: {f1:.3f} (P: {p*100:.1f}%, R: {r*100:.1f}%)"
+                else:
+                    martian_str = f"F1: {f1:.3f} (P: {p*100:.1f}%, R: {r*100:.1f}%) [{cases} PRs]"
+            except Exception:
+                pass
+
+        # Check GitAmi checkpoint for pilot and full Martian scores
+        gitami_cp = self.results_dir / "benchmark_checkpoint.json"
+        if gitami_cp.exists():
+            try:
+                mgr = BenchmarkCheckpointManager(gitami_cp)
+                scores = mgr.get_scores()
+                m_scores = [s for s in scores if s.dataset_name == "martian"]
+                if m_scores:
+                    pilot_ids = {f"martian_cal_dot_com_{i}" for i in range(1, 6)}
+                    pilot_scores = [s for s in m_scores if s.case_id in pilot_ids]
+                    if len(pilot_scores) == 5:
+                        pilot_str = format_score_cell(pilot_scores, expected_total=5)
+                    elif len(m_scores) >= 5:
+                        pilot_str = format_score_cell(m_scores[:5], expected_total=5)
+
+                    if len(m_scores) >= 50:
+                        martian_str = format_score_cell(m_scores, expected_total=50)
             except Exception:
                 pass
 

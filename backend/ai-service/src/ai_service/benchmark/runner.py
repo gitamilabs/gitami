@@ -174,7 +174,22 @@ class BenchmarkRunner:
                         cleanup=self.config.cleanup_kb,
                     ) as kb_ctx:
                         hunks = parse_git_diff(case.diff_text)
+                        changed_files = list({h.file_path for h in hunks if h.file_path})
                         changed_symbols = extract_changed_symbols(hunks, case.diff_text)
+
+                        # Extract AST symbols from changed files in staged repository
+                        symbols = []
+                        if repo_dir and Path(repo_dir).exists():
+                            try:
+                                from ai_service.parsing.parser import CodeParser
+                                code_parser = CodeParser()
+                                for f_rel in changed_files:
+                                    f_full = Path(repo_dir) / f_rel
+                                    if f_full.exists() and f_full.is_file():
+                                        p_res = code_parser.parse_file(f_full, repo_root=Path(repo_dir))
+                                        symbols.extend(p_res.symbols)
+                            except Exception as pe:
+                                logger.debug(f"AST symbol extraction notice for '{case.case_id}': {pe}")
 
                         review_result = await run_agentic_pr_review(
                             client=kb_ctx.graph_client,
@@ -182,7 +197,7 @@ class BenchmarkRunner:
                             branch=self.config.branch,
                             changed_symbols=changed_symbols,
                             raw_diff_text=case.diff_text,
-                            symbols=[],
+                            symbols=symbols,
                             vector_client=kb_ctx.vector_client,
                             llm_client=llm_client,
                         )

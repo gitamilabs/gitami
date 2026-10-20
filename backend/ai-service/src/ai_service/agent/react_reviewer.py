@@ -1,21 +1,152 @@
 """Autonomous ReAct Agent for Pull Request Review and Vulnerability Detection."""
 
+import asyncio
 import json
 import logging
+import os
+import re
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ai_service.graph.client import Neo4jClient
 from ai_service.vector.client import VectorKBClient
 from ai_service.mcp.tools import execute_tool_by_name
 from ai_service.analysis.conventions import check_conventions, check_diff_conventions
 from ai_service.analysis.decision import DecisionResult, Verdict, Suggestion
-from ai_service.agent.diff_parser import parse_git_diff, extract_changed_symbols
+from ai_service.agent.diff_parser import parse_git_diff, extract_changed_symbols, chunk_diff_by_files
 from ai_service.agent.llm_client import DualLLMClient
+from ai_service.prompts import get_prompt
 from ai_service.agent.prompts import get_react_pr_reviewer_prompt
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_issues(
+    raw_issues: List[Any],
+    changed_files: List[str],
+    default_category: str = "bug",
+) -> List[Dict[str, Any]]:
+    """Normalize extracted issues into standard BenchmarkScorer format."""
+    normalized: List[Dict[str, Any]] = []
+    primary_file = changed_files[0] if changed_files else "codebase"
+
+    for item in raw_issues:
+        if not isinstance(item, dict):
+            continue
+
+        raw_sev = str(item.get("severity", "warning")).lower()
+        if raw_sev in ("error", "critical"):
+            sev = "error"
+        elif raw_sev in ("info", "low"):
+            sev = "info"
+        else:
+            sev = "warning"
+
+        raw_cat = str(item.get("category", default_category)).lower()
+        if "sec" in raw_cat or "vuln" in raw_cat or "auth" in raw_cat:
+            cat = "security"
+        elif "perf" in raw_cat or "leak" in raw_cat:
+            cat = "performance"
+        elif "style" in raw_cat or "conv" in raw_cat or "doc" in raw_cat or "nam" in raw_cat:
+            cat = "convention"
+        else:
+            cat = "bug"
+
+        line_val = item.get("line") or item.get("line_start") or 1
+        try:
+            line_int = int(line_val)
+        except (ValueError, TypeError):
+            line_int = 1
+
+        file_path = str(item.get("file_path") or item.get("file") or primary_file).strip()
+        if file_path.startswith("a/") or file_path.startswith("b/"):
+            file_path = file_path[2:]
+
+        # Map file_path accurately against changed_files list
+        if changed_files and file_path not in changed_files:
+            matched_cf = None
+            for cf in changed_files:
+                if file_path.endswith(cf) or cf.endswith(file_path):
+                    matched_cf = cf
+                    break
+                if os.path.basename(file_path) == os.path.basename(cf):
+                    matched_cf = cf
+                    break
+            if matched_cf:
+                file_path = matched_cf
+
+        normalized.append({
+            "id": str(uuid.uuid4()),
+            "title": str(item.get("title", "Identified Code Defect"))[:120],
+            "description": str(item.get("description", "Potential defect identified during review.")),
+            "category": cat,
+            "severity": sev,
+            "file_path": file_path,
+            "line": line_int,
+            "suggested_fix": str(item.get("suggested_fix", "")),
+        })
+
+    return normalized
+
+
+def _text_overlap(t1: str, t2: str) -> float:
+    w1 = set(re.findall(r"[a-zA-Z0-9_]{3,}", t1.lower()))
+    w2 = set(re.findall(r"[a-zA-Z0-9_]{3,}", t2.lower()))
+    if not w1 or not w2:
+        return 0.0
+    return len(w1 & w2) / len(w1 | w2)
+
+
+def deduplicate_issues(issues: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Deduplicate overlapping issues while preserving distinct defects in the same file."""
+    unique: List[Dict[str, Any]] = []
+
+    for issue in issues:
+        f = str(issue.get("file_path", "")).strip()
+        l = int(issue.get("line", 1) or 1)
+        cat = str(issue.get("category", "")).strip().lower()
+        title = str(issue.get("title", "")).strip().lower()
+        desc = str(issue.get("description", "")).strip().lower()
+        full_text = f"{title} {desc}"
+
+        is_dup = False
+        dup_idx = -1
+        for idx, existing in enumerate(unique):
+            ef = str(existing.get("file_path", "")).strip()
+            el = int(existing.get("line", 1) or 1)
+            ecat = str(existing.get("category", "")).strip().lower()
+            etitle = str(existing.get("title", "")).strip().lower()
+            edesc = str(existing.get("description", "")).strip().lower()
+            efull_text = f"{etitle} {edesc}"
+
+            # If not the same file, not a duplicate
+            if f != ef and not (f.endswith(ef) or ef.endswith(f)):
+                continue
+
+            line_diff = abs(l - el)
+            sim = _text_overlap(full_text, efull_text)
+
+            # Duplicate if:
+            # 1. Close lines (<= 6) in the same category (referring to the same code block)
+            # 2. Similar text (sim >= 0.20) within line tolerance (<= 15)
+            # 3. Highly similar text (sim >= 0.50) anywhere in the file
+            if (line_diff <= 6 and cat == ecat) or (line_diff <= 15 and sim >= 0.20) or sim >= 0.50:
+                is_dup = True
+                dup_idx = idx
+                break
+
+        if not is_dup:
+            unique.append(issue)
+        else:
+            # Upgrade existing issue if current one has higher severity (error > warning > info)
+            sev_order = {"error": 3, "warning": 2, "info": 1}
+            cur_sev = sev_order.get(str(issue.get("severity", "warning")).lower(), 2)
+            ex_sev = sev_order.get(str(unique[dup_idx].get("severity", "warning")).lower(), 2)
+            if cur_sev > ex_sev:
+                unique[dup_idx] = issue
+
+    return unique
 
 
 class PrReviewReActAgent:
@@ -37,7 +168,7 @@ class PrReviewReActAgent:
         symbols: Optional[list] = None,
         graph_client: Optional[Neo4jClient] = None,
         vector_client: Optional[VectorKBClient] = None,
-        max_steps: int = 4,
+        max_steps: int = 2,
     ) -> Any:
         """
         Execute iterative ReAct PR review.
@@ -59,17 +190,46 @@ class PrReviewReActAgent:
         diff_violations = check_diff_conventions(raw_diff_text or "")
         all_violations = ast_violations + diff_violations
 
-        violations_dicts = [
-            {"rule": v.rule_id, "file": v.file_path, "line": v.line, "msg": v.message, "severity": v.severity}
-            for v in all_violations
-        ]
+        conv_issues: List[Dict[str, Any]] = []
+        for v in all_violations:
+            conv_issues.append({
+                "id": str(uuid.uuid4()),
+                "title": f"[{v.rule_id}] Style & Convention Violation",
+                "description": v.message,
+                "category": "convention",
+                "severity": v.severity,
+                "file_path": v.file_path,
+                "line": v.line,
+                "suggested_fix": f"Adhere to project convention {v.rule_id}",
+            })
 
-        # 3. ReAct reasoning loop
+        # 3. High-Recall Focused Worker Diff Scanning (1 single focused call)
+        worker_issues: List[Dict[str, Any]] = []
+        diff_snippet = raw_diff_text[:5000] if raw_diff_text else "# Empty diff"
+
+        worker_system = get_prompt("pr_reviewer_worker")
+        worker_prompt = (
+            f"Target Repository: '{repo_id}' (branch: '{branch}')\n"
+            f"Changed Files: {changed_files}\n"
+            f"Modified Symbols: {changed_symbols}\n"
+            f"Analyze the following pull request diff for bugs, concurrency flaws, logic errors, and security issues:\n\n"
+            f"{diff_snippet}"
+        )
+        try:
+            worker_raw = await self.llm_client.run_worker(worker_prompt, worker_system)
+            worker_parsed = self._parse_json(worker_raw)
+            raw_w_issues = worker_parsed.get("issues", [])
+            if isinstance(raw_w_issues, list):
+                worker_issues.extend(raw_w_issues)
+        except Exception as we:
+            logger.warning(f"Worker scan note: {we}")
+
+        # 4. ReAct Reasoning Loop for Deep Multi-Modal Verification
         observations: List[Dict[str, Any]] = []
         final_decision_data: Optional[Dict[str, Any]] = None
         system_prompt = get_react_pr_reviewer_prompt()
 
-        diff_snippet = raw_diff_text[:4000] if raw_diff_text else "# Empty diff"
+        diff_snippet = raw_diff_text[:5000] if raw_diff_text else "# Empty diff"
 
         for step_idx in range(1, max_steps + 1):
             history_str = ""
@@ -87,8 +247,9 @@ class PrReviewReActAgent:
                 f"Target Repository: '{repo_id}' (branch: '{branch}')\n"
                 f"Changed Files: {changed_files}\n"
                 f"Changed Symbols: {changed_symbols}\n"
-                f"Static Convention Violations: {json.dumps(violations_dicts)}\n\n"
-                f"Pull Request Diff:\n{diff_snippet}\n"
+                f"Convention Violations: {len(conv_issues)}\n"
+                f"Worker Preliminary Findings: {json.dumps(worker_issues[:6])}\n\n"
+                f"Pull Request Diff (Snippet):\n{diff_snippet}\n"
                 f"{history_str}\n"
                 f"Current Reasoning Step #{step_idx} of {max_steps}.\n"
                 f"Decide your next action: choose 'call_tool' to inspect further, or 'final_review' to submit findings."
@@ -136,62 +297,33 @@ class PrReviewReActAgent:
                 "summary": summary,
             })
 
-            # Small pause between reasoning turns to protect free-tier API quotas
-            time.sleep(0.5)
-
-        # 4. Fallback synthesis if final_review was not cleanly provided
-        if not final_decision_data or final_decision_data.get("action") != "final_review":
-            synth_prompt = (
-                f"Target Repository: '{repo_id}' (branch: '{branch}')\n"
-                f"Changed Files: {changed_files}\n"
-                f"Diff:\n{diff_snippet}\n"
-                f"Observations:\n{json.dumps([o['raw'] for o in observations], indent=2)[:3000]}\n\n"
-                f"Formulate final review JSON with verdict, risk_score, summary, and issues."
-            )
-            synth_res = await self._call_llm(prompt=synth_prompt, system_prompt=system_prompt)
-            final_decision_data = self._parse_json(synth_res)
+            # Non-blocking pause between reasoning turns
+            await asyncio.sleep(0.05)
 
         # 5. Extract structured issues & build AgentReviewResult
-        structured_issues: List[Dict[str, Any]] = []
-        raw_issues = final_decision_data.get("issues", [])
-        if isinstance(raw_issues, list):
-            for item in raw_issues:
-                if isinstance(item, dict):
-                    structured_issues.append({
-                        "id": str(uuid.uuid4()),
-                        "title": item.get("title", "Code Defect Detected"),
-                        "description": item.get("description", "Potential defect identified in PR analysis."),
-                        "category": str(item.get("category", "bug")).lower(),
-                        "severity": str(item.get("severity", "warning")).lower(),
-                        "file_path": item.get("file_path", changed_files[0] if changed_files else "codebase"),
-                        "line": int(item.get("line", 1) or 1),
-                        "suggested_fix": item.get("suggested_fix", ""),
-                    })
+        react_issues = []
+        if final_decision_data and isinstance(final_decision_data.get("issues"), list):
+            react_issues = final_decision_data.get("issues", [])
 
-        # Append static convention violations as issues and suggestions
+        # Prioritize ReAct verified issues; include unmentioned worker issues or fallback
+        if react_issues:
+            combined_issues = list(react_issues)
+            react_files = {str(i.get("file_path", "")).strip() for i in react_issues}
+            for wi in worker_issues:
+                w_file = str(wi.get("file_path", "")).strip()
+                if w_file and w_file not in react_files:
+                    combined_issues.append(wi)
+        else:
+            combined_issues = list(worker_issues)
+
+        normalized_issues = normalize_issues(combined_issues, changed_files)
+        normalized_issues.extend(conv_issues)
+
+        # Deduplicate to eliminate overlapping predictions
+        structured_issues = deduplicate_issues(normalized_issues)
+
+        # Build suggestions list for backward compatibility
         suggestions: List[Suggestion] = []
-        for v in all_violations:
-            structured_issues.append({
-                "id": str(uuid.uuid4()),
-                "title": f"[{v.rule_id}] Style & Convention Violation",
-                "description": v.message,
-                "category": "convention",
-                "severity": v.severity,
-                "file_path": v.file_path,
-                "line": v.line,
-                "suggested_fix": f"Adhere to project convention {v.rule_id}",
-            })
-            suggestions.append(
-                Suggestion(
-                    file_path=v.file_path,
-                    line=v.line,
-                    description=f"[{v.rule_id}] {v.message}",
-                    category="convention",
-                    severity=v.severity,
-                )
-            )
-
-        # Convert issues to suggestions list
         for issue in structured_issues:
             suggestions.append(
                 Suggestion(
@@ -203,10 +335,9 @@ class PrReviewReActAgent:
                 )
             )
 
-        raw_verdict = str(final_decision_data.get("verdict", "")).upper()
-        risk_score = float(final_decision_data.get("risk_score", 0.0) or 0.0)
+        raw_verdict = str((final_decision_data or {}).get("verdict", "")).upper()
+        risk_score = float((final_decision_data or {}).get("risk_score", 0.0) or 0.0)
 
-        # Determine verdict: SUGGEST if actionable issues or high risk, else ACCEPT
         has_errors = any(i.get("severity") == "error" for i in structured_issues)
         has_warnings = any(i.get("severity") == "warning" for i in structured_issues)
 
@@ -215,11 +346,11 @@ class PrReviewReActAgent:
         else:
             verdict = "SUGGEST" if (has_errors or has_warnings or risk_score > 5.0) else "ACCEPT"
 
-        summary = final_decision_data.get(
+        summary = (final_decision_data or {}).get(
             "summary",
-            f"ReAct PR Review Verdict: {verdict}. Evaluated {len(structured_issues)} issue(s) across {len(changed_files)} changed file(s)."
+            f"GitAmi PR Review Verdict: {verdict}. Evaluated {len(structured_issues)} issue(s) across {len(changed_files)} changed file(s)."
         )
-        agent_rationale = final_decision_data.get(
+        agent_rationale = (final_decision_data or {}).get(
             "agent_rationale",
             f"Autonomous ReAct review completed in {len(observations)} tool steps."
         )
@@ -232,7 +363,7 @@ class PrReviewReActAgent:
         )
 
         total_latency = round(time.perf_counter() - loop_start, 3)
-        logger.info(f"ReAct PR review finished in {total_latency}s | Verdict: {verdict} | Issues: {len(structured_issues)}")
+        logger.info(f"GitAmi PR review finished in {total_latency}s | Verdict: {verdict} | Issues: {len(structured_issues)}")
 
         return AgentReviewResult(
             decision=decision,
@@ -262,18 +393,58 @@ class PrReviewReActAgent:
             return {"action": "final_review", "verdict": "ACCEPT", "issues": [], "risk_score": 0.0}
 
         clean = text.strip()
-        if "```json" in clean:
-            clean = clean.split("```json")[1].split("```")[0]
-        elif "```" in clean:
-            clean = clean.split("```")[1].split("```")[0]
 
+        # If wrapped in markdown code fence, strip outer fence only
+        if clean.startswith("```"):
+            clean = re.sub(r"^```(?:json)?\s*", "", clean)
+            clean = re.sub(r"\s*```$", "", clean)
+        else:
+            fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean, re.DOTALL)
+            if fence_match:
+                clean = fence_match.group(1).strip()
+
+        # Extract outermost JSON object
         first_brace = clean.find("{")
         last_brace = clean.rfind("}")
         if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
             clean = clean[first_brace : last_brace + 1]
 
+        # 1. Standard JSON parse
         try:
             return json.loads(clean.strip())
-        except Exception as e:
-            logger.warning(f"Failed to parse ReAct PR reviewer JSON ({e}): {text[:200]}")
-            return {"action": "final_review", "verdict": "SUGGEST", "issues": [], "risk_score": 2.0}
+        except Exception:
+            pass
+
+        # 2. Python literal dict syntax (single quotes) fallback
+        try:
+            import ast
+            parsed = ast.literal_eval(clean.strip())
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+
+        # 3. Clean trailing commas and retry
+        try:
+            fixed = re.sub(r",\s*([\]}])", r"\1", clean.strip())
+            return json.loads(fixed)
+        except Exception:
+            pass
+
+        # 4. Regex fallback: extract list of issues if enclosed in "issues": [...]
+        try:
+            match = re.search(r'["\']issues["\']\s*:\s*(\[[^\]]*\])', text, re.DOTALL)
+            if match:
+                raw_list = match.group(1)
+                try:
+                    issues = json.loads(raw_list)
+                except Exception:
+                    import ast
+                    issues = ast.literal_eval(raw_list)
+                if isinstance(issues, list):
+                    return {"action": "final_review", "verdict": "SUGGEST" if issues else "ACCEPT", "issues": issues}
+        except Exception:
+            pass
+
+        logger.warning(f"Failed to parse ReAct PR reviewer JSON: {text[:200]}")
+        return {"action": "final_review", "verdict": "SUGGEST", "issues": [], "risk_score": 2.0}

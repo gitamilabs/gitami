@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from unidiff import PatchSet
 
 
@@ -64,6 +64,55 @@ def parse_git_diff(raw_diff_text: str) -> List[DiffHunk]:
         ]
 
 
+def group_hunks_by_file(hunks: List[DiffHunk]) -> Dict[str, List[DiffHunk]]:
+    """Group parsed diff hunks by target file path."""
+    grouped: Dict[str, List[DiffHunk]] = {}
+    for hunk in hunks:
+        path = hunk.file_path or "codebase"
+        grouped.setdefault(path, []).append(hunk)
+    return grouped
+
+
+def chunk_diff_by_files(
+    hunks: List[DiffHunk], max_chars_per_chunk: int = 5000
+) -> List[Tuple[List[str], str]]:
+    """
+    Partition diff hunks across files into bounded chunks.
+    Returns list of (file_paths, chunk_diff_text) pairs so long diffs
+    can be inspected without dropping any changed file.
+    """
+    chunks: List[Tuple[List[str], str]] = []
+    curr_files: List[str] = []
+    curr_patches: List[str] = []
+    curr_len = 0
+
+    grouped = group_hunks_by_file(hunks)
+    for file_path, file_hunks in grouped.items():
+        file_patch = "\n".join(h.patch_text for h in file_hunks if h.patch_text)
+        if not file_patch:
+            continue
+        patch_len = len(file_patch)
+
+        if curr_len + patch_len > max_chars_per_chunk and curr_patches:
+            chunks.append((list(curr_files), "\n".join(curr_patches)))
+            curr_files = []
+            curr_patches = []
+            curr_len = 0
+
+        curr_files.append(file_path)
+        if patch_len > max_chars_per_chunk:
+            curr_patches.append(file_patch[:max_chars_per_chunk])
+            curr_len += max_chars_per_chunk
+        else:
+            curr_patches.append(file_patch)
+            curr_len += patch_len
+
+    if curr_patches:
+        chunks.append((list(curr_files), "\n".join(curr_patches)))
+
+    return chunks
+
+
 def extract_changed_symbols(hunks: List[DiffHunk], raw_diff_text: str) -> List[str]:
     """Extract modified function, class, and method names from diff hunks."""
     symbols = set()
@@ -105,4 +154,3 @@ def extract_changed_symbols(hunks: List[DiffHunk], raw_diff_text: str) -> List[s
                     symbols.add(m)
 
     return list(symbols)
-

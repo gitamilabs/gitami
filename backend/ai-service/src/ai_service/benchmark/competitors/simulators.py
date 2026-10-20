@@ -29,21 +29,18 @@ from ai_service.vector.client import VectorKBClient
 logger = logging.getLogger(__name__)
 
 GEMINI_BENCHMARK_MODELS = [
-    "gemini-flash-lite-latest",
-    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
     "gemini-flash-latest",
     "gemini-3.1-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-3.6-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
+    "gemini-flash-lite-latest",
 ]
 
 GROQ_BENCHMARK_MODELS = [
-    "qwen/qwen3.8-27b",
-    "llama-3.3-70b-versatile",
-    "openai/gpt-oss-20b",
     "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.8-27b",
 ]
 
 
@@ -148,8 +145,9 @@ async def call_gemini_with_rotation(
         key = rotator.get_current_key()
         try:
             from google import genai
-            client = genai.Client(api_key=key)
+            client = genai.Client(api_key=key, http_options={"timeout": 35.0})
 
+            last_rate_error = None
             for model_name in GEMINI_BENCHMARK_MODELS:
                 try:
                     res = client.models.generate_content(
@@ -160,8 +158,12 @@ async def call_gemini_with_rotation(
                         return res.text
                 except Exception as me:
                     if is_rate_limit_error(me):
-                        raise me
+                        logger.info(f"[Gemini] Model '{model_name}' hit rate limit/quota, trying next model...")
+                        last_rate_error = me
+                        continue
                     logger.debug(f"[Gemini] Model '{model_name}' try failed: {me}")
+            if last_rate_error:
+                raise last_rate_error
             return ""
 
         except Exception as e:
@@ -196,15 +198,20 @@ async def call_groq_with_rotation(
         key = rotator.get_current_key()
         try:
             from groq import Groq
-            client = Groq(api_key=key, max_retries=0)
+            client = Groq(api_key=key, max_retries=0, timeout=30.0)
 
+            last_rate_error = None
             for model_name in GROQ_BENCHMARK_MODELS:
                 try:
+                    eff_prompt = prompt
+                    if json_mode and "json" not in system_prompt.lower() and "json" not in prompt.lower():
+                        eff_prompt = f"{prompt}\nRespond in valid JSON format."
+
                     kwargs: Dict[str, Any] = {
                         "model": model_name,
                         "messages": [
                             {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": prompt},
+                            {"role": "user", "content": eff_prompt},
                         ],
                         "temperature": 0.1,
                     }
@@ -216,8 +223,12 @@ async def call_groq_with_rotation(
                         return completion.choices[0].message.content
                 except Exception as me:
                     if is_rate_limit_error(me):
-                        raise me
+                        logger.info(f"[Groq] Model '{model_name}' hit rate limit/quota, trying next model...")
+                        last_rate_error = me
+                        continue
                     logger.debug(f"[Groq] Model '{model_name}' try failed: {me}")
+            if last_rate_error:
+                raise last_rate_error
             return ""
 
         except Exception as e:
