@@ -74,10 +74,11 @@ def group_hunks_by_file(hunks: List[DiffHunk]) -> Dict[str, List[DiffHunk]]:
 
 
 def chunk_diff_by_files(
-    hunks: List[DiffHunk], max_chars_per_chunk: int = 5000
+    hunks: List[DiffHunk], max_chars_per_chunk: int = 25000
 ) -> List[Tuple[List[str], str]]:
     """
     Partition diff hunks across files into bounded chunks.
+    Prioritizes implementation files ahead of test/mock files so critical logic is reviewed first.
     Returns list of (file_paths, chunk_diff_text) pairs so long diffs
     can be inspected without dropping any changed file.
     """
@@ -86,8 +87,15 @@ def chunk_diff_by_files(
     curr_patches: List[str] = []
     curr_len = 0
 
+    def _is_test_file(p: str) -> bool:
+        low = p.lower()
+        return any(x in low for x in ("/test", "/__test", "test.", "spec.", "/mock", "/fixture"))
+
     grouped = group_hunks_by_file(hunks)
-    for file_path, file_hunks in grouped.items():
+    # Sort: non-test files first, test files second
+    sorted_items = sorted(grouped.items(), key=lambda item: 1 if _is_test_file(item[0]) else 0)
+
+    for file_path, file_hunks in sorted_items:
         file_patch = "\n".join(h.patch_text for h in file_hunks if h.patch_text)
         if not file_patch:
             continue
@@ -156,10 +164,11 @@ def extract_changed_symbols(hunks: List[DiffHunk], raw_diff_text: str) -> List[s
     return list(symbols)
 
 
-def format_annotated_diff(hunks: List[DiffHunk], max_chars: int = 50000) -> str:
+def format_annotated_diff(hunks: List[DiffHunk], max_chars: int = 150000) -> str:
     """
     Format parsed git diff hunks with explicit 1-indexed target line numbers for LLM consumption.
     Formats line numbers so the LLM directly outputs the accurate line number matching ground truth.
+    Accurately resets target line counter on every @@ hunk header and skips git patch headers.
     """
     lines_out = []
     total_len = 0
@@ -180,37 +189,44 @@ def format_annotated_diff(hunks: List[DiffHunk], max_chars: int = 50000) -> str:
             if not hunk.patch_text:
                 continue
 
-            # Scope / function signature header if present
-            scope_match = re.search(r"@@\s+[^@]+@@\s*(.*)", hunk.patch_text)
-            if scope_match and scope_match.group(1).strip():
-                scope_line = f"--- Scope: {scope_match.group(1).strip()} ---\n"
-                lines_out.append(scope_line)
-                total_len += len(scope_line)
-
-            added_map = dict(hunk.added_lines)
-            curr_target_line = None
-            hunk_header_match = re.search(r"@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,(\d+))?\s+@@", hunk.patch_text)
-            if hunk_header_match:
-                curr_target_line = int(hunk_header_match.group(1))
+            curr_target_line: Optional[int] = None
+            seen_hunk_header = False
 
             for line in hunk.patch_text.splitlines():
                 if line.startswith("@@"):
+                    seen_hunk_header = True
+                    # Extract target line start (+line_no)
+                    hunk_header_match = re.search(r"@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,(\d+))?\s+@@(?:\s*(.*))?", line)
+                    if hunk_header_match:
+                        curr_target_line = int(hunk_header_match.group(1))
+                        scope_text = (hunk_header_match.group(3) or "").strip()
+                        if scope_text:
+                            scope_line = f"--- Scope: {scope_text} ---\n"
+                            lines_out.append(scope_line)
+                            total_len += len(scope_line)
                     continue
+
+                if not seen_hunk_header:
+                    # Skip git patch metadata before first hunk (e.g. diff --git, index, ---, +++)
+                    continue
+
                 if line.startswith("+++") or line.startswith("---"):
                     continue
 
                 if line.startswith("+"):
-                    line_no = added_map.get(curr_target_line, curr_target_line) if curr_target_line is not None else ""
+                    line_no = curr_target_line if curr_target_line is not None else ""
                     formatted = f"{line_no}:+ {line[1:]}\n"
                     if curr_target_line is not None:
                         curr_target_line += 1
                 elif line.startswith("-"):
                     formatted = f"   - {line[1:]}\n"
-                else:
-                    # Context line
-                    formatted = f"{curr_target_line}:  {line[1:] if len(line) > 0 else ''}\n" if curr_target_line is not None else f"    {line}\n"
+                elif line.startswith(" "):
+                    formatted = f"{curr_target_line}:  {line[1:]}\n" if curr_target_line is not None else f"    {line[1:]}\n"
                     if curr_target_line is not None:
                         curr_target_line += 1
+                else:
+                    # Unrecognized line, keep without advancing target line
+                    formatted = f"    {line}\n"
 
                 if total_len + len(formatted) > max_chars:
                     lines_out.append("\n[Diff truncated for maximum token budget]\n")

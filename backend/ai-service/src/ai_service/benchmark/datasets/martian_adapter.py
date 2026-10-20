@@ -155,11 +155,12 @@ class MartianAdapter(BenchmarkDataset):
                     line_match = re.search(r"\b(?:line|lines)\s+(\d+)", comment_text, re.IGNORECASE)
                     line_start = int(line_match.group(1)) if line_match else None
 
-                    # Associate with file: look for exact filename in comment, else diff token overlap
+                    # Associate with file: look for exact filename, stem, or path in comment, else diff token overlap
                     target_file = ""
                     for cf in changed_files:
                         fname = os.path.basename(cf)
-                        if fname in comment_text or cf in comment_text:
+                        fstem = os.path.splitext(fname)[0]
+                        if fname in comment_text or cf in comment_text or (len(fstem) > 3 and fstem in comment_text):
                             target_file = cf
                             break
 

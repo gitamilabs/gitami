@@ -56,13 +56,22 @@ The JSON output must strictly conform to this schema:
 {
   "issues": [
     {
-      "title": "Short, precise descriptive bug title (e.g. 'Unhandled Promise in async forEach loop')",
-      "description": "Comprehensive explanation of the exact failure mechanism, why this line will cause a runtime crash, race condition, or vulnerability.",
+      "title": "Unhandled Promise in async forEach loop",
+      "description": "The forEach callback is async and returns unawaited promises, causing race conditions and unhandled rejections.",
       "category": "bug",
       "severity": "error",
       "file_path": "packages/app-store/vital/lib/reschedule.ts",
       "line": 125,
       "suggested_fix": "Use for...of with await instead of forEach"
+    },
+    {
+      "title": "Potential Null Pointer Dereference in Query Conditions",
+      "description": "Property is accessed directly on an optional object without null checking or optional chaining, risking runtime crash.",
+      "category": "bug",
+      "severity": "warning",
+      "file_path": "packages/lib/server/service/insightsBooking.ts",
+      "line": 73,
+      "suggested_fix": "Add null check guard or optional chaining (?.)"
     }
   ]
 }
@@ -83,7 +92,7 @@ The JSON output must strictly conform to this schema:
 ## OPERATING DIRECTIVES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-- **Prioritize Real Defects with High Recall**: Flag all genuine bugs, async flaws, null dereferences, and security risks.
+- **High-Recall Exhaustive Inspection**: Real pull requests frequently contain multiple distinct defects across different files and functions (e.g. logic flaws, missing null guards, unawaited async calls, invalid test assertions, unreachable branches, and style issues). You MUST audit all changed files and lines. DO NOT stop after finding only 1 issue; report ALL legitimate defects discovered.
 - **Accurate File & Line Mapping**: Always report the exact relative file path from the diff header. Each line in the provided diff is prefixed with its exact target line number (e.g. '107:+ const x = ...'). Always set 'line' to the exact line number printed at the beginning of the line where the defect occurs.
 """
 

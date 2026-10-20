@@ -45,6 +45,8 @@ class DualLLMClient:
     Includes automated multi-key rotation and HTTP 429 failover support.
     """
 
+    _groq_cooldown_until: float = 0.0
+
     def __init__(
         self,
         gemini_api_key: Optional[str] = None,
@@ -76,6 +78,7 @@ class DualLLMClient:
 
         self.has_gemini = self.gemini_rotator.has_keys
         self.has_groq = self.groq_rotator.has_keys
+        self._groq_cooldown_until: float = 0.0
 
     async def _call_gemini(
         self,
@@ -143,7 +146,12 @@ class DualLLMClient:
         if not self.has_groq:
             return None
 
+        import time
+        if time.time() < DualLLMClient._groq_cooldown_until:
+            return None
+
         target_models = models or GROQ_MODELS
+        max_retries = min(max_retries, max(1, self.groq_rotator.key_count))
 
         for attempt in range(1, max_retries + 1):
             key = self.groq_rotator.get_current_key()
@@ -184,15 +192,22 @@ class DualLLMClient:
 
             except Exception as e:
                 if is_rate_limit_error(e):
+                    err_msg = str(e).lower()
+                    if "tokens per day" in err_msg or "tpd" in err_msg:
+                        import time
+                        DualLLMClient._groq_cooldown_until = time.time() + 900
+                        logger.warning(
+                            f"[Groq 429 TPD] Daily token limit reached; entering 15m cooldown until {DualLLMClient._groq_cooldown_until:.0f}."
+                        )
                     logger.warning(
                         f"[Groq 429] Rate limit hit on key (attempt {attempt}/{max_retries}): {e}"
                     )
                     if self.groq_rotator.key_count > 1:
                         await self.groq_rotator.rotate(reason=f"HTTP 429 on attempt {attempt}")
                         if attempt > 1:
-                            await asyncio.sleep(3)
+                            await asyncio.sleep(2)
                     else:
-                        backoff = 5 * attempt
+                        backoff = 3 * attempt
                         logger.info(f"[Groq] Single key configured; sleeping {backoff}s...")
                         await asyncio.sleep(backoff)
                 else:
@@ -258,7 +273,8 @@ class DualLLMClient:
 
     async def run_worker(self, prompt: str, system_prompt: str) -> str:
         """Call Groq for fast parallel hunk review sub-tasks; fallback to Gemini."""
-        if self.has_groq:
+        import time
+        if self.has_groq and time.time() >= DualLLMClient._groq_cooldown_until:
             res = await self._call_groq(prompt, system_prompt, temperature=0.2, json_mode=True)
             if res:
                 return res

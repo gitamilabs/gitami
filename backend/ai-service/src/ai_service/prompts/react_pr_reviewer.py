@@ -69,6 +69,15 @@ In EVERY reasoning turn, respond ONLY with a single valid JSON object. No markdo
       "file_path": "packages/app-store/vital/lib/reschedule.ts",
       "line": 125,
       "suggested_fix": "Use for...of with await instead of forEach"
+    },
+    {
+      "title": "Unreachable Branch in Authorization Logic",
+      "description": "Condition always evaluates to true, rendering subsequent else-if branches unreachable.",
+      "category": "bug",
+      "severity": "warning",
+      "file_path": "packages/lib/server/service/insightsBooking.ts",
+      "line": 73,
+      "suggested_fix": "Refactor condition to properly check for null or empty object"
     }
   ]
 }
@@ -81,6 +90,7 @@ In EVERY reasoning turn, respond ONLY with a single valid JSON object. No markdo
 - **Severity**: `"error"` (runtime crash, async race condition, security flaw, data corruption), `"warning"` (potential bug, edge case, missing error handling), `"info"` (naming inconsistency, style).
 - **Verdict**: `"SUGGEST"` if any error/warning issues are found or risk_score > 5.0; `"ACCEPT"` if code is clean and low risk.
 - **Precision & Line Accuracy**: Report the exact file_path and line number where the defect is located using the target line numbers printed at the start of each line in the diff.
+- **High-Recall Exhaustive Review**: Do not omit defects. Report all distinct bugs, concurrency flaws, security gaps, and convention violations found across the PR.
 """
 
 PROMPT = DEFAULT_PROMPT

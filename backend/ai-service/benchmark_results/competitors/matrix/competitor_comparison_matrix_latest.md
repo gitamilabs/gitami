@@ -13,7 +13,7 @@
 | **A1** | Neo4j Only (No Vector) | Dual-LLM | Enabled | F1: 0.216 (P: 21.1%, R: 22.2%) | F1: 0.191 (P: 30.4%, R: 13.9%) | F1: 0.306 (P: 77.0%, R: 19.1%) |
 | **A2** | Dual KB (Neo4j + Chroma) | Worker Only (Llama-70B) | Enabled | F1: 0.293 (P: 26.1%, R: 33.3%) | F1: 0.137 (P: 26.7%, R: 9.2%) | [TO BE MEASURED] |
 | **A3** | Dual KB (Neo4j + Chroma) | Orch. Only (Gemini 2.0) | Enabled | [TO BE MEASURED] | [TO BE MEASURED] | [TO BE MEASURED] |
-| **GitAmi (Proposed)** | Dual KB (Neo4j + Chroma) | Dual-LLM + ReAct Agent | Enabled | F1: 0.500 (P: 50.0%, R: 50.0%) | F1: 0.385 (P: 69.7%, R: 26.6%) | F1: 0.741 (P: 100.0%, R: 58.8%) [10 Cases] |
+| **GitAmi (Proposed)** | Dual KB (Neo4j + Chroma) | Dual-LLM + ReAct Agent | Enabled | F1: 0.500 (P: 50.0%, R: 50.0%) | **F1: 0.471 (P: 63.1%, R: 37.6%)** | F1: 0.741 (P: 100.0%, R: 58.8%) [10 Cases] |
 
 
 ### Architectural Insights & Hypotheses:

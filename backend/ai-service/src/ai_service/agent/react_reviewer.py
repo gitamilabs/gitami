@@ -127,11 +127,11 @@ def deduplicate_issues(issues: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             line_diff = abs(l - el)
             sim = _text_overlap(full_text, efull_text)
 
-            # Duplicate if:
-            # 1. Close lines (<= 6) in the same category (referring to the same code block)
-            # 2. Similar text (sim >= 0.20) within line tolerance (<= 15)
-            # 3. Highly similar text (sim >= 0.50) anywhere in the file
-            if (line_diff <= 6 and cat == ecat) or (line_diff <= 15 and sim >= 0.20) or sim >= 0.50:
+            # Duplicate only if referring to the exact same defect:
+            # 1. Extremely close lines (<= 5) in same category with semantic overlap (sim >= 0.15)
+            # 2. Within line tolerance (<= 15) with substantial text similarity (sim >= 0.30)
+            # 3. Identical wording / highly similar text (sim >= 0.50) anywhere in the file
+            if (line_diff <= 5 and cat == ecat and sim >= 0.15) or (line_diff <= 15 and sim >= 0.30) or sim >= 0.50:
                 is_dup = True
                 dup_idx = idx
                 break
@@ -203,31 +203,37 @@ class PrReviewReActAgent:
                 "suggested_fix": f"Adhere to project convention {v.rule_id}",
             })
 
-        # 3. High-Recall Focused Worker Diff Scanning with Line Annotations
+        # 3. High-Recall Focused Worker Diff Scanning Across All Files
         worker_issues: List[Dict[str, Any]] = []
-        worker_diff = (
-            format_annotated_diff(hunks, max_chars=12000)
-            if hunks
-            else (raw_diff_text[:12000] if raw_diff_text else "# Empty diff")
-        )
-
         worker_system = get_prompt("pr_reviewer_worker")
-        worker_prompt = (
-            f"Target Repository: '{repo_id}' (branch: '{branch}')\n"
-            f"Changed Files: {changed_files}\n"
-            f"Modified Symbols: {changed_symbols}\n"
-            f"Analyze the following pull request diff for bugs, concurrency flaws, logic errors, and security issues. "
-            f"Always use the exact line numbers shown in the diff:\n\n"
-            f"{worker_diff}"
-        )
-        try:
-            worker_raw = await self.llm_client.run_worker(worker_prompt, worker_system)
-            worker_parsed = self._parse_json(worker_raw)
-            raw_w_issues = worker_parsed.get("issues", [])
-            if isinstance(raw_w_issues, list):
-                worker_issues.extend(raw_w_issues)
-        except Exception as we:
-            logger.warning(f"Worker scan note: {we}")
+
+        # Partition hunks into chunks so no file is dropped due to length
+        file_chunks = chunk_diff_by_files(hunks, max_chars_per_chunk=35000) if hunks else [([], raw_diff_text or "# Empty diff")]
+        # Scan up to 4 chunks covering up to 140,000 characters of diff
+        for chunk_idx, (chunk_files, _) in enumerate(file_chunks[:4], start=1):
+            chunk_hunks = [h for h in hunks if h.file_path in chunk_files] if chunk_files else hunks
+            worker_diff = (
+                format_annotated_diff(chunk_hunks, max_chars=40000)
+                if chunk_hunks
+                else (raw_diff_text[:40000] if raw_diff_text else "# Empty diff")
+            )
+
+            worker_prompt = (
+                f"Target Repository: '{repo_id}' (branch: '{branch}')\n"
+                f"Inspecting File Chunk {chunk_idx}/{min(len(file_chunks), 4)}: {chunk_files}\n"
+                f"Changed Symbols: {changed_symbols}\n"
+                f"Analyze the following pull request diff for bugs, concurrency flaws, logic errors, and security issues. "
+                f"Always use the exact line numbers shown in the diff:\n\n"
+                f"{worker_diff}"
+            )
+            try:
+                worker_raw = await self.llm_client.run_worker(worker_prompt, worker_system)
+                worker_parsed = self._parse_json(worker_raw)
+                raw_w_issues = worker_parsed.get("issues", [])
+                if isinstance(raw_w_issues, list):
+                    worker_issues.extend(raw_w_issues)
+            except Exception as we:
+                logger.warning(f"Worker scan note on chunk {chunk_idx}: {we}")
 
         # 4. ReAct Reasoning Loop for Deep Multi-Modal Verification
         observations: List[Dict[str, Any]] = []
@@ -235,9 +241,9 @@ class PrReviewReActAgent:
         system_prompt = get_react_pr_reviewer_prompt()
 
         orchestrator_diff = (
-            format_annotated_diff(hunks, max_chars=50000)
+            format_annotated_diff(hunks, max_chars=120000)
             if hunks
-            else (raw_diff_text[:50000] if raw_diff_text else "# Empty diff")
+            else (raw_diff_text[:120000] if raw_diff_text else "# Empty diff")
         )
 
         for step_idx in range(1, max_steps + 1):
@@ -252,16 +258,27 @@ class PrReviewReActAgent:
                         f"- Output:\n{obs['raw'][:1500]}\n\n"
                     )
 
+            if step_idx == max_steps:
+                step_directive = (
+                    f"Current Reasoning Step #{step_idx} of {max_steps} (FINAL STEP).\n"
+                    f"You MUST conclude your review now: choose action: 'final_review', verify all findings, "
+                    f"and output your complete list of verified defects in the 'issues' array."
+                )
+            else:
+                step_directive = (
+                    f"Current Reasoning Step #{step_idx} of {max_steps}.\n"
+                    f"Decide your next action: choose 'call_tool' to inspect further, or 'final_review' to submit findings."
+                )
+
             prompt = (
                 f"Target Repository: '{repo_id}' (branch: '{branch}')\n"
                 f"Changed Files: {changed_files}\n"
                 f"Changed Symbols: {changed_symbols}\n"
                 f"Convention Violations: {len(conv_issues)}\n"
-                f"Worker Preliminary Findings: {json.dumps(worker_issues[:8])}\n\n"
+                f"Worker Preliminary Findings ({len(worker_issues)} identified): {json.dumps(worker_issues[:12])}\n\n"
                 f"Pull Request Diff (Annotated with Target Line Numbers):\n{orchestrator_diff}\n"
                 f"{history_str}\n"
-                f"Current Reasoning Step #{step_idx} of {max_steps}.\n"
-                f"Decide your next action: choose 'call_tool' to inspect further, or 'final_review' to submit findings."
+                f"{step_directive}"
             )
 
             llm_text = await self._call_llm(prompt=prompt, system_prompt=system_prompt)

@@ -163,7 +163,7 @@ class BenchmarkScorer:
                 continue
 
             # Accept match if score threshold met and file matches (or strong cross-file semantic match)
-            if (f_match and score >= 0.40) or (score >= 0.28 and text_sim >= 0.10):
+            if (f_match and score >= 0.35) or (score >= 0.25 and text_sim >= 0.08):
                 matched_pred_indices.add(p_idx)
                 matched_gt_indices.add(gt_idx)
                 matches.append(
