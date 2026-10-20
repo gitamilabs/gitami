@@ -1,20 +1,20 @@
 # GitAmi Benchmark Evaluation Report
 
-**Run Timestamp**: `2026-10-19 21:30:28`  
+**Run Timestamp**: `2026-10-20 15:00:04`  
 **Datasets Evaluated**: ``  
-**Total Cases**: `50`  
-**Mean Latency**: `18.69s per case`  
+**Total Cases**: `443`  
+**Mean Latency**: `6.46s per case`  
 
 ## 1. Overall Performance Metrics
 
 | Metric | Value | Description |
 | :--- | :--- | :--- |
-| **Precision** | **30.4%** | True Positives / Total Predictions (24/79) |
-| **Recall** | **13.9%** | True Positives / Ground Truth Issues (24/173) |
-| **F1 Score** | **0.1905** | Harmonic mean of Precision and Recall |
-| **True Positives (TP)** | `24` | Successfully detected ground-truth defects |
-| **False Positives (FP)** | `55` | Spurious or hallucinated issues |
-| **False Negatives (FN)** | `149` | Missed ground-truth defects |
+| **Precision** | **60.8%** | True Positives / Total Predictions (138/227) |
+| **Recall** | **17.9%** | True Positives / Ground Truth Issues (138/769) |
+| **F1 Score** | **0.2771** | Harmonic mean of Precision and Recall |
+| **True Positives (TP)** | `138` | Successfully detected ground-truth defects |
+| **False Positives (FP)** | `89` | Spurious or hallucinated issues |
+| **False Negatives (FN)** | `631` | Missed ground-truth defects |
 
 ## 2. Category Breakdown
 
@@ -23,15 +23,15 @@
 | **Bug** | 20 | 128 | 15.6% |
 | **Convention** | 3 | 28 | 10.7% |
 | **Performance** | 0 | 6 | 0.0% |
-| **Security** | 1 | 11 | 9.1% |
+| **Security** | 115 | 607 | 18.9% |
 
 ## 3. Severity Breakdown
 
 | Severity | Detection Rate |
 | :--- | :--- |
-| **Error** | 18.2% |
+| **Error** | 27.0% |
 | **Info** | 10.9% |
-| **Warning** | 11.5% |
+| **Warning** | 3.4% |
 
 ## 4. Per-Testcase Summary
 
@@ -87,3 +87,396 @@
 | `martian_sentry_8` | martian | 0% | 0% | 0.00 | 0/0/2 | 8.07s |
 | `martian_sentry_9` | martian | 0% | 0% | 0.00 | 0/2/2 | 11.38s |
 | `martian_sentry_10` | martian | 0% | 0% | 0.00 | 0/0/3 | 11.16s |
+| `vulngym_entry-00057` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 12.05s |
+| `vulngym_entry-00058` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 8.48s |
+| `vulngym_entry-00061` | vulngym | 50% | 100% | 0.67 | 1/1/0 | 3.37s |
+| `vulngym_entry-00062` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.72s |
+| `vulngym_entry-00063` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 8.12s |
+| `vulngym_entry-00064` | vulngym | 25% | 50% | 0.33 | 1/3/1 | 3.87s |
+| `vulngym_entry-00065` | vulngym | 25% | 50% | 0.33 | 1/3/1 | 4.37s |
+| `vulngym_entry-00066` | vulngym | 20% | 100% | 0.33 | 1/4/0 | 4.79s |
+| `vulngym_entry-00067` | vulngym | 50% | 50% | 0.50 | 1/1/1 | 4.69s |
+| `vulngym_entry-00068` | vulngym | 50% | 100% | 0.67 | 1/1/0 | 3.41s |
+| `vulngym_entry-00071` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 4.96s |
+| `vulngym_entry-00072` | vulngym | 33% | 100% | 0.50 | 1/2/0 | 3.52s |
+| `vulngym_entry-00073` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.39s |
+| `vulngym_entry-00074` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.91s |
+| `vulngym_entry-00075` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.72s |
+| `vulngym_entry-00076` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.44s |
+| `vulngym_entry-00077` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.45s |
+| `vulngym_entry-00078` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.49s |
+| `vulngym_entry-00079` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.89s |
+| `vulngym_entry-00080` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.56s |
+| `vulngym_entry-00081` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 3.34s |
+| `vulngym_entry-00082` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 3.92s |
+| `vulngym_entry-00083` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.76s |
+| `vulngym_entry-00084` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.77s |
+| `vulngym_entry-00085` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.11s |
+| `vulngym_entry-00086` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.46s |
+| `vulngym_entry-00087` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 4.13s |
+| `vulngym_entry-00090` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 4.57s |
+| `vulngym_entry-00091` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.02s |
+| `vulngym_entry-00097` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.72s |
+| `vulngym_entry-00098` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.62s |
+| `vulngym_entry-00101` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.13s |
+| `vulngym_entry-00102` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.16s |
+| `vulngym_entry-00104` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.19s |
+| `vulngym_entry-00105` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.51s |
+| `vulngym_entry-00106` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.41s |
+| `vulngym_entry-00107` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.51s |
+| `vulngym_entry-00108` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.86s |
+| `vulngym_entry-00109` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.04s |
+| `vulngym_entry-00110` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.91s |
+| `vulngym_entry-00111` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.48s |
+| `vulngym_entry-00112` | vulngym | 33% | 100% | 0.50 | 1/2/0 | 3.37s |
+| `vulngym_entry-00113` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.90s |
+| `vulngym_entry-00114` | vulngym | 50% | 100% | 0.67 | 1/1/0 | 2.80s |
+| `vulngym_entry-00115` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 5.68s |
+| `vulngym_entry-00116` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.40s |
+| `vulngym_entry-00117` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 5.78s |
+| `vulngym_entry-00118` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.83s |
+| `vulngym_entry-00119` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 7.50s |
+| `vulngym_entry-00120` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.08s |
+| `vulngym_entry-00121` | vulngym | 50% | 100% | 0.67 | 1/1/0 | 10.68s |
+| `vulngym_entry-00122` | vulngym | 33% | 50% | 0.40 | 1/2/1 | 3.68s |
+| `vulngym_entry-00123` | vulngym | 33% | 50% | 0.40 | 1/2/1 | 3.26s |
+| `vulngym_entry-00124` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.08s |
+| `vulngym_entry-00125` | vulngym | 50% | 100% | 0.67 | 1/1/0 | 8.62s |
+| `vulngym_entry-00126` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 3.07s |
+| `vulngym_entry-00127` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 4.31s |
+| `vulngym_entry-00128` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.50s |
+| `vulngym_entry-00129` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.45s |
+| `vulngym_entry-00130` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.77s |
+| `vulngym_entry-00131` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 5.99s |
+| `vulngym_entry-00132` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.25s |
+| `vulngym_entry-00133` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.40s |
+| `vulngym_entry-00134` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.64s |
+| `vulngym_entry-00135` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.44s |
+| `vulngym_entry-00136` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.51s |
+| `vulngym_entry-00137` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 7.33s |
+| `vulngym_entry-00140` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 1.92s |
+| `vulngym_entry-00141` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.49s |
+| `vulngym_entry-00142` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.43s |
+| `vulngym_entry-00143` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.33s |
+| `vulngym_entry-00144` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.43s |
+| `vulngym_entry-00145` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.06s |
+| `vulngym_entry-00146` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.67s |
+| `vulngym_entry-00147` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.66s |
+| `vulngym_entry-00148` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 7.19s |
+| `vulngym_entry-00149` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 1.79s |
+| `vulngym_entry-00150` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 6.74s |
+| `vulngym_entry-00151` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.12s |
+| `vulngym_entry-00152` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 8.13s |
+| `vulngym_entry-00153` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.09s |
+| `vulngym_entry-00154` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 1.83s |
+| `vulngym_entry-00155` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 1.99s |
+| `vulngym_entry-00156` | vulngym | 50% | 100% | 0.67 | 1/1/0 | 4.58s |
+| `vulngym_entry-00157` | vulngym | 50% | 100% | 0.67 | 1/1/0 | 3.46s |
+| `vulngym_entry-00158` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 3.27s |
+| `vulngym_entry-00159` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.03s |
+| `vulngym_entry-00160` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.59s |
+| `vulngym_entry-00161` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.68s |
+| `vulngym_entry-00162` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.01s |
+| `vulngym_entry-00163` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.68s |
+| `vulngym_entry-00164` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.62s |
+| `vulngym_entry-00165` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.65s |
+| `vulngym_entry-00166` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.85s |
+| `vulngym_entry-00167` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.89s |
+| `vulngym_entry-00168` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.66s |
+| `vulngym_entry-00169` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 13.20s |
+| `vulngym_entry-00170` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.89s |
+| `vulngym_entry-00171` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 5.69s |
+| `vulngym_entry-00172` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.63s |
+| `vulngym_entry-00173` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.18s |
+| `vulngym_entry-00174` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.84s |
+| `vulngym_entry-00175` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.05s |
+| `vulngym_entry-00177` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.97s |
+| `vulngym_entry-00178` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.82s |
+| `vulngym_entry-00179` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.81s |
+| `vulngym_entry-00180` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.88s |
+| `vulngym_entry-00181` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.83s |
+| `vulngym_entry-00182` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.72s |
+| `vulngym_entry-00183` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 3.15s |
+| `vulngym_entry-00184` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 4.37s |
+| `vulngym_entry-00186` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.80s |
+| `vulngym_entry-00187` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 4.36s |
+| `vulngym_entry-00188` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 3.33s |
+| `vulngym_entry-00189` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.66s |
+| `vulngym_entry-00190` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.70s |
+| `vulngym_entry-00191` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.68s |
+| `vulngym_entry-00192` | vulngym | 50% | 50% | 0.50 | 1/1/1 | 4.56s |
+| `vulngym_entry-00193` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.07s |
+| `vulngym_entry-00194` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.17s |
+| `vulngym_entry-00195` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.79s |
+| `vulngym_entry-00196` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.91s |
+| `vulngym_entry-00198` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.46s |
+| `vulngym_entry-00199` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.45s |
+| `vulngym_entry-00200` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.96s |
+| `vulngym_entry-00201` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.08s |
+| `vulngym_entry-00202` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.94s |
+| `vulngym_entry-00207` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 3.10s |
+| `vulngym_entry-00208` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 3.04s |
+| `vulngym_entry-00209` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.94s |
+| `vulngym_entry-00210` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 3.79s |
+| `vulngym_entry-00211` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.58s |
+| `vulngym_entry-00212` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.95s |
+| `vulngym_entry-00213` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.77s |
+| `vulngym_entry-00214` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.53s |
+| `vulngym_entry-00215` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.71s |
+| `vulngym_entry-00216` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.56s |
+| `vulngym_entry-00217` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.03s |
+| `vulngym_entry-00218` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.70s |
+| `vulngym_entry-00219` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.20s |
+| `vulngym_entry-00220` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.38s |
+| `vulngym_entry-00221` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 4.82s |
+| `vulngym_entry-00222` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.90s |
+| `vulngym_entry-00223` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.65s |
+| `vulngym_entry-00224` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.53s |
+| `vulngym_entry-00225` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.91s |
+| `vulngym_entry-00226` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.53s |
+| `vulngym_entry-00227` | vulngym | 33% | 100% | 0.50 | 1/2/0 | 5.56s |
+| `vulngym_entry-00228` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.80s |
+| `vulngym_entry-00229` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.52s |
+| `vulngym_entry-00230` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.62s |
+| `vulngym_entry-00231` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.05s |
+| `vulngym_entry-00232` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 3.07s |
+| `vulngym_entry-00233` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.04s |
+| `vulngym_entry-00240` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 3.66s |
+| `vulngym_entry-00245` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 1.87s |
+| `vulngym_entry-00246` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 3.64s |
+| `vulngym_entry-00247` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 1.76s |
+| `vulngym_entry-00248` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.69s |
+| `vulngym_entry-00249` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.10s |
+| `vulngym_entry-00250` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 4.85s |
+| `vulngym_entry-00251` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 4.83s |
+| `vulngym_entry-00252` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.49s |
+| `vulngym_entry-00253` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.11s |
+| `vulngym_entry-00254` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 3.13s |
+| `vulngym_entry-00255` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 4.26s |
+| `vulngym_entry-00256` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 3.51s |
+| `vulngym_entry-00257` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 4.50s |
+| `vulngym_entry-00258` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.60s |
+| `vulngym_entry-00259` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.58s |
+| `vulngym_entry-00260` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.56s |
+| `vulngym_entry-00261` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.62s |
+| `vulngym_entry-00262` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.85s |
+| `vulngym_entry-00263` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 3.53s |
+| `vulngym_entry-00264` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 3.65s |
+| `vulngym_entry-00265` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.56s |
+| `vulngym_entry-00266` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.72s |
+| `vulngym_entry-00267` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.53s |
+| `vulngym_entry-00268` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.07s |
+| `vulngym_entry-00269` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 3.52s |
+| `vulngym_entry-00270` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.69s |
+| `vulngym_entry-00271` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.62s |
+| `vulngym_entry-00272` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.52s |
+| `vulngym_entry-00273` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.76s |
+| `vulngym_entry-00274` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 4.06s |
+| `vulngym_entry-00275` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 5.56s |
+| `vulngym_entry-00276` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 3.71s |
+| `vulngym_entry-00277` | vulngym | 50% | 50% | 0.50 | 1/1/1 | 4.04s |
+| `vulngym_entry-00278` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.75s |
+| `vulngym_entry-00283` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.03s |
+| `vulngym_entry-00284` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.49s |
+| `vulngym_entry-00285` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.74s |
+| `vulngym_entry-00286` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.43s |
+| `vulngym_entry-00287` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.61s |
+| `vulngym_entry-00288` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.85s |
+| `vulngym_entry-00289` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.62s |
+| `vulngym_entry-00291` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.72s |
+| `vulngym_entry-00292` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.65s |
+| `vulngym_entry-00293` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.65s |
+| `vulngym_entry-00294` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.11s |
+| `vulngym_entry-00295` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.96s |
+| `vulngym_entry-00296` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.46s |
+| `vulngym_entry-00297` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.79s |
+| `vulngym_entry-00298` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.14s |
+| `vulngym_entry-00299` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 3.72s |
+| `vulngym_entry-00300` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.10s |
+| `vulngym_entry-00301` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.77s |
+| `vulngym_entry-00302` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.90s |
+| `vulngym_entry-00303` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.89s |
+| `vulngym_entry-00304` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.67s |
+| `vulngym_entry-00305` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.15s |
+| `vulngym_entry-00306` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.67s |
+| `vulngym_entry-00307` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.63s |
+| `vulngym_entry-00308` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.57s |
+| `vulngym_entry-00309` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 3.13s |
+| `vulngym_entry-00310` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.14s |
+| `vulngym_entry-00311` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.47s |
+| `vulngym_entry-00312` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.58s |
+| `vulngym_entry-00313` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.98s |
+| `vulngym_entry-00314` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 56.41s |
+| `vulngym_entry-00315` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.21s |
+| `vulngym_entry-00316` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 7.69s |
+| `vulngym_entry-00317` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.74s |
+| `vulngym_entry-00318` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 3.32s |
+| `vulngym_entry-00319` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 3.57s |
+| `vulngym_entry-00321` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.54s |
+| `vulngym_entry-00322` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 3.33s |
+| `vulngym_entry-00323` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 4.75s |
+| `vulngym_entry-00324` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.55s |
+| `vulngym_entry-00325` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.31s |
+| `vulngym_entry-00326` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.12s |
+| `vulngym_entry-00327` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.48s |
+| `vulngym_entry-00328` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.91s |
+| `vulngym_entry-00329` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.77s |
+| `vulngym_entry-00330` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.14s |
+| `vulngym_entry-00331` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.68s |
+| `vulngym_entry-00332` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.58s |
+| `vulngym_entry-00333` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.75s |
+| `vulngym_entry-00334` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.71s |
+| `vulngym_entry-00335` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.63s |
+| `vulngym_entry-00336` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.69s |
+| `vulngym_entry-00337` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.94s |
+| `vulngym_entry-00338` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.53s |
+| `vulngym_entry-00339` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.02s |
+| `vulngym_entry-00340` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 1.97s |
+| `vulngym_entry-00341` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 9.29s |
+| `vulngym_entry-00342` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.65s |
+| `vulngym_entry-00343` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.10s |
+| `vulngym_entry-00344` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.10s |
+| `vulngym_entry-00345` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 1.89s |
+| `vulngym_entry-00346` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.48s |
+| `vulngym_entry-00347` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.25s |
+| `vulngym_entry-00348` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.18s |
+| `vulngym_entry-00349` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.67s |
+| `vulngym_entry-00350` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.80s |
+| `vulngym_entry-00351` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.94s |
+| `vulngym_entry-00352` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.93s |
+| `vulngym_entry-00355` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.72s |
+| `vulngym_entry-00356` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.56s |
+| `vulngym_entry-00357` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 4.99s |
+| `vulngym_entry-00358` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.13s |
+| `vulngym_entry-00359` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.61s |
+| `vulngym_entry-00360` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.62s |
+| `vulngym_entry-00361` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.84s |
+| `vulngym_entry-00362` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.92s |
+| `vulngym_entry-00363` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.45s |
+| `vulngym_entry-00364` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.64s |
+| `vulngym_entry-00365` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.62s |
+| `vulngym_entry-00368` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.70s |
+| `vulngym_entry-00369` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.76s |
+| `vulngym_entry-00370` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.15s |
+| `vulngym_entry-00371` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.07s |
+| `vulngym_entry-00372` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.94s |
+| `vulngym_entry-00373` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.61s |
+| `vulngym_entry-00374` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 3.91s |
+| `vulngym_entry-00375` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.65s |
+| `vulngym_entry-00376` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 92.14s |
+| `vulngym_entry-00377` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 3.14s |
+| `vulngym_entry-00378` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 3.91s |
+| `vulngym_entry-00379` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.52s |
+| `vulngym_entry-00380` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.68s |
+| `vulngym_entry-00381` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.16s |
+| `vulngym_entry-00382` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.46s |
+| `vulngym_entry-00383` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.91s |
+| `vulngym_entry-00384` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 6.65s |
+| `vulngym_entry-00385` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.88s |
+| `vulngym_entry-00386` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.81s |
+| `vulngym_entry-00387` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.10s |
+| `vulngym_entry-00388` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.29s |
+| `vulngym_entry-00389` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.92s |
+| `vulngym_entry-00390` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.62s |
+| `vulngym_entry-00392` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.42s |
+| `vulngym_entry-00393` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.36s |
+| `vulngym_entry-00394` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 3.30s |
+| `vulngym_entry-00395` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.37s |
+| `vulngym_entry-00396` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.95s |
+| `vulngym_entry-00397` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.25s |
+| `vulngym_entry-00398` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 3.14s |
+| `vulngym_entry-00399` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.58s |
+| `vulngym_entry-00400` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.06s |
+| `vulngym_entry-00401` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.05s |
+| `vulngym_entry-00402` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.90s |
+| `vulngym_entry-00403` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.64s |
+| `vulngym_entry-00404` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.40s |
+| `vulngym_entry-00405` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.54s |
+| `vulngym_entry-00406` | vulngym | 50% | 50% | 0.50 | 1/1/1 | 3.86s |
+| `vulngym_entry-00407` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.33s |
+| `vulngym_entry-00408` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 4.33s |
+| `vulngym_entry-00409` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 3.62s |
+| `vulngym_entry-00410` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.04s |
+| `vulngym_entry-00411` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 5.26s |
+| `vulngym_entry-00412` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.39s |
+| `vulngym_entry-00413` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.58s |
+| `vulngym_entry-00414` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 3.17s |
+| `vulngym_entry-00415` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.13s |
+| `vulngym_entry-00416` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.63s |
+| `vulngym_entry-00417` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 6.09s |
+| `vulngym_entry-00418` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.30s |
+| `vulngym_entry-00419` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 4.81s |
+| `vulngym_entry-00424` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 1.81s |
+| `vulngym_entry-00429` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.50s |
+| `vulngym_entry-00430` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.80s |
+| `vulngym_entry-00431` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.24s |
+| `vulngym_entry-00432` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 4.15s |
+| `vulngym_entry-00433` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.00s |
+| `vulngym_entry-00434` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.68s |
+| `vulngym_entry-00435` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.79s |
+| `vulngym_entry-00436` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.78s |
+| `vulngym_entry-00437` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.43s |
+| `vulngym_entry-00438` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.59s |
+| `vulngym_entry-00439` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.15s |
+| `vulngym_entry-00440` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.65s |
+| `vulngym_entry-00441` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.63s |
+| `vulngym_entry-00442` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.87s |
+| `vulngym_entry-00443` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.72s |
+| `vulngym_entry-00446` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 4.60s |
+| `vulngym_entry-00447` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.03s |
+| `vulngym_entry-00448` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.00s |
+| `vulngym_entry-00449` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.56s |
+| `vulngym_entry-00450` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.92s |
+| `vulngym_entry-00451` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.14s |
+| `vulngym_entry-00458` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.75s |
+| `vulngym_entry-00459` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.70s |
+| `vulngym_entry-00462` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.82s |
+| `vulngym_entry-00463` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.68s |
+| `vulngym_entry-00464` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.85s |
+| `vulngym_entry-00465` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.38s |
+| `vulngym_entry-00466` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.03s |
+| `vulngym_entry-00467` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.72s |
+| `vulngym_entry-00468` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.10s |
+| `vulngym_entry-00469` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.66s |
+| `vulngym_entry-00470` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 132.79s |
+| `vulngym_entry-00471` | vulngym | 50% | 50% | 0.50 | 1/1/1 | 116.37s |
+| `vulngym_entry-00472` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 11.48s |
+| `vulngym_entry-00473` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 127.82s |
+| `vulngym_entry-00474` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 11.92s |
+| `vulngym_entry-00475` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 10.05s |
+| `vulngym_entry-00476` | vulngym | 50% | 50% | 0.50 | 1/1/1 | 103.19s |
+| `vulngym_entry-00477` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 19.95s |
+| `vulngym_entry-00478` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 112.48s |
+| `vulngym_entry-00479` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 22.94s |
+| `vulngym_entry-00480` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 12.36s |
+| `vulngym_entry-00481` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 13.23s |
+| `vulngym_entry-00482` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 13.03s |
+| `vulngym_entry-00483` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 48.05s |
+| `vulngym_entry-00484` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 5.07s |
+| `vulngym_entry-00485` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 4.98s |
+| `vulngym_entry-00486` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 4.58s |
+| `vulngym_entry-00487` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 4.48s |
+| `vulngym_entry-00488` | vulngym | 100% | 100% | 1.00 | 2/0/0 | 4.27s |
+| `vulngym_entry-00489` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 6.71s |
+| `vulngym_entry-00490` | vulngym | 67% | 100% | 0.80 | 2/1/0 | 5.25s |
+| `vulngym_entry-00491` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.21s |
+| `vulngym_entry-00492` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.76s |
+| `vulngym_entry-00493` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 6.00s |
+| `vulngym_entry-00494` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.70s |
+| `vulngym_entry-00495` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.31s |
+| `vulngym_entry-00496` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 2.92s |
+| `vulngym_entry-00497` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.91s |
+| `vulngym_entry-00498` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 1.90s |
+| `vulngym_entry-00499` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 4.79s |
+| `vulngym_entry-00500` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 3.87s |
+| `vulngym_entry-00501` | vulngym | 100% | 100% | 1.00 | 1/0/0 | 3.45s |
+| `vulngym_entry-00502` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.95s |
+| `vulngym_entry-00503` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.02s |
+| `vulngym_entry-00504` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.37s |
+| `vulngym_entry-00505` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.62s |
+| `vulngym_entry-00506` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.05s |
+| `vulngym_entry-00507` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 2.33s |
+| `vulngym_entry-00508` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.62s |
+| `vulngym_entry-00509` | vulngym | 0% | 0% | 0.00 | 0/0/2 | 2.27s |
+| `vulngym_entry-00510` | vulngym | 100% | 50% | 0.67 | 1/0/1 | 2.69s |
+| `vulngym_entry-00513` | vulngym | 0% | 0% | 0.00 | 0/0/1 | 1.89s |

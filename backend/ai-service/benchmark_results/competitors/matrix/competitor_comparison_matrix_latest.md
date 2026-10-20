@@ -1,6 +1,6 @@
 # Competitor & Ablation Benchmark Comparison Matrix
 
-**Last Updated**: 2026-10-20 14:15:04 UTC
+**Last Updated**: 2026-10-20 15:00:04 UTC
 
 > [!NOTE]
 > This matrix tracks independent evaluations of rival architectures against the proposed GitAmi system.
@@ -10,7 +10,7 @@
 |---|---|---|---|---|---|---|
 | **B1** | None (Raw Diff Only) | Single (Gemini 2.0 Flash) | Disabled | F1: 0.000 (P: 0.0%, R: 0.0%) | F1: 0.031 (P: 14.3%, R: 1.7%) | F1: 0.197 (P: 100.0%, R: 10.9%) |
 | **B2** | ChromA (Only) | Dual-LLM | Enabled | F1: 0.324 (P: 31.6%, R: 33.3%) | F1: 0.215 (P: 28.3%, R: 17.3%) | F1: 0.288 (P: 96.2%, R: 17.0%) |
-| **A1** | Neo4j Only (No Vector) | Dual-LLM | Enabled | F1: 0.216 (P: 21.1%, R: 22.2%) | F1: 0.191 (P: 30.4%, R: 13.9%) | F1: 0.500 (P: 43.5%, R: 58.8%) [10/393 cases] |
+| **A1** | Neo4j Only (No Vector) | Dual-LLM | Enabled | F1: 0.216 (P: 21.1%, R: 22.2%) | F1: 0.191 (P: 30.4%, R: 13.9%) | F1: 0.306 (P: 77.0%, R: 19.1%) |
 | **A2** | Dual KB (Neo4j + Chroma) | Worker Only (Llama-70B) | Enabled | F1: 0.293 (P: 26.1%, R: 33.3%) | F1: 0.137 (P: 26.7%, R: 9.2%) | [TO BE MEASURED] |
 | **A3** | Dual KB (Neo4j + Chroma) | Orch. Only (Gemini 2.0) | Enabled | [TO BE MEASURED] | [TO BE MEASURED] | [TO BE MEASURED] |
 | **GitAmi (Proposed)** | Dual KB (Neo4j + Chroma) | Dual-LLM + ReAct Agent | Enabled | F1: 0.500 (P: 50.0%, R: 50.0%) | F1: 0.385 (P: 69.7%, R: 26.6%) | F1: 0.741 (P: 100.0%, R: 58.8%) [10 Cases] |
