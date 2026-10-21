@@ -127,47 +127,72 @@ class BenchmarkRunner:
             safe_id = self._sanitize_id(case.case_id)
             repo_id = f"{self.config.repo_id_prefix}{safe_id}"
 
-            # Determine directory for KB ingestion
-            stage_dir: Optional[Path] = None
-            if case.local_repo_dir and case.local_repo_dir.exists():
-                repo_dir = case.local_repo_dir
-            else:
-                stage_dir = self._setup_stage_directory(case)
-                repo_dir = stage_dir
+            # Decide execution mode: text_rag vs graph_rag
+            has_real_repo = bool(case.local_repo_dir and case.local_repo_dir.exists())
+            use_text_rag = (self.config.review_mode == "text_rag") or (
+                self.config.review_mode == "auto" and not has_real_repo
+            )
 
+            stage_dir: Optional[Path] = None
             predicted_issues: List[Dict[str, Any]] = []
 
             try:
-                # Ingest into real Knowledge Base and guarantee cleanup via context manager
-                async with BenchmarkKBContext(
-                    repo_id=repo_id,
-                    branch=self.config.branch,
-                    repo_dir=repo_dir,
-                    graph_client=graph_client,
-                    vector_client=vector_client,
-                    cleanup=self.config.cleanup_kb,
-                ) as kb_ctx:
-                    # Parse diff hunks & extract changed symbols
+                if use_text_rag:
+                    # In text_rag mode, bypass temporary staging directory & Neo4j graph ingestion
                     hunks = parse_git_diff(case.diff_text)
                     changed_symbols = extract_changed_symbols(hunks, case.diff_text)
 
-                    # Execute Agentic PR Review
                     review_result = await run_agentic_pr_review(
-                        client=kb_ctx.graph_client,
+                        client=None,
                         repo_id=repo_id,
                         branch=self.config.branch,
                         changed_symbols=changed_symbols,
                         raw_diff_text=case.diff_text,
                         symbols=[],
-                        vector_client=kb_ctx.vector_client,
+                        vector_client=vector_client,
                         llm_client=llm_client,
+                        mode="text_rag",
                     )
-
                     predicted_issues = review_result.issues
                     logger.info(
-                        f"Review complete for '{case.case_id}': verdict={review_result.decision.verdict}, "
+                        f"Review complete (Text-RAG) for '{case.case_id}': verdict={review_result.decision.verdict}, "
                         f"predicted_issues={len(predicted_issues)}"
                     )
+                else:
+                    repo_dir = case.local_repo_dir if has_real_repo else self._setup_stage_directory(case)
+                    if not has_real_repo:
+                        stage_dir = repo_dir
+
+                    # Ingest into real Knowledge Base and guarantee cleanup via context manager
+                    async with BenchmarkKBContext(
+                        repo_id=repo_id,
+                        branch=self.config.branch,
+                        repo_dir=repo_dir,
+                        graph_client=graph_client,
+                        vector_client=vector_client,
+                        cleanup=self.config.cleanup_kb,
+                    ) as kb_ctx:
+                        hunks = parse_git_diff(case.diff_text)
+                        changed_symbols = extract_changed_symbols(hunks, case.diff_text)
+
+                        # Execute Agentic PR Review
+                        review_result = await run_agentic_pr_review(
+                            client=kb_ctx.graph_client,
+                            repo_id=repo_id,
+                            branch=self.config.branch,
+                            changed_symbols=changed_symbols,
+                            raw_diff_text=case.diff_text,
+                            symbols=[],
+                            vector_client=kb_ctx.vector_client,
+                            llm_client=llm_client,
+                            mode="graph_rag",
+                        )
+
+                        predicted_issues = review_result.issues
+                        logger.info(
+                            f"Review complete (Graph-RAG) for '{case.case_id}': verdict={review_result.decision.verdict}, "
+                            f"predicted_issues={len(predicted_issues)}"
+                        )
 
             except Exception as e:
                 logger.error(f"Error during evaluation of '{case.case_id}': {e}")

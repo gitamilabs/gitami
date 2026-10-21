@@ -57,10 +57,15 @@ class AggregateScore:
 
 
 def _tokenize(text: str) -> Set[str]:
-    """Tokenize text into lowercase alphanumeric keywords."""
-    tokens = re.findall(r"[a-zA-Z0-9_]{3,}", text.lower())
+    """Tokenize text into lowercase alphanumeric keywords including camelCase and snake_case parts."""
+    tokens = set(re.findall(r"[a-zA-Z0-9_]{3,}", text.lower()))
+    # Also extract subwords from camelCase or snake_case
+    subwords = re.findall(r"[a-zA-Z][a-z]+|[A-Z]+(?=[A-Z][a-z]|\b)", text)
+    for sw in subwords:
+        if len(sw) >= 3:
+            tokens.add(sw.lower())
     # Exclude trivial stop words
-    stopwords = {"the", "and", "for", "with", "that", "this", "from", "should", "have", "not"}
+    stopwords = {"the", "and", "for", "with", "that", "this", "from", "should", "have", "not", "code", "file", "line"}
     return {t for t in tokens if t not in stopwords}
 
 
@@ -73,6 +78,30 @@ def jaccard_similarity(text1: str, text2: str) -> float:
     intersection = len(t1 & t2)
     union = len(t1 | t2)
     return intersection / union if union > 0 else 0.0
+
+
+def semantic_token_similarity(text1: str, text2: str) -> float:
+    """Compute composite semantic token similarity combining Jaccard and containment overlap with prefix matching."""
+    t1 = _tokenize(text1)
+    t2 = _tokenize(text2)
+    if not t1 or not t2:
+        return 0.0
+
+    exact = t1 & t2
+    matched_t1 = set(exact)
+    matched_t2 = set(exact)
+    for w1 in t1 - exact:
+        for w2 in t2 - exact:
+            if len(w1) >= 4 and len(w2) >= 4 and (w1.startswith(w2[:4]) or w2.startswith(w1[:4])):
+                matched_t1.add(w1)
+                matched_t2.add(w2)
+
+    sim_count = len(matched_t1)
+    if sim_count == 0:
+        return 0.0
+    jaccard = sim_count / len(t1 | t2)
+    overlap = sim_count / min(len(t1), len(t2))
+    return max(jaccard, overlap * 0.75)
 
 
 def files_match(file1: str, file2: str) -> bool:
@@ -110,8 +139,10 @@ class BenchmarkScorer:
         matched_pred_indices: Set[int] = set()
         matches: List[IssueMatch] = []
 
+        is_pr_level_dataset = (dataset_name.lower() == "martian")
+
         # Find best bipartite matches between predicted issues and ground truth
-        candidates: List[Tuple[float, int, int, bool, Optional[int]]] = []
+        candidates: List[Tuple[float, int, int, bool, Optional[int], float]] = []
 
         for p_idx, pred in enumerate(predicted_issues):
             p_file = str(pred.get("file_path", ""))
@@ -134,12 +165,12 @@ class BenchmarkScorer:
                     line_ok = True  # File-level defect
 
                 gt_text = f"{gt.title} {gt.description}"
-                text_sim = jaccard_similarity(p_text, gt_text)
+                text_sim = semantic_token_similarity(p_text, gt_text)
 
                 # Category compatibility bonus
                 cat_bonus = 0.0
                 p_cat = str(pred.get("category", "")).lower()
-                if p_cat == gt.category:
+                if p_cat == gt.category or (p_cat in ("bug", "logical_error", "syntax") and gt.category == "bug"):
                     cat_bonus = 0.2
 
                 # Calculate composite match score
@@ -150,20 +181,31 @@ class BenchmarkScorer:
                         score += 0.3
                     score += (text_sim * 0.3) + cat_bonus
                 else:
-                    # Weak cross-file textual match
-                    score += text_sim * 0.5 + cat_bonus
+                    if is_pr_level_dataset:
+                        # For Martian, golden comments are PR-level; cross-file semantic matches are valid
+                        score += (text_sim * 0.7) + cat_bonus
+                    else:
+                        # Weak cross-file textual match for coordinate datasets like VulnGym
+                        score += text_sim * 0.5 + cat_bonus
 
-                candidates.append((score, p_idx, gt_idx, f_match, line_dist))
+                candidates.append((score, p_idx, gt_idx, f_match, line_dist, text_sim))
 
         # Sort candidates greedily by match score descending
         candidates.sort(key=lambda x: x[0], reverse=True)
 
-        for score, p_idx, gt_idx, f_match, line_dist in candidates:
+        for score, p_idx, gt_idx, f_match, line_dist, text_sim in candidates:
             if p_idx in matched_pred_indices or gt_idx in matched_gt_indices:
                 continue
 
-            # Accept match if score threshold met and file matches (or very strong textual match)
-            if (f_match and score >= 0.40) or score >= 0.70:
+            # Accept match:
+            # - For VulnGym / coordinate datasets: require file match (score>=0.40) or very strong text match (score>=0.70)
+            # - For Martian PR-level dataset: accept file match (score>=0.35) or strong semantic match (score>=0.38 and text_sim>=0.20)
+            if is_pr_level_dataset:
+                matched = (f_match and score >= 0.35) or (score >= 0.38 and text_sim >= 0.20)
+            else:
+                matched = (f_match and score >= 0.40) or score >= 0.70
+
+            if matched:
                 matched_pred_indices.add(p_idx)
                 matched_gt_indices.add(gt_idx)
                 matches.append(

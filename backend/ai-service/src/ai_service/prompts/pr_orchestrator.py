@@ -150,7 +150,7 @@ For each finding, provide:
 Higher-level observations about design patterns, coupling, or structural concerns.
 
 ### Verified Issues (Strict JSON)
-At the very end of your review, output a JSON block with the confirmed defects that survived falsification:
+At the very end of your review, output a JSON block with the confirmed defects across BOTH Scope A (bugs, concurrency, error handling, performance leaks) and Scope B (security vulnerabilities):
 ```json
 {
   "confirmed_issues": [

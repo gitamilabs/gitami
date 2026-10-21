@@ -5,7 +5,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 
 from ai_service.graph.client import Neo4jClient
 from ai_service.vector.client import VectorKBClient
@@ -204,15 +204,99 @@ def deduplicate_issues(issues: List[Dict[str, Any]], line_window: int = 15) -> L
 
 
 
+def _chunk_diff_by_files(raw_diff_text: str, max_chunk_chars: int = 22000) -> List[Tuple[List[str], str]]:
+    """
+    Split a large multi-file git diff into manageable chunks grouped by file,
+    ensuring files late in the diff are not truncated.
+    Returns list of (files_in_chunk, chunk_diff_text).
+    """
+    if not raw_diff_text:
+        return [([], "")]
+
+    # Split by git diff file headers
+    file_diff_pattern = re.compile(r"(?=diff --git a/.* b/.*)")
+    parts = file_diff_pattern.split(raw_diff_text)
+    parts = [p.strip() for p in parts if p.strip()]
+
+    if not parts:
+        return [([], raw_diff_text[:max_chunk_chars])]
+
+    # Extract all files across parts
+    all_files: List[str] = []
+    for part in parts:
+        m = re.search(r"diff --git a/(\S+) b/(\S+)", part)
+        if m:
+            all_files.append(m.group(1))
+
+    if len(raw_diff_text) <= max_chunk_chars:
+        return [(all_files if all_files else ["modified_files"], raw_diff_text)]
+
+    chunks: List[Tuple[List[str], str]] = []
+    curr_files: List[str] = []
+    curr_text: List[str] = []
+    curr_len = 0
+
+    for part in parts:
+        m = re.search(r"diff --git a/(\S+) b/(\S+)", part)
+        fname = m.group(1) if m else "unknown"
+
+        part_len = len(part)
+        if curr_len + part_len > max_chunk_chars and curr_text:
+            chunks.append((curr_files, "\n\n".join(curr_text)))
+            curr_files = [fname]
+            curr_text = [part[:max_chunk_chars]]
+            curr_len = min(part_len, max_chunk_chars)
+        else:
+            curr_files.append(fname)
+            curr_text.append(part)
+            curr_len += part_len
+
+    if curr_text:
+        chunks.append((curr_files, "\n\n".join(curr_text)))
+
+    return chunks
+
+
+def _parse_worker_issues(worker_raw: str, default_files: List[str]) -> List[Dict[str, Any]]:
+    """Extract structured candidate issues from worker node JSON/markdown output."""
+    candidate_issues: List[Dict[str, Any]] = []
+    if not worker_raw:
+        return candidate_issues
+    try:
+        clean_json = re.sub(r"<think>.*?</think>", "", worker_raw, flags=re.DOTALL).strip()
+        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean_json, re.DOTALL)
+        if not json_match:
+            json_match = re.search(r"(\{\s*\"issues\"\s*:\s*\[.*?\]\s*\})", clean_json, re.DOTALL)
+        raw_to_parse = json_match.group(1) if json_match else clean_json
+        worker_parsed = json.loads(raw_to_parse.strip())
+        w_issues = worker_parsed.get("issues", [])
+        if isinstance(w_issues, list):
+            for item in w_issues:
+                candidate_issues.append({
+                    "id": str(uuid.uuid4()),
+                    "title": item.get("title", "Code Issue Detected"),
+                    "description": item.get("description", "Potential flaw found during deep diff analysis."),
+                    "category": item.get("category", "bug"),
+                    "severity": item.get("severity", "warning"),
+                    "file_path": item.get("file_path", default_files[0] if default_files else "codebase"),
+                    "line": item.get("line", 1),
+                    "suggested_fix": item.get("suggested_fix", ""),
+                })
+    except Exception as e:
+        logger.warning(f"Worker JSON parse notice: {e}")
+    return candidate_issues
+
+
 async def run_agentic_pr_review(
-    client: Neo4jClient,
-    repo_id: str,
-    branch: str,
-    changed_symbols: List[str],
-    raw_diff_text: str,
-    symbols: list,
+    client: Optional[Neo4jClient] = None,
+    repo_id: str = "repo",
+    branch: str = "main",
+    changed_symbols: Optional[List[str]] = None,
+    raw_diff_text: str = "",
+    symbols: Optional[list] = None,
     vector_client: Optional[VectorKBClient] = None,
     llm_client: Optional[DualLLMClient] = None,
+    mode: str = "auto",
 ) -> AgentReviewResult:
     """Execute autonomous agentic PR review using FastMCP knowledge base tools + Gemini/Ollama dual LLMs."""
     if llm_client is None:
@@ -220,6 +304,14 @@ async def run_agentic_pr_review(
 
     if vector_client is None:
         vector_client = VectorKBClient()
+
+    if symbols is None:
+        symbols = []
+
+    if changed_symbols is None:
+        changed_symbols = []
+
+    is_text_rag = (mode == "text_rag") or (client is None)
 
     # 1. Parse raw diff text into hunks & extract changed symbols
     hunks = parse_git_diff(raw_diff_text)
@@ -241,82 +333,71 @@ async def run_agentic_pr_review(
     # 3. Formulate prompts and queries
     diff_query = raw_diff_text[:2000] if raw_diff_text else repo_id
     worker_system = get_prompt("pr_reviewer_worker")
-    worker_prompt = (
-        f"Target Repo: '{repo_id}' (branch: '{branch}')\n"
-        f"Changed Files: {changed_files}\n"
-        f"Modified Symbols: {changed_symbols}\n"
-        f"Systematically inspect EVERY file listed in Changed Files ({changed_files}) for runtime bugs, unhandled promise rejections, missing try-catch error handling around dynamic imports or API calls, and logic flaws:\n\n{raw_diff_text[:25000]}"
-    )
 
-    # 4. Concurrent execution of Neo4j Blast Radius, Vector Search, Joern CPG, and Worker Node (Ollama / Groq)
-    blast_task = tool_get_blast_radius(client, repo_id=repo_id, changed_symbols=changed_symbols, branch=branch)
+    # Chunk diff by files to prevent dropping files in large PRs
+    diff_chunks = _chunk_diff_by_files(raw_diff_text, max_chunk_chars=22000)
+
+    # 4. Concurrent execution of Blast Radius, Vector Search, Joern CPG, and Worker Node(s)
+    if not is_text_rag and client is not None:
+        blast_task = tool_get_blast_radius(client, repo_id=repo_id, changed_symbols=changed_symbols, branch=branch)
+        cpg_task = _run_cpg_analysis(repo_id=repo_id, syms=changed_symbols)
+    else:
+        async def _dummy_blast():
+            return json.dumps({"risk_score": 0.0, "total_affected": 0, "mode": "text_rag"})
+        async def _dummy_cpg():
+            return "Text-RAG mode active (pure diff & vector review). AST & Graph reasoning performed directly on code diff context."
+        blast_task = _dummy_blast()
+        cpg_task = _dummy_cpg()
+
     vector_task = tool_vector_search(vector_client, query_text=diff_query, repo_id=repo_id, n_results=3)
-    cpg_task = _run_cpg_analysis(repo_id=repo_id, syms=changed_symbols)
-    worker_task = llm_client.run_worker(worker_prompt, worker_system)
 
-    results = await asyncio.gather(blast_task, vector_task, cpg_task, worker_task, return_exceptions=True)
+    # Run worker inspections for each chunk
+    async def _inspect_chunk(chunk_files: List[str], chunk_diff: str) -> str:
+        prompt = (
+            f"Target Repo: '{repo_id}' (branch: '{branch}')\n"
+            f"Target Files in this patch: {chunk_files}\n"
+            f"Modified Symbols: {changed_symbols}\n"
+            f"Systematically inspect EVERY file listed in Target Files ({chunk_files}) for runtime bugs, unhandled promise rejections, missing try-catch error handling around dynamic imports or API calls, and logic flaws:\n\n{chunk_diff}"
+        )
+        return await llm_client.run_worker(prompt, worker_system)
+
+    worker_tasks = [_inspect_chunk(c_files, c_diff) for c_files, c_diff in diff_chunks]
+
+    all_coros = [blast_task, vector_task, cpg_task] + worker_tasks
+    results = await asyncio.gather(*all_coros, return_exceptions=True)
 
     blast_json = results[0] if isinstance(results[0], str) else json.dumps({"risk_score": 0.0, "total_affected": 0})
     semantic_json = results[1] if isinstance(results[1], str) else "[]"
     cpg_context = results[2] if isinstance(results[2], str) else "CPG analysis unavailable."
-    worker_raw = results[3] if isinstance(results[3], str) else "{}"
+    worker_raw_list = results[3:]
 
     try:
         blast_data = json.loads(blast_json)
     except Exception:
         blast_data = {"risk_score": 0.0, "total_affected": 0}
 
-    # 5. Parse candidate issues from worker node
+    # 5. Parse candidate issues from all worker node chunks
     candidate_issues: List[Dict[str, Any]] = []
-    try:
-        clean_json = re.sub(r"<think>.*?</think>", "", worker_raw, flags=re.DOTALL).strip()
-        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean_json, re.DOTALL)
-        if not json_match:
-            json_match = re.search(r"(\{\s*\"issues\"\s*:\s*\[.*?\]\s*\})", clean_json, re.DOTALL)
-        raw_to_parse = json_match.group(1) if json_match else clean_json
-        worker_parsed = json.loads(raw_to_parse.strip())
-        w_issues = worker_parsed.get("issues", [])
-        if isinstance(w_issues, list):
-            for item in w_issues:
-                candidate_issues.append({
-                    "id": str(uuid.uuid4()),
-                    "title": item.get("title", "Code Issue Detected"),
-                    "description": item.get("description", "Potential flaw found during deep diff analysis."),
-                    "category": item.get("category", "bug"),
-                    "severity": item.get("severity", "warning"),
-                    "file_path": item.get("file_path", changed_files[0] if changed_files else "codebase"),
-                    "line": item.get("line", 1),
-                    "suggested_fix": item.get("suggested_fix", ""),
-                })
-    except Exception as e:
-        logger.warning(f"Worker JSON parse notice: {e}")
+    for idx, w_raw in enumerate(worker_raw_list):
+        if isinstance(w_raw, str):
+            c_files = diff_chunks[idx][0] if idx < len(diff_chunks) else changed_files
+            parsed = _parse_worker_issues(w_raw, c_files)
+            candidate_issues.extend(parsed)
 
-    # 5b. Fallback: If candidate_issues is empty and Gemini is available, run direct inspection
+    # 5b. Fallback: If candidate_issues is empty and Gemini is available, run direct inspection on first chunk
     if not candidate_issues and llm_client.has_gemini:
         try:
+            fallback_prompt = (
+                f"Target Repo: '{repo_id}' (branch: '{branch}')\n"
+                f"Changed Files: {changed_files}\n"
+                f"Modified Symbols: {changed_symbols}\n"
+                f"Systematically inspect EVERY file listed in Changed Files ({changed_files}) for runtime bugs, unhandled promise rejections, missing try-catch error handling around dynamic imports or API calls, and logic flaws:\n\n{raw_diff_text[:25000]}"
+            )
             gem_raw = await llm_client._call_gemini(
-                worker_prompt, worker_system, temperature=0.2, json_mode=True
+                fallback_prompt, worker_system, temperature=0.2, json_mode=True
             )
             if gem_raw:
-                gem_clean = re.sub(r"<think>.*?</think>", "", gem_raw, flags=re.DOTALL).strip()
-                json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", gem_clean, re.DOTALL)
-                if not json_match:
-                    json_match = re.search(r"(\{\s*\"issues\"\s*:\s*\[.*?\]\s*\})", gem_clean, re.DOTALL)
-                raw_to_parse = json_match.group(1) if json_match else gem_clean
-                gem_parsed = json.loads(raw_to_parse.strip())
-                g_issues = gem_parsed.get("issues", [])
-                if isinstance(g_issues, list):
-                    for item in g_issues:
-                        candidate_issues.append({
-                            "id": str(uuid.uuid4()),
-                            "title": item.get("title", "Code Issue Detected"),
-                            "description": item.get("description", "Potential flaw found during deep diff analysis."),
-                            "category": item.get("category", "bug"),
-                            "severity": item.get("severity", "warning"),
-                            "file_path": item.get("file_path", changed_files[0] if changed_files else "codebase"),
-                            "line": item.get("line", 1),
-                            "suggested_fix": item.get("suggested_fix", ""),
-                        })
+                candidate_issues.extend(_parse_worker_issues(gem_raw, changed_files))
         except Exception as ge:
             logger.warning(f"Fallback Gemini worker inspection notice: {ge}")
 

@@ -61,6 +61,9 @@ class BenchmarkConfig:
     # Minimum text overlap/similarity threshold for issue matching
     match_text_threshold: float = 0.35
 
+    # Review execution mode: "auto" (graph_rag if repo exists, text_rag if diff-only), "text_rag", or "graph_rag"
+    review_mode: str = "auto"
+
     def ensure_directories(self) -> None:
         """Ensure necessary storage directories exist on disk."""
         self.repos_dir.mkdir(parents=True, exist_ok=True)
