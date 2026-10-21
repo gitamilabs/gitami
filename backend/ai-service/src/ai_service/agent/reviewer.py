@@ -5,7 +5,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple, Set
 
 from ai_service.graph.client import Neo4jClient
 from ai_service.vector.client import VectorKBClient
@@ -156,26 +156,87 @@ async def _run_cpg_analysis(repo_id: str, syms: List[str]) -> str:
     return format_cpg_security_summary(target_syms, guards_res, callers_res)
 
 
-def deduplicate_issues(issues: List[Dict[str, Any]], line_window: int = 15) -> List[Dict[str, Any]]:
+def _extract_concept_tokens(text: str) -> Set[str]:
+    """Tokenize issue text into keywords including camelCase and snake_case subwords."""
+    tokens = set(re.findall(r"[a-zA-Z0-9_]{3,}", text.lower()))
+    subwords = re.findall(r"[a-zA-Z][a-z]+|[A-Z]+(?=[A-Z][a-z]|\b)", text)
+    for sw in subwords:
+        if len(sw) >= 3:
+            tokens.add(sw.lower())
+    stopwords = {
+        "the", "and", "for", "with", "that", "this", "from", "should", "have",
+        "not", "code", "file", "line", "issue", "detected", "potential", "during",
+        "analysis", "found", "verified", "orchestrator", "flaw", "possible",
+        "does", "will", "without", "into", "been", "being"
+    }
+    return {t for t in tokens if t not in stopwords}
+
+
+def _calc_concept_overlap(text1: str, text2: str) -> float:
+    """Calculate token overlap similarity with prefix and substring matching."""
+    t1 = _extract_concept_tokens(text1)
+    t2 = _extract_concept_tokens(text2)
+    if not t1 or not t2:
+        return 0.0
+    exact = t1 & t2
+    matched = set(exact)
+    for w1 in t1 - exact:
+        for w2 in t2 - exact:
+            if len(w1) >= 4 and len(w2) >= 4 and (w1 in w2 or w2 in w1 or w1.startswith(w2[:4]) or w2.startswith(w1[:4])):
+                matched.add(w1)
+                break
+    sim_count = len(matched)
+    if sim_count == 0:
+        return 0.0
+    jaccard = sim_count / len(t1 | t2)
+    overlap = sim_count / min(len(t1), len(t2))
+    return max(jaccard, overlap * 0.75)
+
+
+def _issue_concept_sim(issue1: Dict[str, Any], issue2: Dict[str, Any]) -> float:
+    """Compute composite concept similarity across title, description, and full text."""
+    t1 = issue1.get("title", "")
+    t2 = issue2.get("title", "")
+    d1 = issue1.get("description", "")
+    d2 = issue2.get("description", "")
+    sim_title = _calc_concept_overlap(t1, t2)
+    sim_desc = _calc_concept_overlap(d1, d2)
+    sim_full = _calc_concept_overlap(f"{t1} {d1}", f"{t2} {d2}")
+    return max(sim_title, sim_desc, sim_full)
+
+
+def deduplicate_issues(
+    issues: List[Dict[str, Any]],
+    line_window: int = 15,
+    cross_file_threshold: float = 0.48,
+) -> List[Dict[str, Any]]:
     """
-    Deduplicate issues that target the same file and have overlapping line ranges
-    or identical core concepts to prevent duplicate predictions.
+    Two-pass deduplication:
+    Pass 1 (Intra-file):
+        Deduplicate issues that target the same file and have overlapping line ranges
+        (within line_window) or high concept overlap.
+    Pass 2 (Cross-file Sibling Deduplication):
+        For multi-file PRs, worker hunks often catch the exact same systemic bug
+        (e.g., async callback inside Array.forEach, unhandled promise, missing CSRF token)
+        across multiple touched files. In real PR reviews and benchmarks (like Martian),
+        ground truth records one issue for a systemic defect rather than repeating it across
+        every touched file. Pass 2 identifies cross-file duplicates with high concept
+        similarity (>= cross_file_threshold) and suppresses subsequent sibling copies.
     """
     if not issues:
         return []
 
-    deduped: List[Dict[str, Any]] = []
-
+    # Pass 1: Intra-file deduplication
+    pass1: List[Dict[str, Any]] = []
     for issue in issues:
         f = issue.get("file_path", "")
         try:
             l = int(issue.get("line", 0))
         except (ValueError, TypeError):
             l = 0
-        desc = f"{issue.get('title', '')} {issue.get('description', '')}".lower()
 
         is_duplicate = False
-        for existing in deduped:
+        for existing in pass1:
             ef = existing.get("file_path", "")
             if f != ef:
                 continue
@@ -184,23 +245,36 @@ def deduplicate_issues(issues: List[Dict[str, Any]], line_window: int = 15) -> L
             except (ValueError, TypeError):
                 el = 0
 
-            edesc = f"{existing.get('title', '')} {existing.get('description', '')}".lower()
             line_diff = abs(l - el)
+            overlap = _issue_concept_sim(issue, existing)
 
-            t1 = set(re.findall(r"[a-z]{4,}", desc))
-            t2 = set(re.findall(r"[a-z]{4,}", edesc))
-            overlap = len(t1 & t2) / max(1, len(t1 | t2)) if (t1 and t2) else 0.0
-
-            if (line_diff <= line_window and overlap >= 0.25) or (line_diff == 0 and overlap >= 0.15):
+            if (line_diff <= line_window and overlap >= 0.25) or (line_diff == 0 and overlap >= 0.15) or (overlap >= 0.60):
                 is_duplicate = True
                 if issue.get("severity") in ("critical", "error") and existing.get("severity") not in ("critical", "error"):
                     existing["severity"] = issue.get("severity")
                 break
 
         if not is_duplicate:
-            deduped.append(issue)
+            pass1.append(issue)
 
-    return deduped
+    # Pass 2: Cross-file sibling deduplication
+    pass2: List[Dict[str, Any]] = []
+    for issue in pass1:
+        is_cross_dup = False
+
+        for existing in pass2:
+            overlap = _issue_concept_sim(issue, existing)
+
+            if overlap >= cross_file_threshold:
+                is_cross_dup = True
+                if issue.get("severity") in ("critical", "error") and existing.get("severity") not in ("critical", "error"):
+                    existing["severity"] = issue.get("severity")
+                break
+
+        if not is_cross_dup:
+            pass2.append(issue)
+
+    return pass2
 
 
 
@@ -433,17 +507,31 @@ async def run_agentic_pr_review(
         logger.debug(f"Orchestrator confirmed issues parse notice: {e}")
 
     raw_issues: List[Dict[str, Any]] = []
+    suggestions: List[Suggestion] = []
+    generic_titles = {
+        "code issue detected",
+        "issue detected",
+        "bug detected",
+        "code issue",
+        "potential flaw found",
+        "potential flaw found during deep diff analysis.",
+        "issue verified by orchestrator.",
+    }
 
     # Priority 1: Add orchestrator confirmed issues
     if orchestrator_confirmed and len(orchestrator_confirmed) > 0:
         for item in orchestrator_confirmed:
             f = item.get("file_path", changed_files[0] if changed_files else "codebase")
             l = item.get("line", 1)
-            t = item.get("title", "Code Issue Detected")
+            t = (item.get("title") or "").strip()
+            desc = (item.get("description") or "").strip()
+            if not t or t.lower() in generic_titles:
+                t = desc[:60] if desc else "Code Issue Detected"
+
             raw_issues.append({
                 "id": str(uuid.uuid4()),
                 "title": t,
-                "description": item.get("description", "Issue verified by orchestrator."),
+                "description": desc or "Issue verified by orchestrator.",
                 "category": item.get("category", "bug"),
                 "severity": item.get("severity", "warning"),
                 "file_path": f,
@@ -451,13 +539,54 @@ async def run_agentic_pr_review(
                 "suggested_fix": item.get("suggested_fix", ""),
             })
 
-    # Priority 2: Add worker candidate issues
-    for item in candidate_issues:
-        raw_issues.append(item)
+    # Priority 2: Hierarchical Vetting Gate for worker candidate issues
+    # Combines orchestrator precision with worker hunk coverage
+    for cand in candidate_issues:
+        title = (cand.get("title") or "").strip()
+        desc = (cand.get("description") or "").strip()
+        sev = (cand.get("severity") or "warning").lower()
+        cat = (cand.get("category") or "bug").lower()
 
-    # Deduplicate issues to eliminate overlapping line reports on same file
-    structured_issues = deduplicate_issues(raw_issues, line_window=15)
+        # Gate 1: Discard generic placeholder issues that lack actionable substance
+        if not title or title.lower() in generic_titles:
+            if not desc or desc.lower() in generic_titles:
+                continue
+            title = desc[:60]
 
+        # Gate 2: Route low-severity/info nits to non-blocking suggestions (avoids FP inflation)
+        if sev in ("low", "info") or cat in ("style", "formatting", "convention"):
+            try:
+                cline = int(cand.get("line", 1))
+            except (ValueError, TypeError):
+                cline = 1
+            suggestions.append(
+                Suggestion(
+                    file_path=cand.get("file_path", "codebase"),
+                    line=cline,
+                    description=f"{title}: {desc}",
+                    category=cat,
+                    severity=sev,
+                )
+            )
+            continue
+
+        # Gate 3: Deduplicate candidate against already admitted orchestrator issues
+        covered_by_orch = False
+        for orch_item in raw_issues:
+            if _issue_concept_sim(cand, orch_item) >= 0.45:
+                covered_by_orch = True
+                if sev in ("critical", "error") and orch_item.get("severity") not in ("critical", "error"):
+                    orch_item["severity"] = sev
+                break
+
+        if covered_by_orch:
+            continue
+
+        # Gate 4: Admit verified high-confidence worker candidate
+        raw_issues.append(cand)
+
+    # Deduplicate issues to eliminate overlapping line reports & cross-file siblings
+    structured_issues = deduplicate_issues(raw_issues, line_window=15, cross_file_threshold=0.48)
 
     # Add critical convention violations to structured_issues (style suggestions stay in suggestions)
     for v in all_violations:
@@ -472,19 +601,16 @@ async def run_agentic_pr_review(
                 "line": v.line,
                 "suggested_fix": f"Follow project conventions for {v.rule_id}",
             })
-
-    # Suggestions list for non-blocking code quality feedback
-    suggestions: List[Suggestion] = []
-    for v in all_violations:
-        suggestions.append(
-            Suggestion(
-                file_path=v.file_path,
-                line=v.line,
-                description=f"[{v.rule_id}] {v.message}",
-                category="convention",
-                severity=v.severity,
+        else:
+            suggestions.append(
+                Suggestion(
+                    file_path=v.file_path,
+                    line=v.line,
+                    description=f"[{v.rule_id}] {v.message}",
+                    category="convention",
+                    severity=v.severity,
+                )
             )
-        )
 
     # 8. Composite risk score and final verdict
     base_blast_risk = blast_data.get("risk_score", 0.0) if isinstance(blast_data, dict) else 0.0

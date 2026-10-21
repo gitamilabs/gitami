@@ -33,6 +33,9 @@ OLLAMA_MODELS = [
 
 
 
+from ai_service.agent.key_rotator import APIKeyRotator
+
+
 class DualLLMClient:
     """Multi-LLM Client wrapper: Qwen / Google Gemini for Orchestration & Local Ollama / Groq for Worker Sub-tasks / Failover."""
 
@@ -46,16 +49,24 @@ class DualLLMClient:
         orchestrator_provider: Optional[str] = None,
         orchestrator_model: Optional[str] = None,
     ):
-        self.gemini_key = gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        self.groq_key = groq_api_key or os.getenv("GROQ_API_KEY")
+        self.gemini_rotator = APIKeyRotator.from_env("Gemini", "GEMINI_API_KEY", "GEMINI_API_KEYS")
+        if gemini_api_key and gemini_api_key not in self.gemini_rotator.keys:
+            self.gemini_rotator.keys.insert(0, gemini_api_key)
+
+        self.groq_rotator = APIKeyRotator.from_env("Groq", "GROQ_API_KEY", "GROQ_API_KEYS")
+        if groq_api_key and groq_api_key not in self.groq_rotator.keys:
+            self.groq_rotator.keys.insert(0, groq_api_key)
+
+        self.gemini_key = self.gemini_rotator.get_current_key()
+        self.groq_key = self.groq_rotator.get_current_key()
         self.ollama_base_url = (ollama_base_url or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/")
         self.ollama_model = ollama_model or os.getenv("OLLAMA_MODEL") or "qwen2.5-coder:latest"
         self.worker_provider = (worker_provider or os.getenv("WORKER_PROVIDER") or "ollama").lower()
         self.orchestrator_provider = (orchestrator_provider or os.getenv("ORCHESTRATOR_PROVIDER") or "ollama").lower()
         self.orchestrator_model = orchestrator_model or os.getenv("ORCHESTRATOR_MODEL") or "qwen2.5-coder:latest"
 
-        self.has_gemini = bool(self.gemini_key)
-        self.has_groq = bool(self.groq_key)
+        self.has_gemini = self.gemini_rotator.has_keys
+        self.has_groq = self.groq_rotator.has_keys
         self.has_ollama = bool(self.ollama_base_url)
 
         self._genai_client = None
@@ -65,19 +76,21 @@ class DualLLMClient:
         self._ollama_cooldown_until: float = 0.0
 
     def _get_genai_client(self):
-        if not self._genai_client and self.has_gemini:
+        curr_key = self.gemini_rotator.get_current_key() or self.gemini_key
+        if not self._genai_client and curr_key:
             try:
                 from google import genai
-                self._genai_client = genai.Client(api_key=self.gemini_key)
+                self._genai_client = genai.Client(api_key=curr_key)
             except Exception as e:
                 logger.error(f"Failed to instantiate Google GenAI Client: {e}")
         return self._genai_client
 
     def _get_groq_client(self):
-        if not self._groq_client and self.has_groq:
+        curr_key = self.groq_rotator.get_current_key() or self.groq_key
+        if not self._groq_client and curr_key:
             try:
                 from groq import Groq
-                self._groq_client = Groq(api_key=self.groq_key, max_retries=1)
+                self._groq_client = Groq(api_key=curr_key, max_retries=1)
             except Exception as e:
                 logger.error(f"Failed to instantiate Groq Client: {e}")
         return self._groq_client
@@ -192,11 +205,15 @@ class DualLLMClient:
                     or "503" in err_str
                 )
                 if is_quota_exhausted:
-                    # Place exhausted model on 60-second cooldown so subsequent calls skip it directly
-                    self._gemini_model_cooldowns[model_name] = time.time() + 60.0
+                    if self.gemini_rotator.key_count > 1:
+                        await self.gemini_rotator.rotate(reason=f"Gemini quota exhausted on {model_name}")
+                        self._genai_client = None
+                    else:
+                        # Place exhausted model on 60-second cooldown so subsequent calls skip it directly
+                        self._gemini_model_cooldowns[model_name] = time.time() + 60.0
                     logger.warning(
                         f"Gemini model [{model_name}] quota exhausted or unavailable ({e}). "
-                        f"Placed on 60s cooldown; falling back to next candidate model..."
+                        f"Falling back to next candidate model..."
                     )
                 else:
                     logger.warning(
@@ -257,6 +274,10 @@ class DualLLMClient:
                         or "quota" in err_str
                     )
                     if is_rate_limit:
+                        if self.groq_rotator.key_count > 1:
+                            await self.groq_rotator.rotate(reason=f"Groq 429 on {model_name}")
+                            self._groq_client = None
+                            client = self._get_groq_client()
                         if attempt == 0:
                             backoff = 2.0
                             logger.warning(

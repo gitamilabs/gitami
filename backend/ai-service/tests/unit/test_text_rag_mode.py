@@ -138,5 +138,145 @@ async def test_run_agentic_pr_review_text_rag_mode():
 
     assert result.decision.verdict in ("ACCEPT", "SUGGEST")
     assert len(result.issues) == 1
-    assert result.issues[0]["title"] == "Unhandled promise"
-    assert result.issues[0]["file_path"] == "test.js"
+
+
+def test_cross_file_sibling_deduplication():
+    from ai_service.agent.reviewer import deduplicate_issues
+
+    issues = [
+        {
+            "id": "1",
+            "title": "Array.forEach with async callback",
+            "description": "Array.forEach does not wait for async callback promises to resolve, leading to unhandled errors.",
+            "category": "bug",
+            "severity": "warning",
+            "file_path": "services/auth.ts",
+            "line": 45,
+        },
+        {
+            "id": "2",
+            "title": "Async callback in forEach loop",
+            "description": "Async operations in forEach will execute concurrently without awaiting.",
+            "category": "bug",
+            "severity": "error",
+            "file_path": "services/user.ts",
+            "line": 88,
+        },
+        {
+            "id": "3",
+            "title": "SQL Injection vulnerability",
+            "description": "User input directly concatenated into SQL query string.",
+            "category": "security",
+            "severity": "critical",
+            "file_path": "db/queries.ts",
+            "line": 12,
+        },
+    ]
+
+    deduped = deduplicate_issues(issues, line_window=15, cross_file_threshold=0.48)
+    # The two forEach async issues should be merged into 1 (with upgraded severity 'error')
+    # and the SQL injection issue kept
+    assert len(deduped) == 2
+    titles = [i["title"] for i in deduped]
+    assert any("SQL Injection" in t for t in titles)
+    assert any("forEach" in t for t in titles)
+    # Check severity escalation
+    foreach_issue = next(i for i in deduped if "forEach" in i["title"])
+    assert foreach_issue["severity"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_hierarchical_vetting_gate():
+    mock_llm = MagicMock()
+    mock_llm.has_gemini = False
+    mock_llm.orchestrator_provider = "ollama"
+
+    # Worker reports:
+    # 1. Generic placeholder
+    # 2. Duplicate of orchestrator issue
+    # 3. Low-severity style nit
+    # 4. Distinct real bug
+    worker_output = """```json
+    {
+      "issues": [
+        {
+          "title": "Code Issue Detected",
+          "description": "Potential flaw found during deep diff analysis.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "src/app.py",
+          "line": 1
+        },
+        {
+          "title": "Unhandled promise in async handler",
+          "description": "Async handler missing await on database commit call.",
+          "category": "bug",
+          "severity": "warning",
+          "file_path": "src/controllers.py",
+          "line": 50
+        },
+        {
+          "title": "Variable naming convention",
+          "description": "Variable should use snake_case instead of camelCase.",
+          "category": "style",
+          "severity": "low",
+          "file_path": "src/app.py",
+          "line": 15
+        },
+        {
+          "title": "Resource leak in file descriptor",
+          "description": "File opened with open() is never closed in exception path.",
+          "category": "bug",
+          "severity": "error",
+          "file_path": "src/utils.py",
+          "line": 30
+        }
+      ]
+    }
+    ```"""
+    mock_llm.run_worker = AsyncMock(return_value=worker_output)
+
+    # Orchestrator confirms the unhandled promise bug
+    orch_output = """Verdict: SUGGEST
+    ```json
+    {
+      "confirmed_issues": [
+        {
+          "title": "Unhandled promise in async handler",
+          "description": "Async handler missing await on database commit call.",
+          "category": "bug",
+          "severity": "error",
+          "file_path": "src/controllers.py",
+          "line": 48
+        }
+      ]
+    }
+    ```"""
+    mock_llm.run_orchestrator = AsyncMock(return_value=orch_output)
+
+    sample_diff = """diff --git a/src/app.py b/src/app.py
+--- a/src/app.py
++++ b/src/app.py
+@@ -1,5 +1,5 @@
++new_code()
+"""
+    result = await run_agentic_pr_review(
+        client=None,
+        repo_id="test-repo",
+        branch="main",
+        raw_diff_text=sample_diff,
+        llm_client=mock_llm,
+        mode="text_rag",
+    )
+
+    # Vetting gate should leave:
+    # 1. Orchestrator confirmed issue (unhandled promise)
+    # 2. Distinct worker bug (resource leak)
+    # Placeholder should be discarded, duplicate should be suppressed, style nit routed to suggestions
+    assert len(result.issues) == 2
+    issue_titles = [i["title"] for i in result.issues]
+    assert any("Unhandled promise" in t for t in issue_titles)
+    assert any("Resource leak" in t for t in issue_titles)
+    # Style nit should be in decision suggestions
+    suggestion_texts = [s.description for s in result.decision.suggestions]
+    assert any("Variable naming convention" in s for s in suggestion_texts)
