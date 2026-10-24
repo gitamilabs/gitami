@@ -150,7 +150,7 @@ class RepositoryIndexer:
                 # Mode A: Pre-parsed in-memory results (e.g. tarball streamer)
                 resolved_sha = (
                     target_commit_sha
-                    if target_commit_sha not in ("HEAD", "main")
+                    if target_commit_sha not in ("HEAD", "main", "master", "trunk", "dev") and target_commit_sha
                     else "synthetic-commit-0000000000000000000000000000000000000000"
                 )
                 job.target_commit_sha = resolved_sha
@@ -245,6 +245,7 @@ class RepositoryIndexer:
                     repo_id=repo_id,
                     commit_sha=resolved_sha,
                     parse_results=parse_results,
+                    branch=branch,
                 )
 
                 tests_count = await graph_indexer.index_tests(
@@ -794,6 +795,7 @@ class RepositoryIndexer:
 
                         # Cleanup empty directory nodes
                         await graph_indexer.cleanup_empty_directories(repo_id)
+                        await graph_indexer.cleanup_orphaned_external_entities(repo_id)
 
                         # Post-processing import resolution
                         try:

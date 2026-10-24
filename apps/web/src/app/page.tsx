@@ -30,7 +30,7 @@ import {
 
 export default function LandingPage() {
   const router = useRouter();
-  const { token, login, isInitialized, initialize } = useAuthStore();
+  const { token, user, login, isInitialized, initialize } = useAuthStore();
   const { activeTeam, fetchTeams } = useTeamStore();
   const [activeArchTab, setActiveArchTab] = useState<"graph" | "context" | "vector" | "agent">("graph");
 
@@ -49,16 +49,18 @@ export default function LandingPage() {
           .then((teams) => {
             if (teams && teams.length > 0) {
               router.replace(`/${teams[0].slug}`);
-            } else {
-              router.replace("/aryanracha");
+            } else if (user?.username) {
+              router.replace(`/${user.username}`);
             }
           })
           .catch(() => {
-            router.replace("/aryanracha");
+            if (user?.username) {
+              router.replace(`/${user.username}`);
+            }
           });
       }
     }
-  }, [token, isInitialized, activeTeam, router, fetchTeams]);
+  }, [token, isInitialized, activeTeam, user, router, fetchTeams]);
 
   const hasSavedToken =
     typeof window !== "undefined" &&
@@ -161,7 +163,7 @@ export default function LandingPage() {
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           {token ? (
-            <Link href={activeTeam ? `/${activeTeam.slug}` : "/aryanracha"}>
+            <Link href={activeTeam ? `/${activeTeam.slug}` : (user?.username ? `/${user.username}` : "#features")}>
               <Button size="lg" variant="primary" rightIcon={<ArrowRight className="w-4 h-4" />}>
                 Open GitAmi Workspace
               </Button>
@@ -177,9 +179,9 @@ export default function LandingPage() {
             </Button>
           )}
 
-          <Link href={activeTeam ? `/${activeTeam.slug}` : "/aryanracha"}>
+          <Link href={token ? (activeTeam ? `/${activeTeam.slug}` : (user?.username ? `/${user.username}` : "#features")) : "#features"}>
             <Button size="lg" variant="secondary" rightIcon={<ArrowRight className="w-4 h-4" />}>
-              Explore Workspace
+              {token ? "Explore Workspace" : "Explore Features"}
             </Button>
           </Link>
         </div>

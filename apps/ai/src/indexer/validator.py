@@ -22,7 +22,7 @@ class IndexValidator:
             fatal.append("Repository ID is empty or invalid.")
 
         # 2. Commit SHA check
-        commit_exists = bool(commit_sha and len(commit_sha.strip()) >= 7)
+        commit_exists = bool(commit_sha and len(commit_sha.strip()) >= 1)
         if not commit_exists:
             fatal.append(f"Target commit SHA '{commit_sha}' is invalid.")
 

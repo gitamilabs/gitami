@@ -8,6 +8,7 @@ import {
   type PullRequest,
   type PRReview,
   type PRIssue,
+  type User,
 } from "../../db/schema";
 import { env } from "../../configs/env";
 import {
@@ -17,6 +18,7 @@ import {
   getIngestedRepoNames,
   isRepoIngested,
 } from "../github/github-app.service";
+import { getProjectForUser } from "../projects/projects.service";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://127.0.0.1:8000";
 
@@ -85,6 +87,92 @@ export async function listPullRequests(repoFullName?: string, userId?: string) {
   }
 
   const ingestedFullNames = Array.from(new Set(ingestedOwnedRepos.map((r) => r.fullName)));
+
+  const prs = await db
+    .select()
+    .from(pullRequests)
+    .where(inArray(pullRequests.repoFullName, ingestedFullNames))
+    .orderBy(desc(pullRequests.createdAt));
+  return enrichPRsWithReviewData(prs);
+}
+
+/**
+ * Lists PRs strictly scoped to repositories attached to a specific project.
+ */
+export async function listPullRequestsForProject(
+  user: User,
+  projectIdOrSlug: string,
+  repoFullName?: string
+): Promise<any[]> {
+  const projectDetails = await getProjectForUser(user, projectIdOrSlug);
+  if (!projectDetails) return [];
+
+  const { project } = projectDetails;
+
+  const connected = await db
+    .select()
+    .from(connectedRepositories)
+    .where(
+      and(
+        eq(connectedRepositories.projectId, project.id),
+        eq(connectedRepositories.isActive, true)
+      )
+    );
+
+  if (connected.length === 0) return [];
+
+  const projectRepoFullNames = new Set(connected.map((r) => r.fullName));
+  const projectShortNames = new Map(connected.map((r) => [r.name, r.fullName]));
+
+  let targetFullName = repoFullName?.trim();
+  if (targetFullName && !projectRepoFullNames.has(targetFullName)) {
+    const resolved = projectShortNames.get(targetFullName);
+    targetFullName = resolved;
+  }
+
+  if (repoFullName && !targetFullName) {
+    // Requested repo not attached to this project
+    return [];
+  }
+
+  const ingestedNames = await getIngestedRepoNames();
+
+  if (targetFullName) {
+    if (!isRepoIngested(targetFullName, ingestedNames)) {
+      return [];
+    }
+
+    try {
+      await syncPullRequestsForRepo(targetFullName);
+    } catch (err) {
+      console.warn("Notice: background PR sync from GitHub encountered an issue:", err);
+    }
+
+    const prs = await db
+      .select()
+      .from(pullRequests)
+      .where(eq(pullRequests.repoFullName, targetFullName))
+      .orderBy(desc(pullRequests.createdAt));
+    return enrichPRsWithReviewData(prs);
+  }
+
+  // All PRs for this project: strictly filter connected repos to ingested ones
+  const ingestedProjectRepos = connected.filter(
+    (r) => isRepoIngested(r.fullName, ingestedNames) || isRepoIngested(r.name, ingestedNames)
+  );
+
+  if (ingestedProjectRepos.length === 0) return [];
+
+  // Sync PRs for each ingested project repo in background
+  for (const repo of ingestedProjectRepos) {
+    try {
+      await syncPullRequestsForRepo(repo.fullName);
+    } catch (err) {
+      console.warn(`PR sync error for ${repo.fullName}:`, err);
+    }
+  }
+
+  const ingestedFullNames = Array.from(new Set(ingestedProjectRepos.map((r) => r.fullName)));
 
   const prs = await db
     .select()

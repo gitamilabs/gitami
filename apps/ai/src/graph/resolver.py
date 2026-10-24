@@ -4,7 +4,27 @@ from src.graph.client import Neo4jClient
 
 
 def resolve_relative_path(importer_file: str, module_path: str, known_files: Set[str]) -> Optional[str]:
-    """Resolve a relative import path (e.g. ./api.js, ../utils) against known file paths in the repo."""
+    """Resolve an import path (relative ./, ../ or aliases @/, ~/) against known file paths in the repo."""
+    if module_path.startswith(("@/", "~/")):
+        clean_path = module_path[2:]
+        for pfx in ["src/", ""]:
+            target_cand = f"{pfx}{clean_path}".strip("/")
+            candidates = [
+                target_cand,
+                f"{target_cand}.js",
+                f"{target_cand}.jsx",
+                f"{target_cand}.ts",
+                f"{target_cand}.tsx",
+                f"{target_cand}/index.js",
+                f"{target_cand}/index.jsx",
+                f"{target_cand}/index.ts",
+                f"{target_cand}/index.tsx",
+            ]
+            for cand in candidates:
+                if cand in known_files:
+                    return cand
+        return None
+
     importer_dir = Path(importer_file).parent
     
     # Clean leading ./ or ../ for Path join
@@ -81,7 +101,7 @@ async def resolve_repo_imports(client: Neo4jClient, repo_id: str, branch: str) -
         imported_symbol = rec.get("imported_symbol", "")
 
         target_file = None
-        if module_path.startswith("."):
+        if module_path.startswith((".", "@/", "~/")):
             target_file = resolve_relative_path(importer_file, module_path, known_files)
         else:
             target_file = resolve_python_path(importer_file, module_path, known_files)

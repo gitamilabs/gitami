@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from src.graph.client import Neo4jClient
-from src.graph.resolver import resolve_repo_imports
+from src.graph.resolver import resolve_repo_imports, resolve_relative_path, resolve_python_path
 from src.parsing.models import ParseResult, SymbolNode, CallEdge, ImportEdge, HeritageEdge
 
 logger = logging.getLogger(__name__)
@@ -80,6 +80,21 @@ def compute_symbol_uids(
         elif kind == "test":
             label = "Test"
             uid = make_entity_uid(repo_id, "test", norm_path, sym.name, parent=parent, occurrence=occurrence)
+        elif kind == "schema":
+            label = "Schema"
+            uid = make_entity_uid(repo_id, "schema", norm_path, sym.name, parent=parent, occurrence=occurrence)
+        elif kind == "enum":
+            label = "Enum"
+            uid = make_entity_uid(repo_id, "enum", norm_path, sym.name, parent=parent, occurrence=occurrence)
+        elif kind == "router":
+            label = "Router"
+            uid = make_entity_uid(repo_id, "router", norm_path, sym.name, parent=parent, occurrence=occurrence)
+        elif kind == "relation":
+            label = "Relation"
+            uid = make_entity_uid(repo_id, "relation", norm_path, sym.name, parent=parent, occurrence=occurrence)
+        elif kind in ("variable", "constant"):
+            label = "Variable"
+            uid = make_entity_uid(repo_id, "var", norm_path, sym.name, parent=parent, occurrence=occurrence)
         else:
             label = "Function"
             uid = make_entity_uid(repo_id, "func", norm_path, sym.name, parent=parent, occurrence=occurrence)
@@ -113,10 +128,18 @@ class GraphIndexer:
             "CREATE CONSTRAINT interface_uid_unique IF NOT EXISTS FOR (i:Interface) REQUIRE i.uid IS UNIQUE",
             "CREATE CONSTRAINT type_uid_unique IF NOT EXISTS FOR (t:Type) REQUIRE t.uid IS UNIQUE",
             "CREATE CONSTRAINT test_uid_unique IF NOT EXISTS FOR (t:Test) REQUIRE t.uid IS UNIQUE",
+            "CREATE CONSTRAINT schema_uid_unique IF NOT EXISTS FOR (s:Schema) REQUIRE s.uid IS UNIQUE",
+            "CREATE CONSTRAINT enum_uid_unique IF NOT EXISTS FOR (e:Enum) REQUIRE e.uid IS UNIQUE",
+            "CREATE CONSTRAINT router_uid_unique IF NOT EXISTS FOR (r:Router) REQUIRE r.uid IS UNIQUE",
+            "CREATE CONSTRAINT rel_uid_unique IF NOT EXISTS FOR (rel:Relation) REQUIRE rel.uid IS UNIQUE",
+            "CREATE CONSTRAINT var_uid_unique IF NOT EXISTS FOR (v:Variable) REQUIRE v.uid IS UNIQUE",
+            "CREATE CONSTRAINT pkg_uid_unique IF NOT EXISTS FOR (p:Package) REQUIRE p.uid IS UNIQUE",
+            "CREATE CONSTRAINT inferred_uid_unique IF NOT EXISTS FOR (i:Inferred) REQUIRE i.uid IS UNIQUE",
         ]
         indexes = [
             "CREATE INDEX file_repo_idx IF NOT EXISTS FOR (f:File) ON (f.repo_id, f.commit_sha)",
             "CREATE INDEX func_repo_idx IF NOT EXISTS FOR (fn:Function) ON (fn.repo_id, fn.name)",
+            "CREATE INDEX sym_repo_name_idx IF NOT EXISTS FOR (s:Symbol) ON (s.repo_id, s.name)",
         ]
 
         for query in constraints + indexes:
@@ -249,6 +272,11 @@ class GraphIndexer:
             "Interface": [],
             "Type": [],
             "Test": [],
+            "Schema": [],
+            "Enum": [],
+            "Router": [],
+            "Relation": [],
+            "Variable": [],
         }
 
         for pr in parse_results:
@@ -286,7 +314,8 @@ class GraphIndexer:
             UNWIND $batch AS item
             MATCH (f:File {{uid: item.file_uid}})
             MERGE (e:{label} {{uid: item.uid}})
-            SET e.name = item.name,
+            SET e:Symbol,
+                e.name = item.name,
                 e.file_path = item.file_path,
                 e.language = item.language,
                 e.start_line = item.start_line,
@@ -389,75 +418,264 @@ class GraphIndexer:
         return len(heritage_edges)
 
     async def index_calls_and_imports(
-        self, repo_id: str, commit_sha: str, parse_results: List[ParseResult]
+        self,
+        repo_id: str,
+        commit_sha: str,
+        parse_results: List[ParseResult],
+        branch: str = "main",
     ) -> Tuple[int, int]:
-        """Upsert CALLS, IMPORTS, and DEPENDS_ON relationships."""
+        """
+        Upsert CALLS, IMPORTS, DEPENDS_ON, and DEPENDS_ON_FILE relationships.
+        Creates Package nodes for external dependencies and Inferred hub nodes
+        for prominent external/chained calls (e.g. .success(), ApiResponse.success).
+        """
+        # Query known files and internal symbols across the repository from Neo4j
+        # to ensure incremental runs have complete repo-level context
+        repo_files_records = await self.client.execute_query(
+            "MATCH (f:File {repo_id: $repo_id}) RETURN collect(f.file_path) AS paths",
+            {"repo_id": repo_id},
+        )
+        db_files = (
+            set(repo_files_records[0]["paths"])
+            if repo_files_records and isinstance(repo_files_records, list) and repo_files_records[0].get("paths")
+            else set()
+        )
+        known_files = db_files | {pr.file_path.replace("\\", "/").lstrip("/") for pr in parse_results}
+
+        repo_sym_records = await self.client.execute_query(
+            "MATCH (s:Symbol {repo_id: $repo_id}) WHERE NOT s:Inferred AND NOT s:Package RETURN collect(DISTINCT s.name) AS names",
+            {"repo_id": repo_id},
+        )
+        db_symbols = (
+            set(repo_sym_records[0]["names"])
+            if repo_sym_records and isinstance(repo_sym_records, list) and repo_sym_records[0].get("names")
+            else set()
+        )
+        internal_symbol_names = db_symbols | {sym.name for pr in parse_results for sym in pr.symbols}
+
+        repo_inferred_records = await self.client.execute_query(
+            "MATCH (i:Inferred {repo_id: $repo_id}) RETURN collect(DISTINCT i.name) AS names",
+            {"repo_id": repo_id},
+        )
+        db_inferred = (
+            set(repo_inferred_records[0]["names"])
+            if repo_inferred_records and isinstance(repo_inferred_records, list) and repo_inferred_records[0].get("names")
+            else set()
+        )
+
+        file_dep_batch = []
+        symbol_import_batch = []
+        package_batch = []
         call_batch = []
-        import_batch = []
+        file_call_batch = []
+
+        # 1. Imports processing
+        for pr in parse_results:
+            norm_path = pr.file_path.replace("\\", "/").lstrip("/")
+            file_uid = f"file:{repo_id}:{norm_path}"
+
+            for imp in pr.imports:
+                mod = imp.module_path
+                target_file = None
+                if mod.startswith((".", "@/", "~/")):
+                    target_file = resolve_relative_path(norm_path, mod, known_files)
+                else:
+                    target_file = resolve_python_path(norm_path, mod, known_files)
+
+                if target_file:
+                    file_dep_batch.append({
+                        "importer_uid": file_uid,
+                        "target_uid": f"file:{repo_id}:{target_file}",
+                        "module_path": mod,
+                        "line": imp.line,
+                        "commit_sha": commit_sha,
+                    })
+                    if imp.imported_symbol and imp.imported_symbol != "*":
+                        symbol_import_batch.append({
+                            "file_uid": file_uid,
+                            "target_file": target_file,
+                            "symbol_name": imp.imported_symbol,
+                            "module_path": mod,
+                            "line": imp.line,
+                            "repo_id": repo_id,
+                            "commit_sha": commit_sha,
+                        })
+                else:
+                    if mod and not mod.startswith("."):
+                        clean_pkg = (
+                            mod.split("/")[0]
+                            if not mod.startswith("@")
+                            else "/".join(mod.split("/")[:2])
+                        )
+                        package_batch.append({
+                            "pkg_uid": f"pkg:{repo_id}:{clean_pkg}",
+                            "name": clean_pkg,
+                            "file_uid": file_uid,
+                            "imported_symbol": imp.imported_symbol,
+                            "module_path": mod,
+                            "line": imp.line,
+                            "repo_id": repo_id,
+                            "branch": branch,
+                            "commit_sha": commit_sha,
+                        })
+
+        # 2. Inferred hubs and calls processing
+        callee_counts = Counter()
+        for pr in parse_results:
+            for c in pr.calls:
+                callee_counts[c.callee_name] += 1
+
+        inferred_hubs = set()
+        for name, cnt in callee_counts.items():
+            if name not in internal_symbol_names:
+                if (
+                    (cnt >= 2 and not any(ch in name for ch in " \t\n") and len(name) < 50)
+                    or name.startswith(".")
+                    or name in ("express", "drizzle", "Router", "pgTable", "relations")
+                ):
+                    inferred_hubs.add(name)
+
+        inferred_batch = [
+            {
+                "uid": f"inferred:{repo_id}:{hub}",
+                "name": hub,
+                "repo_id": repo_id,
+                "branch": branch,
+                "commit_sha": commit_sha,
+            }
+            for hub in inferred_hubs
+        ]
+
+        valid_callee_targets = internal_symbol_names | inferred_hubs | db_inferred
 
         for pr in parse_results:
             norm_path = pr.file_path.replace("\\", "/").lstrip("/")
             file_uid = f"file:{repo_id}:{norm_path}"
 
             for c in pr.calls:
-                call_batch.append({
-                    "caller_symbol": c.caller_symbol,
-                    "callee_name": c.callee_name,
-                    "file_path": norm_path,
-                    "line": c.line,
-                    "repo_id": repo_id,
-                    "commit_sha": commit_sha,
-                })
+                callee = c.callee_name
+                if callee not in valid_callee_targets:
+                    continue
 
-            for imp in pr.imports:
-                import_batch.append({
-                    "file_uid": file_uid,
-                    "importer_file": norm_path,
-                    "imported_symbol": imp.imported_symbol,
-                    "module_path": imp.module_path,
-                    "line": imp.line,
-                    "repo_id": repo_id,
-                    "commit_sha": commit_sha,
-                })
+                if c.caller_symbol.endswith("::<module>"):
+                    file_call_batch.append({
+                        "file_uid": file_uid,
+                        "callee_name": callee,
+                        "file_path": norm_path,
+                        "line": c.line,
+                        "repo_id": repo_id,
+                        "commit_sha": commit_sha,
+                    })
+                else:
+                    call_batch.append({
+                        "caller_symbol": c.caller_symbol,
+                        "callee_name": callee,
+                        "file_path": norm_path,
+                        "line": c.line,
+                        "repo_id": repo_id,
+                        "commit_sha": commit_sha,
+                    })
 
+        # Upsert Inferred nodes
+        if inferred_batch:
+            inferred_query = """
+            UNWIND $batch AS item
+            MERGE (i:Inferred {uid: item.uid})
+            SET i:Symbol,
+                i.name = item.name,
+                i.qualified_name = item.name,
+                i.repo_id = item.repo_id,
+                i.branch = item.branch,
+                i.provenance = 'INFERRED'
+            """
+            await self.client.execute_query(inferred_query, {"batch": inferred_batch})
+
+        # Upsert Packages & DEPENDS_ON
+        if package_batch:
+            pkg_query = """
+            UNWIND $batch AS item
+            MATCH (f:File {uid: item.file_uid})
+            MERGE (p:Package {uid: item.pkg_uid})
+            SET p:Symbol,
+                p.name = item.name,
+                p.repo_id = item.repo_id,
+                p.branch = item.branch,
+                p.provenance = 'EXTRACTED'
+            MERGE (f)-[r:DEPENDS_ON]->(p)
+            SET r.provenance = 'DETERMINISTIC',
+                r.confidence = 1.0,
+                r.imported_symbol = item.imported_symbol,
+                r.module_path = item.module_path,
+                r.line = item.line,
+                r.commit_sha = item.commit_sha
+            """
+            await self.client.execute_query(pkg_query, {"batch": package_batch})
+
+        # Upsert DEPENDS_ON_FILE
+        if file_dep_batch:
+            file_dep_query = """
+            UNWIND $batch AS item
+            MATCH (f1:File {uid: item.importer_uid})
+            MATCH (f2:File {uid: item.target_uid})
+            MERGE (f1)-[r:DEPENDS_ON_FILE]->(f2)
+            SET r.provenance = 'DETERMINISTIC',
+                r.confidence = 1.0,
+                r.module_path = item.module_path,
+                r.line = item.line,
+                r.commit_sha = item.commit_sha
+            """
+            await self.client.execute_query(file_dep_query, {"batch": file_dep_batch})
+
+        # Upsert internal IMPORTS
+        if symbol_import_batch:
+            sym_imp_query = """
+            UNWIND $batch AS item
+            MATCH (f:File {uid: item.file_uid})
+            MATCH (s:Symbol {repo_id: item.repo_id, file_path: item.target_file, name: item.symbol_name})
+            MERGE (f)-[r:IMPORTS]->(s)
+            SET r.provenance = 'DETERMINISTIC',
+                r.confidence = 1.0,
+                r.module_path = item.module_path,
+                r.line = item.line,
+                r.commit_sha = item.commit_sha
+            """
+            await self.client.execute_query(sym_imp_query, {"batch": symbol_import_batch})
+
+        # Upsert Symbol -> Symbol/Inferred CALLS
         calls_count = 0
         if call_batch:
-            # Wire caller to matching Function/Method callee with provenance
             calls_query = """
             UNWIND $batch AS item
-            MATCH (caller {repo_id: item.repo_id, qualified_name: item.caller_symbol})
-            MATCH (callee {repo_id: item.repo_id, name: item.callee_name})
-            WHERE callee:Function OR callee:Method
+            MATCH (caller:Symbol {repo_id: item.repo_id, qualified_name: item.caller_symbol})
+            MATCH (callee:Symbol {repo_id: item.repo_id, name: item.callee_name})
             MERGE (caller)-[r:CALLS]->(callee)
-            SET r.provenance = 'DETERMINISTIC',
+            SET r.provenance = CASE WHEN callee:Inferred THEN 'INFERRED' ELSE 'DETERMINISTIC' END,
                 r.confidence = 0.95,
                 r.file_path = item.file_path,
                 r.line = item.line,
                 r.commit_sha = item.commit_sha
             """
             await self.client.execute_query(calls_query, {"batch": call_batch})
-            calls_count = len(call_batch)
+            calls_count += len(call_batch)
 
-        imports_count = 0
-        if import_batch:
-            imports_query = """
+        # Upsert File -> Symbol/Inferred CALLS (module-level calls)
+        if file_call_batch:
+            file_calls_query = """
             UNWIND $batch AS item
             MATCH (f:File {uid: item.file_uid})
-            OPTIONAL MATCH (s {repo_id: item.repo_id, name: item.imported_symbol})
-            WHERE s:Function OR s:Class OR s:Interface OR s:Type
-            FOREACH (_ IN CASE WHEN s IS NOT NULL THEN [1] ELSE [] END |
-                MERGE (f)-[r:IMPORTS]->(s)
-                SET r.provenance = 'DETERMINISTIC',
-                    r.confidence = 1.0,
-                    r.module_path = item.module_path,
-                    r.line = item.line,
-                    r.commit_sha = item.commit_sha
-            )
+            MATCH (callee:Symbol {repo_id: item.repo_id, name: item.callee_name})
+            MERGE (f)-[r:CALLS]->(callee)
+            SET r.provenance = CASE WHEN callee:Inferred THEN 'INFERRED' ELSE 'DETERMINISTIC' END,
+                r.confidence = 0.95,
+                r.file_path = item.file_path,
+                r.line = item.line,
+                r.commit_sha = item.commit_sha
             """
-            await self.client.execute_query(imports_query, {"batch": import_batch})
-            imports_count = len(import_batch)
+            await self.client.execute_query(file_calls_query, {"batch": file_call_batch})
+            calls_count += len(file_call_batch)
 
-        return calls_count, imports_count
+        total_relationships = len(file_dep_batch) + len(symbol_import_batch) + len(package_batch)
+        return calls_count, total_relationships
 
     async def index_tests(
         self, repo_id: str, commit_sha: str, parse_results: List[ParseResult]
@@ -585,7 +803,8 @@ class GraphIndexer:
 
         # 5. Group new & updated symbols by label
         by_label: Dict[str, List[Dict[str, Any]]] = {
-            "Class": [], "Function": [], "Method": [], "Interface": [], "Type": [], "Test": []
+            "Class": [], "Function": [], "Method": [], "Interface": [], "Type": [], "Test": [],
+            "Schema": [], "Enum": [], "Router": [], "Relation": [], "Variable": []
         }
         for sym, label, uid in computed:
             by_label[label].append({
@@ -614,7 +833,8 @@ class GraphIndexer:
             UNWIND $batch AS item
             MATCH (f:File {{uid: item.file_uid}})
             MERGE (e:{label} {{uid: item.uid}})
-            SET e.name = item.name,
+            SET e:Symbol,
+                e.name = item.name,
                 e.file_path = item.file_path,
                 e.language = item.language,
                 e.start_line = item.start_line,
@@ -689,6 +909,22 @@ class GraphIndexer:
         """
         records = await self.client.execute_query(query, {"repo_id": repo_id})
         return records[0]["deleted_count"] if records else 0
+
+    async def cleanup_orphaned_external_entities(self, repo_id: str) -> None:
+        """
+        Delete any Package or Inferred hub nodes that no longer have relationships
+        connecting them to the rest of the repository graph.
+        """
+        query = """
+        MATCH (p:Package {repo_id: $repo_id})
+        WHERE NOT EXISTS { MATCH ()-[:DEPENDS_ON]->(p) }
+        DETACH DELETE p
+        WITH count(p) AS del_pkgs
+        MATCH (i:Inferred {repo_id: $repo_id})
+        WHERE NOT EXISTS { MATCH ()-[:CALLS]->(i) }
+        DETACH DELETE i
+        """
+        await self.client.execute_query(query, {"repo_id": repo_id})
 
     async def get_repository_state(self, repo_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve the persisted state of a repository node from Neo4j."""

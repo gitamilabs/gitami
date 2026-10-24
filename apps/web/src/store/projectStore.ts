@@ -218,8 +218,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       const res = await projectsApi.attachRepository(token, projectIdOrSlug, repositoryId);
       if (res.repository) {
-        // Refresh project details
-        await get().fetchProjectDetails(token, projectIdOrSlug);
+        // Force refresh project details so the new repo appears immediately
+        await get().fetchProjectDetails(token, projectIdOrSlug, true);
         return res.repository;
       }
       return null;
@@ -237,7 +237,33 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       const res = await projectsApi.detachRepository(token, projectIdOrSlug, repositoryId);
       if (res.success) {
-        await get().fetchProjectDetails(token, projectIdOrSlug);
+        // Optimistically remove the repository from store state immediately
+        set((state) => {
+          const currentActive = state.activeProject;
+          if (
+            currentActive &&
+            (currentActive.id === projectIdOrSlug || currentActive.slug === projectIdOrSlug)
+          ) {
+            const updatedRepos = (currentActive.repositories || []).filter(
+              (r) => r.id !== repositoryId
+            );
+            const updatedActive = {
+              ...currentActive,
+              repositories: updatedRepos,
+              repositoryCount: updatedRepos.length,
+            };
+            return {
+              activeProject: updatedActive,
+              projects: state.projects.map((p) =>
+                p.id === updatedActive.id ? updatedActive : p
+              ),
+            };
+          }
+          return {};
+        });
+
+        // Force reload from backend
+        await get().fetchProjectDetails(token, projectIdOrSlug, true);
         return true;
       }
       return false;

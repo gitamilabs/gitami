@@ -18,6 +18,7 @@ IGNORED_DIRECTORIES: Set[str] = {
     "coverage",
     ".idea",
     ".vscode",
+    ".pytest_cache",
     ".gemini",
     "benchmark_results",
 }

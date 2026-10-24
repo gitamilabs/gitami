@@ -11,7 +11,14 @@ async def ensure_schema(client: Neo4jClient) -> None:
     REQUIRE (s.repo_id, s.branch, s.qualified_name) IS UNIQUE
     """
 
-    # Uniqueness constraint for Module nodes scoped by repo_id, branch, and file_path
+    # Uniqueness constraint for File nodes scoped by repo_id, branch, and file_path
+    file_constraint = """
+    CREATE CONSTRAINT file_repo_isolation IF NOT EXISTS
+    FOR (f:File)
+    REQUIRE (f.repo_id, f.branch, f.file_path) IS UNIQUE
+    """
+
+    # Uniqueness constraint for Module nodes (backward compatibility)
     module_constraint = """
     CREATE CONSTRAINT module_repo_isolation IF NOT EXISTS
     FOR (m:Module)
@@ -25,6 +32,14 @@ async def ensure_schema(client: Neo4jClient) -> None:
     ON (s.repo_id, s.branch)
     """
 
+    file_repo_idx = """
+    CREATE INDEX file_repo_idx IF NOT EXISTS
+    FOR (f:File)
+    ON (f.repo_id, f.branch)
+    """
+
     await client.execute_query(symbol_constraint)
+    await client.execute_query(file_constraint)
     await client.execute_query(module_constraint)
     await client.execute_query(symbol_repo_idx)
+    await client.execute_query(file_repo_idx)

@@ -62,8 +62,8 @@ def _fallback_directory_partition(G: nx.DiGraph) -> Dict[int, List[str]]:
     dir_map: Dict[str, List[str]] = {}
     for node_id, data in G.nodes(data=True):
         fpath = data.get("props", {}).get("file_path") or data.get("props", {}).get("path") or node_id
-        parts = fpath.replace("\\", "/").split("/")
-        key = "/".join(parts[:2]) if len(parts) > 1 else (parts[0] if parts else "root")
+        parts = [p for p in fpath.replace("\\", "/").split("/") if p]
+        key = "/".join(parts[:2]) if len(parts) > 1 else "Root Files"
         dir_map.setdefault(key, []).append(node_id)
     return {idx: members for idx, members in enumerate(dir_map.values())}
 
@@ -121,36 +121,72 @@ def handle_oversized_communities(
 
 def derive_community_label(members: List[str], G: nx.DiGraph) -> str:
     """
-    Derives an architectural label for a community using directory prefixes
-    and dominant high-degree symbol or package names.
+    Derives an architectural code-area label for a community using semantic cues,
+    directory prefixes, and dominant high-degree symbols.
     """
-    path_prefixes: Dict[str, int] = {}
-    symbol_names: List[Tuple[str, int]] = []
+    path_counts: Dict[str, int] = {}
+    combined_text = []
 
     for node_id in members:
         data = G.nodes.get(node_id, {})
         props = data.get("props", {})
         fpath = props.get("file_path") or props.get("path") or (node_id if "/" in node_id else "")
-        if fpath:
-            parts = fpath.replace("\\", "/").split("/")
-            if len(parts) > 1:
-                prefix = "/".join(parts[:2])
-                path_prefixes[prefix] = path_prefixes.get(prefix, 0) + 1
+        label = data.get("label") or node_id.split("/")[-1]
+        combined_text.append(fpath.lower())
+        combined_text.append(label.lower())
 
+        if fpath:
+            parts = [p for p in fpath.replace("\\", "/").split("/") if p and p != "src"]
+            if parts:
+                key = "/".join(parts[:2]) if len(parts) > 1 else parts[0]
+                path_counts[key] = path_counts.get(key, 0) + 1
+
+    all_tokens = " ".join(combined_text)
+
+    # 1. Semantic domain matches (Graphify-style)
+    if "admin" in all_tokens:
+        return "Admin User Management"
+    if "relation" in all_tokens and ("schema" in all_tokens or "db" in all_tokens or "drizzle" in all_tokens):
+        return "Database Relations"
+    if ("schema" in all_tokens or "user" in all_tokens) and ("table" in all_tokens or "pg" in all_tokens or "column" in all_tokens):
+        return "User Account Schema"
+    if "auth" in all_tokens or "jwt" in all_tokens or "token" in all_tokens or "password" in all_tokens:
+        return "Authentication & Auth Middleware"
+    if "route" in all_tokens or "router" in all_tokens or "controller" in all_tokens or "endpoint" in all_tokens:
+        return "API Routes & Controllers"
+    if "config" in all_tokens or "env" in all_tokens or "constant" in all_tokens or "logger" in all_tokens:
+        return "Core Infrastructure & Config"
+    if "middleware" in all_tokens or "error" in all_tokens:
+        return "Middlewares & Error Handling"
+    if "test" in all_tokens or "spec" in all_tokens:
+        return "Test Suites & Mocks"
+
+    # 2. Directory prefix fallback with clean Title Case
+    if path_counts:
+        best_dir = max(path_counts.items(), key=lambda x: x[1])[0]
+        parts = best_dir.split("/")
+        last_part = parts[-1].replace("_", " ").replace("-", " ").title()
+        if "util" in last_part.lower():
+            return "Shared Utilities"
+        if "db" in last_part.lower():
+            return "Database Layer"
+        if "config" in last_part.lower():
+            return "Configuration"
+        return f"{last_part} Module"
+
+    # 3. High degree symbol fallback
+    symbol_names = []
+    for node_id in members:
         deg = G.degree(node_id) if node_id in G else 0
+        data = G.nodes.get(node_id, {})
         label = data.get("label") or node_id.split("/")[-1]
         symbol_names.append((label, deg))
-
-    if path_prefixes:
-        # Return most common path prefix
-        best_prefix = max(path_prefixes.items(), key=lambda x: x[1])[0]
-        return best_prefix
 
     if symbol_names:
         symbol_names.sort(key=lambda x: x[1], reverse=True)
         return symbol_names[0][0]
 
-    return "Core"
+    return "Core System"
 
 
 def compute_graph_presentation(graph_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -214,7 +250,7 @@ def compute_graph_presentation(graph_data: Dict[str, Any]) -> Dict[str, Any]:
     for node in graph_data.get("nodes", []):
         n_id = node["id"]
         c_id = node_to_comm_id.get(n_id, 0)
-        c_label = node_to_comm_label.get(n_id, "Core")
+        c_label = node_to_comm_label.get(n_id, "Core System")
         in_deg = G.in_degree(n_id) if n_id in G else 0
         out_deg = G.out_degree(n_id) if n_id in G else 0
         total_deg = in_deg + out_deg
@@ -252,6 +288,16 @@ def compute_graph_presentation(graph_data: Dict[str, Any]) -> Dict[str, Any]:
             "props": edge.get("props", {}),
         })
 
+    raw_stats = graph_data.get("stats", {})
+    extracted_cnt = raw_stats.get(
+        "extractedCount",
+        sum(1 for n in formatted_nodes if n.get("props", {}).get("provenance") != "INFERRED" and n.get("type") != "Inferred")
+    )
+    inferred_cnt = raw_stats.get(
+        "inferredCount",
+        sum(1 for n in formatted_nodes if n.get("props", {}).get("provenance") == "INFERRED" or n.get("type") == "Inferred")
+    )
+
     return {
         "nodes": formatted_nodes,
         "edges": formatted_edges,
@@ -260,6 +306,10 @@ def compute_graph_presentation(graph_data: Dict[str, Any]) -> Dict[str, Any]:
             "nodeCount": len(formatted_nodes),
             "edgeCount": len(formatted_edges),
             "communityCount": len(community_summaries),
+            "extractedCount": extracted_cnt,
+            "inferredCount": inferred_cnt,
+            "synthesizedCount": raw_stats.get("synthesizedCount", 0),
+            "observedCount": raw_stats.get("observedCount", 0),
         },
     }
 
@@ -316,3 +366,19 @@ def find_surprising_connections(G: nx.DiGraph, communities: Dict[int, List[str]]
 def cluster_graph(G: nx.DiGraph) -> Dict[int, List[str]]:
     """Legacy alias calling detect_communities."""
     return detect_communities(G)
+
+
+def find_import_cycles(G: nx.DiGraph, max_cycles: int = 50) -> List[List[str]]:
+    """
+    Detect circular dependencies (cycles) in the directed code graph.
+    Returns up to max_cycles cycles as lists of node identifiers.
+    """
+    cycles: List[List[str]] = []
+    try:
+        for cycle in nx.simple_cycles(G):
+            cycles.append([str(node) for node in cycle])
+            if len(cycles) >= max_cycles:
+                break
+    except Exception as e:
+        logger.warning(f"Error computing simple cycles: {e}")
+    return cycles

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   Hammer,
   AlertCircle,
@@ -44,8 +44,10 @@ function formatRelativeTime(dateString?: string): string {
 
 export default function BuildsPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const teamSlug = (params?.teamSlug as string) || "";
   const projectSlug = (params?.projectSlug as string) || "";
+  const repoFilter = searchParams.get("repo");
 
   const { token } = useAuthStore();
   const { getActiveProject, fetchProjectDetails } = useProjectStore();
@@ -70,12 +72,21 @@ export default function BuildsPage() {
     }
   }, [token, activeProject, fetchProjectBuilds]);
 
-  // Set default selected build
+  // Set default selected build, prioritizing repo query parameter
   useEffect(() => {
     if (builds.length > 0 && !selectedBuildId) {
+      if (repoFilter) {
+        const matching = builds.find(
+          (b) => b.repositoryId === repoFilter || b.repositoryId?.includes(repoFilter)
+        );
+        if (matching) {
+          setSelectedBuildId(matching.id);
+          return;
+        }
+      }
       setSelectedBuildId(builds[0].id);
     }
-  }, [builds, selectedBuildId]);
+  }, [builds, selectedBuildId, repoFilter]);
 
   // Auto-polling while any build is active
   useEffect(() => {

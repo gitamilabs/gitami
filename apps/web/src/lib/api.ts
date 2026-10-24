@@ -107,8 +107,11 @@ export const githubApi = {
     return res.json();
   },
 
-  getRepositories: async (token: string): Promise<RepositoriesResponse> => {
-    const res = await fetch(`${API_BASE_URL}/github/repositories`, {
+  getRepositories: async (token: string, force = false): Promise<RepositoriesResponse> => {
+    const url = force
+      ? `${API_BASE_URL}/github/repositories?force=true`
+      : `${API_BASE_URL}/github/repositories`;
+    const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
@@ -117,6 +120,21 @@ export const githubApi = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || "Failed to fetch connected repositories");
+    }
+    return res.json();
+  },
+
+  syncRepositories: async (token: string): Promise<RepositoriesResponse> => {
+    const res = await fetch(`${API_BASE_URL}/github/repositories/sync`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to sync GitHub repositories");
     }
     return res.json();
   },
@@ -607,11 +625,14 @@ export const aiApi = {
 export const prApi = {
   listPullRequests: async (
     repoFullName?: string,
-    token?: string
+    token?: string,
+    projectId?: string
   ): Promise<{ pullRequests: PRData[] }> => {
-    const url = repoFullName
-      ? `${API_BASE_URL}/prs?repoFullName=${encodeURIComponent(repoFullName)}`
-      : `${API_BASE_URL}/prs`;
+    const params = new URLSearchParams();
+    if (repoFullName) params.append("repoFullName", repoFullName);
+    if (projectId) params.append("projectId", projectId);
+    const queryString = params.toString() ? `?${params.toString()}` : "";
+    const url = `${API_BASE_URL}/prs${queryString}`;
     const headers: Record<string, string> = { Accept: "application/json" };
     if (token) {
       headers.Authorization = `Bearer ${token}`;

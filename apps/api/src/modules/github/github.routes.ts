@@ -14,7 +14,7 @@ import {
 } from "./github-app.service";
 import { verifySignature, handleEvent } from "./webhook.service";
 import { db } from "../../db";
-import { githubInstallations, connectedRepositories } from "../../db/schema";
+import { githubInstallations, connectedRepositories, indexJobs } from "../../db/schema";
 import { env } from "../../configs/env";
 
 const githubRouter = new Hono<{ Variables: AuthContextVariables }>();
@@ -130,7 +130,7 @@ githubRouter.get("/callback", async (c) => {
   // Redirect user cleanly back to their originating project repositories page
   if (teamSlug && projectSlug) {
     return c.redirect(
-      `${baseUrl}/${teamSlug}/projects/${projectSlug}/repositories?installed=true`
+      `${baseUrl}/${teamSlug}/${projectSlug}/repositories?installed=true`
     );
   }
 
@@ -167,9 +167,11 @@ githubRouter.get("/installations", authMiddleware, async (c) => {
 /**
  * GET /repositories
  * Protected. Lists active connected repositories for the current user.
+ * Supports ?force=true or ?sync=true to immediately pull newly selected repos from GitHub.
  */
 githubRouter.get("/repositories", authMiddleware, async (c) => {
   const user = c.get("user");
+  const forceSync = c.req.query("force") === "true" || c.req.query("sync") === "true";
 
   let repositories = await db
     .select()
@@ -181,7 +183,7 @@ githubRouter.get("/repositories", authMiddleware, async (c) => {
       ),
     );
 
-  if (repositories.length === 0) {
+  if (forceSync || repositories.length === 0) {
     await syncUserInstallations(user.id, user.githubId, user.username);
     repositories = await db
       .select()
@@ -195,6 +197,25 @@ githubRouter.get("/repositories", authMiddleware, async (c) => {
   }
 
   return c.json({ repositories });
+});
+
+/**
+ * POST /repositories/sync
+ * Protected. Forces an on-demand re-synchronization of all installations and repositories from GitHub.
+ */
+githubRouter.post("/repositories/sync", authMiddleware, async (c) => {
+  const user = c.get("user");
+  await syncUserInstallations(user.id, user.githubId, user.username);
+  const repositories = await db
+    .select()
+    .from(connectedRepositories)
+    .where(
+      and(
+        eq(connectedRepositories.userId, user.id),
+        eq(connectedRepositories.isActive, true),
+      ),
+    );
+  return c.json({ success: true, count: repositories.length, repositories });
 });
 
 /**
@@ -446,14 +467,31 @@ githubRouter.delete("/repositories/:id", authMiddleware, async (c) => {
     return c.json({ error: "Repository not found or access denied" }, 404);
   }
 
+  // 1. Delete associated index jobs
+  await db.delete(indexJobs).where(eq(indexJobs.repositoryId, repoId));
+
+  // 2. Disconnect repository in database
   await db
     .update(connectedRepositories)
-    .set({ isActive: false })
+    .set({ isActive: false, projectId: null })
     .where(eq(connectedRepositories.id, repoId));
+
+  // 3. Purge repository knowledge base from AI Service (Neo4j graph & ChromaDB vectors)
+  const aiServiceUrl = process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://localhost:8000";
+  try {
+    const purgeRes = await fetch(`${aiServiceUrl}/api/repos/${encodeURIComponent(repo.fullName)}`, {
+      method: "DELETE",
+    });
+    if (!purgeRes.ok) {
+      console.warn(`AI Service purge warning for ${repo.fullName}:`, await purgeRes.text().catch(() => ""));
+    }
+  } catch (purgeErr) {
+    console.warn(`Could not reach AI Service to purge repository ${repo.fullName}:`, purgeErr);
+  }
 
   return c.json({
     success: true,
-    message: "Repository disconnected successfully",
+    message: "Repository disconnected and purged from knowledge base successfully",
   });
 });
 

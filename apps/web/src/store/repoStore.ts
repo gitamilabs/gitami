@@ -19,6 +19,7 @@ interface RepoState {
   error: string | null;
 
   fetchConnectedRepos: (token: string, force?: boolean) => Promise<void>;
+  syncConnectedRepos: (token: string) => Promise<void>;
   fetchInstallations: (token: string) => Promise<void>;
   fetchIndexedRepos: (token: string, force?: boolean) => Promise<void>;
   disconnectRepo: (token: string, repoId: string) => Promise<boolean>;
@@ -67,7 +68,7 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     connectedReposInFlight = (async () => {
       set({ isLoading: true, error: null });
       try {
-        const data = await githubApi.getRepositories(token);
+        const data = await githubApi.getRepositories(token, force);
         set({ connectedRepos: data.repositories || [], connectedReposLoaded: true, isLoading: false });
       } catch (err: any) {
         console.warn("Failed to fetch connected repositories:", err);
@@ -77,6 +78,18 @@ export const useRepoStore = create<RepoState>((set, get) => ({
       }
     })();
     return connectedReposInFlight;
+  },
+
+  syncConnectedRepos: async (token: string) => {
+    if (!token) return;
+    set({ isLoading: true, error: null });
+    try {
+      const data = await githubApi.syncRepositories(token);
+      set({ connectedRepos: data.repositories || [], connectedReposLoaded: true, isLoading: false });
+    } catch (err: any) {
+      console.warn("Failed to sync connected repositories:", err);
+      set({ isLoading: false, error: err.message });
+    }
   },
 
   fetchInstallations: async (token: string) => {

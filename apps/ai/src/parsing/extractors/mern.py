@@ -188,15 +188,46 @@ class MernExtractor(BaseExtractor):
                 result.symbols.append(symbol)
                 return
 
-        # 4. Variable declarations assigned to arrow functions / expressions
+        # 3. TypeScript enum declarations
+        elif node.type == "enum_declaration":
+            name_node = node.child_by_field_name("name")
+            if name_node:
+                symbol_name = self._get_text(name_node, code_bytes)
+                scope_path = ".".join(parent_scope + [symbol_name]) if parent_scope else symbol_name
+                qualified_name = f"{file_path}::{scope_path}"
+                code_body = self._get_text(node, code_bytes)
+
+                symbol = SymbolNode(
+                    name=symbol_name,
+                    kind="enum",
+                    file_path=file_path,
+                    language=self.language,
+                    start_line=node.start_point[0] + 1,
+                    end_line=node.end_point[0] + 1,
+                    signature=f"enum {symbol_name}",
+                    code_body=code_body.strip(),
+                    qualified_name=qualified_name,
+                )
+                result.symbols.append(symbol)
+                return
+
+        # 4. Variable declarations (functions, schemas, tables, enums, routers, objects, constants)
         elif node.type in ("lexical_declaration", "variable_declaration"):
+            is_const = "const" in self._get_text(node, code_bytes).split()[:2]
             for declarator in node.children:
                 if declarator.type == "variable_declarator":
                     name_node = declarator.child_by_field_name("name")
                     value_node = declarator.child_by_field_name("value")
 
-                    if name_node and value_node and value_node.type in ("arrow_function", "function_expression"):
-                        symbol_name = self._get_text(name_node, code_bytes)
+                    if not name_node:
+                        continue
+
+                    symbol_name = self._get_text(name_node, code_bytes).strip()
+                    scope_path = ".".join(parent_scope + [symbol_name]) if parent_scope else symbol_name
+                    qualified_name = f"{file_path}::{scope_path}"
+                    code_body = self._get_text(declarator, code_bytes)
+
+                    if value_node and value_node.type in ("arrow_function", "function_expression"):
                         is_component = symbol_name[:1].isupper()
                         is_test = (
                             symbol_name.startswith("test")
@@ -209,10 +240,6 @@ class MernExtractor(BaseExtractor):
                             kind = "component"
                         else:
                             kind = "function"
-
-                        scope_path = ".".join(parent_scope + [symbol_name]) if parent_scope else symbol_name
-                        qualified_name = f"{file_path}::{scope_path}"
-                        code_body = self._get_text(declarator, code_bytes)
 
                         symbol = SymbolNode(
                             name=symbol_name,
@@ -231,14 +258,113 @@ class MernExtractor(BaseExtractor):
                         for child in value_node.children:
                             self._traverse_node(child, code_bytes, file_path, result, new_scope)
 
+                    elif value_node and value_node.type == "call_expression":
+                        fn_node = value_node.child_by_field_name("function")
+                        fn_text = self._get_text(fn_node or value_node, code_bytes)
+                        if any(k in fn_text for k in ("Table", "pgTable", "mysqlTable", "sqliteTable", "createTable", "model", "Schema")):
+                            kind = "schema"
+                        elif "Enum" in fn_text or "pgEnum" in fn_text:
+                            kind = "enum"
+                        elif "Router" in fn_text:
+                            kind = "router"
+                        elif "relations" in fn_text:
+                            kind = "relation"
+                        elif is_const:
+                            kind = "constant"
+                        else:
+                            kind = "variable"
+
+                        symbol = SymbolNode(
+                            name=symbol_name,
+                            kind=kind,
+                            file_path=file_path,
+                            language=self.language,
+                            start_line=declarator.start_point[0] + 1,
+                            end_line=declarator.end_point[0] + 1,
+                            signature=f"const {symbol_name} = {fn_text}(...)",
+                            code_body=code_body.strip(),
+                            qualified_name=qualified_name,
+                        )
+                        result.symbols.append(symbol)
+
+                        new_scope = parent_scope + [symbol_name]
+                        for child in value_node.children:
+                            self._traverse_node(child, code_bytes, file_path, result, new_scope)
+
+                    elif value_node and value_node.type == "object":
+                        kind = "router" if "router" in symbol_name.lower() else ("constant" if is_const else "variable")
+                        symbol = SymbolNode(
+                            name=symbol_name,
+                            kind=kind,
+                            file_path=file_path,
+                            language=self.language,
+                            start_line=declarator.start_point[0] + 1,
+                            end_line=declarator.end_point[0] + 1,
+                            signature=f"const {symbol_name} = {{...}}",
+                            code_body=code_body.strip(),
+                            qualified_name=qualified_name,
+                        )
+                        result.symbols.append(symbol)
+
+                        # Walk object properties
+                        new_scope = parent_scope + [symbol_name]
+                        for child in value_node.children:
+                            if child.type == "pair":
+                                key_n = child.child_by_field_name("key")
+                                val_n = child.child_by_field_name("value")
+                                if key_n and val_n and val_n.type in ("arrow_function", "function_expression"):
+                                    prop_name = self._get_text(key_n, code_bytes)
+                                    prop_qname = f"{file_path}::{symbol_name}.{prop_name}"
+                                    prop_sym = SymbolNode(
+                                        name=prop_name,
+                                        kind="method",
+                                        file_path=file_path,
+                                        language=self.language,
+                                        start_line=child.start_point[0] + 1,
+                                        end_line=child.end_point[0] + 1,
+                                        signature=f"{prop_name}: (...) => ...",
+                                        code_body=self._get_text(child, code_bytes).strip(),
+                                        qualified_name=prop_qname,
+                                        class_name=symbol_name,
+                                    )
+                                    result.symbols.append(prop_sym)
+                                    for sub_c in val_n.children:
+                                        self._traverse_node(sub_c, code_bytes, file_path, result, new_scope + [prop_name])
+                                else:
+                                    self._traverse_node(child, code_bytes, file_path, result, new_scope)
+                            else:
+                                self._traverse_node(child, code_bytes, file_path, result, new_scope)
+
+                    elif not parent_scope:
+                        # Top-level constant/variable declaration
+                        kind = "constant" if is_const else "variable"
+                        symbol = SymbolNode(
+                            name=symbol_name,
+                            kind=kind,
+                            file_path=file_path,
+                            language=self.language,
+                            start_line=declarator.start_point[0] + 1,
+                            end_line=declarator.end_point[0] + 1,
+                            signature=f"const {symbol_name}",
+                            code_body=code_body.strip(),
+                            qualified_name=qualified_name,
+                        )
+                        result.symbols.append(symbol)
+                        if value_node:
+                            new_scope = parent_scope + [symbol_name]
+                            for child in value_node.children:
+                                self._traverse_node(child, code_bytes, file_path, result, new_scope)
+
         # 5. Function/method calls and test runners (it, test, describe)
         elif node.type == "call_expression":
             func_node = node.child_by_field_name("function")
             if func_node:
-                callee_name = self._get_text(func_node, code_bytes)
+                raw_callee = self._get_text(func_node, code_bytes).strip()
+                clean_callee = " ".join(raw_callee.split())
+                caller_symbol = f"{file_path}::{'.'.join(parent_scope)}" if parent_scope else f"{file_path}::<module>"
 
                 # Capture test runner invocations (e.g. it('should fetch', ...), test('works', ...))
-                if callee_name in ("it", "test", "describe"):
+                if clean_callee in ("it", "test", "describe"):
                     args_node = node.child_by_field_name("arguments")
                     test_desc = ""
                     if args_node and args_node.children:
@@ -246,7 +372,7 @@ class MernExtractor(BaseExtractor):
                             if a.type in ("string", "string_fragment"):
                                 test_desc = self._get_text(a, code_bytes).strip("\"'`")
                                 break
-                    test_label = f"{callee_name}:{test_desc}" if test_desc else f"{callee_name}_{node.start_point[0] + 1}"
+                    test_label = f"{clean_callee}:{test_desc}" if test_desc else f"{clean_callee}_{node.start_point[0] + 1}"
                     symbol = SymbolNode(
                         name=test_label,
                         kind="test",
@@ -254,20 +380,56 @@ class MernExtractor(BaseExtractor):
                         language=self.language,
                         start_line=node.start_point[0] + 1,
                         end_line=node.end_point[0] + 1,
-                        signature=f"{callee_name}('{test_desc}')",
+                        signature=f"{clean_callee}('{test_desc}')",
                         code_body=self._get_text(node, code_bytes),
                         qualified_name=f"{file_path}::{test_label}",
                     )
                     result.symbols.append(symbol)
 
-                caller_symbol = f"{file_path}::{'.'.join(parent_scope)}" if parent_scope else f"{file_path}::<module>"
-                call_edge = CallEdge(
-                    caller_symbol=caller_symbol,
-                    callee_name=callee_name,
-                    file_path=file_path,
-                    line=node.start_point[0] + 1,
-                )
-                result.calls.append(call_edge)
+                # Member method calls and chained expressions (e.g. ApiResponse.success(...) -> ApiResponse.success and .success())
+                if func_node.type == "member_expression":
+                    prop_node = func_node.child_by_field_name("property")
+                    obj_node = func_node.child_by_field_name("object")
+                    prop_name = self._get_text(prop_node, code_bytes).strip() if prop_node else ""
+                    obj_name = self._get_text(obj_node, code_bytes).strip() if obj_node else ""
+
+                    if obj_node and obj_node.type == "identifier" and prop_name:
+                        result.calls.append(
+                            CallEdge(
+                                caller_symbol=caller_symbol,
+                                callee_name=f"{obj_name}.{prop_name}",
+                                file_path=file_path,
+                                line=node.start_point[0] + 1,
+                            )
+                        )
+                    if prop_name and len(prop_name) > 1 and not prop_name.startswith("_"):
+                        result.calls.append(
+                            CallEdge(
+                                caller_symbol=caller_symbol,
+                                callee_name=f".{prop_name}()",
+                                file_path=file_path,
+                                line=node.start_point[0] + 1,
+                            )
+                        )
+                elif func_node.type == "identifier":
+                    # Direct call: e.g. express(), pgTable(), relations(), drizzle()
+                    result.calls.append(
+                        CallEdge(
+                            caller_symbol=caller_symbol,
+                            callee_name=clean_callee,
+                            file_path=file_path,
+                            line=node.start_point[0] + 1,
+                        )
+                    )
+                elif clean_callee and not "\n" in clean_callee and len(clean_callee) < 60:
+                    result.calls.append(
+                        CallEdge(
+                            caller_symbol=caller_symbol,
+                            callee_name=clean_callee,
+                            file_path=file_path,
+                            line=node.start_point[0] + 1,
+                        )
+                    )
 
         # 6. Import statements
         elif node.type in ("import_statement",):

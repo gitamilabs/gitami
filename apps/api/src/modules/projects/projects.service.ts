@@ -13,7 +13,7 @@ import {
   type ConnectedRepository,
 } from "../../db/schema";
 import { env } from "../../configs/env";
-import { getInstallationAccessToken } from "../github/github-app.service";
+import { getInstallationAccessToken, getInstallationTokenForRepo } from "../github/github-app.service";
 import { generateSlug } from "../teams/teams.service";
 
 /**
@@ -234,6 +234,18 @@ export async function detachRepositoryFromProject(
     )
     .returning();
 
+  if (updated) {
+    // Clean up associated index jobs for this project-repo association
+    await db
+      .delete(indexJobs)
+      .where(
+        and(
+          eq(indexJobs.projectId, projectId),
+          eq(indexJobs.repositoryId, repositoryId)
+        )
+      );
+  }
+
   return !!updated;
 }
 
@@ -368,6 +380,21 @@ async function executeBackgroundBuild(
       }
     } catch (err) {
       console.warn("Could not get installation access token for build:", err);
+    }
+  }
+
+  // Fallback: If token was not resolved via installationId, query GitHub App API by repo full name
+  if (!token && repo.fullName && repo.fullName.includes("/") && !repo.githubRepoId.startsWith("local:")) {
+    const parts = repo.fullName.split("/");
+    const owner = parts[0];
+    const name = parts[1];
+    if (owner && name) {
+      try {
+        const resolved = await getInstallationTokenForRepo(owner, name);
+        if (resolved) token = resolved;
+      } catch (err) {
+        console.warn("Fallback getInstallationTokenForRepo failed for build:", err);
+      }
     }
   }
 

@@ -14,6 +14,7 @@ export function getOAuthAuthorizeUrl(state?: string): string {
     client_id: env.GITHUB_CLIENT_ID,
     redirect_uri: env.GITHUB_OAUTH_REDIRECT_URI,
     scope: "read:user user:email",
+    prompt: "select_account",
     ...(state && { state }),
   });
 

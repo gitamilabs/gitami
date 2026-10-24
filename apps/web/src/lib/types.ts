@@ -452,6 +452,10 @@ export interface GraphData {
     nodeCount: number;
     edgeCount: number;
     communityCount: number;
+    extractedCount?: number;
+    inferredCount?: number;
+    synthesizedCount?: number;
+    observedCount?: number;
   };
   totalNodes?: number;
   totalEdges?: number;

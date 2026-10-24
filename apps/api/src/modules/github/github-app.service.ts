@@ -203,7 +203,7 @@ export function getAppInstallationUrl(state?: string): string {
 }
 
 /**
- * Auto-discovers and syncs installations belonging to a user from GitHub App API.
+ * Auto-discovers and syncs installations belonging to a user from GitHub App API and DB.
  */
 export async function syncUserInstallations(
   userId: string,
@@ -211,8 +211,30 @@ export async function syncUserInstallations(
   username?: string,
 ): Promise<ConnectedRepository[]> {
   try {
+    const allSynced: ConnectedRepository[] = [];
+    const syncedInstallationIds = new Set<string>();
+
+    // 1. Sync all installations already recorded in DB for this user (including Orgs)
+    const existingInsts = await db
+      .select()
+      .from(githubInstallations)
+      .where(eq(githubInstallations.userId, userId));
+
+    for (const inst of existingInsts) {
+      if (inst.installationId) {
+        try {
+          syncedInstallationIds.add(inst.installationId);
+          const repos = await syncInstallationRepositories(inst.installationId, userId);
+          allSynced.push(...repos);
+        } catch (instErr) {
+          console.warn(`Sync failed for known installation ${inst.installationId}:`, instErr);
+        }
+      }
+    }
+
+    // 2. Discover any new installations directly from GitHub App API
     const appJwt = await getAppJwt();
-    const res = await fetch("https://api.github.com/app/installations", {
+    const res = await fetch("https://api.github.com/app/installations?per_page=100", {
       headers: {
         Authorization: `Bearer ${appJwt}`,
         Accept: "application/vnd.github+json",
@@ -220,25 +242,28 @@ export async function syncUserInstallations(
       },
     });
 
-    if (!res.ok) {
-      console.warn("Failed to fetch app installations from GitHub:", res.statusText);
-      return [];
-    }
+    if (res.ok) {
+      const installations = (await res.json()) as any[];
+      if (Array.isArray(installations)) {
+        for (const inst of installations) {
+          const instIdStr = String(inst.id);
+          if (syncedInstallationIds.has(instIdStr)) continue;
 
-    const installations = (await res.json()) as any[];
-    if (!Array.isArray(installations)) return [];
+          const account = inst.account;
+          const matchesGithubId = userGithubId && String(account?.id) === String(userGithubId);
+          const matchesUsername = username && account?.login?.toLowerCase() === username.toLowerCase();
 
-    const allSynced: ConnectedRepository[] = [];
-
-    for (const inst of installations) {
-      const account = inst.account;
-      const matchesGithubId = userGithubId && String(account?.id) === String(userGithubId);
-      const matchesUsername = username && account?.login?.toLowerCase() === username.toLowerCase();
-
-      // If user matched or there is only 1 user installation
-      if (matchesGithubId || matchesUsername || installations.length === 1) {
-        const repos = await syncInstallationRepositories(String(inst.id), userId);
-        allSynced.push(...repos);
+          // Sync if installation matches user's personal account, username, or if single installation
+          if (matchesGithubId || matchesUsername || installations.length === 1) {
+            try {
+              syncedInstallationIds.add(instIdStr);
+              const repos = await syncInstallationRepositories(instIdStr, userId);
+              allSynced.push(...repos);
+            } catch (err) {
+              console.warn(`Failed syncing discovered installation ${instIdStr}:`, err);
+            }
+          }
+        }
       }
     }
 
@@ -253,6 +278,7 @@ export async function syncUserInstallations(
  * Fetches repositories from a GitHub App installation and syncs them to the database.
  * - Upserts the installation record.
  * - Upserts each accessible repository.
+ * - Marks any repositories no longer accessible as isActive: false.
  */
 export async function syncInstallationRepositories(
   installationId: string,
@@ -317,9 +343,9 @@ export async function syncInstallationRepositories(
   const tokenData = (await tokenRes.json()) as any;
   const installationToken = tokenData.token;
 
-  // Fetch accessible repositories
+  // Fetch accessible repositories with pagination
   const reposRes = await fetch(
-    `https://api.github.com/installation/repositories`,
+    `https://api.github.com/installation/repositories?per_page=100`,
     {
       headers: {
         Authorization: `Bearer ${installationToken}`,
@@ -332,16 +358,21 @@ export async function syncInstallationRepositories(
     throw new Error(`Failed to fetch accessible repositories: ${reposRes.statusText}`);
   }
   const reposData = (await reposRes.json()) as any;
+  const reposList = Array.isArray(reposData.repositories) ? reposData.repositories : [];
 
   const syncedRepos: ConnectedRepository[] = [];
+  const currentGithubIds = new Set<string>();
 
-  for (const repo of reposData.repositories) {
+  for (const repo of reposList) {
+    const githubRepoIdStr = String(repo.id);
+    currentGithubIds.add(githubRepoIdStr);
+
     const [savedRepo] = await db
       .insert(connectedRepositories)
       .values({
         installationId: savedInst!.id,
         userId,
-        githubRepoId: String(repo.id),
+        githubRepoId: githubRepoIdStr,
         name: repo.name,
         fullName: repo.full_name,
         isPrivate: repo.private,
@@ -362,7 +393,26 @@ export async function syncInstallationRepositories(
       })
       .returning();
 
-    syncedRepos.push(savedRepo!);
+    if (savedRepo) {
+      syncedRepos.push(savedRepo);
+    }
+  }
+
+  // Deactivate any repositories previously connected under this installation that are no longer accessible
+  if (savedInst) {
+    const existingRepos = await db
+      .select()
+      .from(connectedRepositories)
+      .where(eq(connectedRepositories.installationId, savedInst.id));
+
+    for (const ex of existingRepos) {
+      if (!currentGithubIds.has(ex.githubRepoId) && ex.isActive) {
+        await db
+          .update(connectedRepositories)
+          .set({ isActive: false })
+          .where(eq(connectedRepositories.id, ex.id));
+      }
+    }
   }
 
   return syncedRepos;

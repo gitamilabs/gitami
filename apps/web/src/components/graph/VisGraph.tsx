@@ -23,6 +23,7 @@ import {
   RotateCcw,
   Share2,
   Palette,
+  SlidersHorizontal,
 } from "lucide-react";
 import { GraphData, GraphNode, GraphEdge } from "../../lib/types";
 
@@ -45,6 +46,22 @@ const COMMUNITY_PALETTE = [
   { name: "Sky", bg: "#0ea5e9", border: "#38bdf8", glow: "rgba(14, 165, 233, 0.25)" },
   { name: "Fuchsia", bg: "#d946ef", border: "#e879f9", glow: "rgba(217, 70, 239, 0.25)" },
 ];
+
+export function getCommunityName(n: GraphNode): string {
+  if (n.communityLabel) return n.communityLabel;
+  if ((n.props as any)?.communityLabel) return (n.props as any).communityLabel;
+  const filePath = n.props?.file_path || n.props?.path || (n.type === "File" ? n.id : "");
+  if (filePath) {
+    const parts = filePath.split("/").filter(Boolean);
+    if (parts.length > 1) {
+      return parts.slice(0, Math.min(2, parts.length - 1)).join("/");
+    }
+    return "Root Files";
+  }
+  if (n.props?.module) return n.props.module;
+  if (n.type) return n.type;
+  return "Core System";
+}
 
 export const CANVAS_THEMES = {
   slate: {
@@ -113,6 +130,7 @@ export const VisGraph: React.FC<VisGraphProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [canvasTheme, setCanvasTheme] = useState<CanvasThemeKey>("slate");
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(true);
 
   // 1. Community detection & Degree calculation
   const { nodeDegrees, communities, communityMap, nodeDetailsMap } = useMemo(() => {
@@ -171,45 +189,17 @@ export const VisGraph: React.FC<VisGraphProps> = ({
       }
     });
 
-    // Cluster into communities based on path directory or module
+    // Cluster into communities based on topological community or directory
     const commSet = new Set<string>();
     const cMap = new Map<string, number>();
 
     data.nodes.forEach((n) => {
-      let commName = "core";
-      const filePath = n.props?.file_path || n.props?.path || (n.type === "File" ? n.id : "");
-      if (filePath) {
-        const parts = filePath.split("/").filter(Boolean);
-        if (parts.length > 1) {
-          // Use top 2 directories as cluster (e.g. apps/web or src/indexer)
-          commName = parts.slice(0, Math.min(2, parts.length - 1)).join("/");
-        } else {
-          commName = parts[0] || "root";
-        }
-      } else if (n.props?.module) {
-        commName = n.props.module;
-      } else if (n.type) {
-        commName = n.type;
-      }
-      commSet.add(commName);
+      commSet.add(getCommunityName(n));
     });
 
     const uniqueComms = Array.from(commSet).sort();
     data.nodes.forEach((n) => {
-      let commName = "core";
-      const filePath = n.props?.file_path || n.props?.path || (n.type === "File" ? n.id : "");
-      if (filePath) {
-        const parts = filePath.split("/").filter(Boolean);
-        if (parts.length > 1) {
-          commName = parts.slice(0, Math.min(2, parts.length - 1)).join("/");
-        } else {
-          commName = parts[0] || "root";
-        }
-      } else if (n.props?.module) {
-        commName = n.props.module;
-      } else if (n.type) {
-        commName = n.type;
-      }
+      const commName = getCommunityName(n);
       const idx = uniqueComms.indexOf(commName);
       cMap.set(n.id, idx >= 0 ? idx % COMMUNITY_PALETTE.length : 0);
     });
@@ -221,6 +211,48 @@ export const VisGraph: React.FC<VisGraphProps> = ({
       nodeDetailsMap: details,
     };
   }, [data.nodes, data.edges]);
+
+  // Graphify top stats computation
+  const stats = useMemo(() => {
+    const rawStats = data.stats;
+    const nodeCount = data.nodes.length;
+    const edgeCount = data.edges.length;
+    const inferredCount =
+      rawStats?.inferredCount ??
+      data.nodes.filter(
+        (n) => n.props?.provenance === "INFERRED" || n.type === "Inferred"
+      ).length;
+    const extractedCount =
+      rawStats?.extractedCount ?? Math.max(0, nodeCount - inferredCount);
+    const synthesizedCount = rawStats?.synthesizedCount ?? 0;
+    const observedCount = rawStats?.observedCount ?? 0;
+
+    return {
+      nodes: nodeCount,
+      edges: edgeCount,
+      extracted: extractedCount,
+      inferred: inferredCount,
+      synthesized: synthesizedCount,
+      observed: observedCount,
+    };
+  }, [data]);
+
+  // Top 15 most connected hubs for sidebar
+  const mostConnectedNodes = useMemo(() => {
+    return [...data.nodes]
+      .sort((a, b) => (nodeDegrees.get(b.id) || 0) - (nodeDegrees.get(a.id) || 0))
+      .slice(0, 15);
+  }, [data.nodes, nodeDegrees]);
+
+  // Community member counts
+  const communityCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    data.nodes.forEach((n) => {
+      const comm = getCommunityName(n);
+      counts.set(comm, (counts.get(comm) || 0) + 1);
+    });
+    return counts;
+  }, [data.nodes]);
 
   // Unique node types available in this graph
   const availableTypes = useMemo(() => {
@@ -237,17 +269,24 @@ export const VisGraph: React.FC<VisGraphProps> = ({
     const visNodes = data.nodes
       .filter((n) => {
         if (filterType === "ALL") return true;
+        if (filterType === "Inferred") {
+          return n.props?.provenance === "INFERRED" || n.type === "Inferred";
+        }
+        if (filterType === "Function") {
+          return (n.type || "").toLowerCase().includes("func") || n.type === "Method";
+        }
         return (n.type || "Symbol").toUpperCase() === filterType.toUpperCase();
       })
       .map((node) => {
         const degree = nodeDegrees.get(node.id) || 0;
         const commIndex = communityMap.get(node.id) ?? 0;
         const palette = COMMUNITY_PALETTE[commIndex];
+        const isInferred = node.props?.provenance === "INFERRED" || node.type === "Inferred";
 
         // Sizing based on degree
-        let size = Math.max(10, Math.min(34, 9 + Math.sqrt(degree) * 4));
-        if (node.type === "File") size = Math.max(14, size * 1.15);
-        if (node.type === "Package") size = Math.max(18, size * 1.3);
+        let size = Math.max(9, Math.min(28, 8 + Math.sqrt(degree) * 2.8));
+        if (node.type === "File") size = Math.max(13, size * 1.1);
+        if (isInferred) size = Math.max(12, size);
 
         const shortLabel = node.label || node.id.split("/").pop() || node.id;
         const cleanLabel = shortLabel.length > 24 ? shortLabel.slice(0, 22) + "…" : shortLabel;
@@ -255,13 +294,13 @@ export const VisGraph: React.FC<VisGraphProps> = ({
         return {
           id: node.id,
           label: cleanLabel,
-          title: `${node.type}: ${node.id} (${degree} connections)`,
+          title: `${node.type}: ${node.id} (${degree} connections${isInferred ? " • Inferred" : ""})`,
           value: degree,
           size: size,
-          shape: "dot",
+          shape: isInferred ? "diamond" : node.type === "File" ? "box" : "dot",
           color: {
             background: palette.bg,
-            border: palette.border,
+            border: isInferred ? "#fbbf24" : palette.border,
             highlight: {
               background: "#ffffff",
               border: palette.border,
@@ -278,7 +317,7 @@ export const VisGraph: React.FC<VisGraphProps> = ({
             strokeWidth: 3,
             strokeColor: canvasTheme === "light" ? "#ffffff" : CANVAS_THEMES[canvasTheme].bgColor,
           },
-          borderWidth: 1.5,
+          borderWidth: isInferred ? 2 : 1.5,
           borderWidthSelected: 3,
           shadow: {
             enabled: true,
@@ -538,15 +577,38 @@ export const VisGraph: React.FC<VisGraphProps> = ({
           </div>
         </div>
 
-        {/* Right: Graph Stats & Canvas Controls */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Degree / Summary */}
-          <span className="hidden lg:inline text-[11px] font-mono text-zinc-500">
-            {data.nodes.length} nodes · {data.edges.length} relationships
-          </span>
+        {/* Middle: Graphify Statistic Pill Badges */}
+        <div className="hidden lg:flex items-center gap-1.5 overflow-x-auto py-1">
+          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs font-mono">
+            <span className="font-bold text-white">{stats.nodes}</span>
+            <span className="text-zinc-400 text-[10px]">Nodes</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs font-mono">
+            <span className="font-bold text-white">{stats.edges}</span>
+            <span className="text-zinc-400 text-[10px]">Edges</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-mono">
+            <span className="font-bold text-emerald-400">{stats.extracted}</span>
+            <span className="text-emerald-400/80 text-[10px]">Extracted</span>
+          </div>
+          {stats.inferred > 0 && (
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-mono">
+              <span className="font-bold text-amber-400">{stats.inferred}</span>
+              <span className="text-amber-400/80 text-[10px]">Inferred</span>
+            </div>
+          )}
+          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/[0.02] border border-white/[0.05] text-xs font-mono text-zinc-500">
+            <span className="font-bold text-zinc-400">{stats.synthesized}</span>
+            <span className="text-[10px]">Synthesized</span>
+          </div>
+          <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/[0.02] border border-white/[0.05] text-xs font-mono text-zinc-500">
+            <span className="font-bold text-zinc-400">{stats.observed}</span>
+            <span className="text-[10px]">Observed</span>
+          </div>
+        </div>
 
-          <div className="h-4 w-px bg-white/[0.08] hidden sm:block" />
-
+        {/* Right: Canvas Controls & Sidebar Toggle */}
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* Fit to View */}
           <button
             onClick={() => networkRef.current?.fit({ animation: { duration: 400 } })}
@@ -643,6 +705,21 @@ export const VisGraph: React.FC<VisGraphProps> = ({
               </div>
             )}
           </div>
+
+          <div className="h-4 w-px bg-white/[0.08]" />
+
+          {/* Sidebar Toggle Button */}
+          <button
+            onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+            className={`p-1.5 rounded-md border text-xs transition-colors cursor-pointer flex items-center gap-1 ${
+              isDrawerOpen
+                ? "bg-white/[0.08] border-white/[0.12] text-white"
+                : "bg-white/[0.03] border-white/[0.06] text-zinc-400 hover:text-white"
+            }`}
+            title={isDrawerOpen ? "Collapse Sidebar" : "Expand Sidebar"}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
@@ -655,182 +732,303 @@ export const VisGraph: React.FC<VisGraphProps> = ({
           className="flex-1 h-full w-full cursor-grab active:cursor-grabbing transition-all duration-200"
         />
 
-        {/* Community Legend (Bottom Left) */}
-        <div className="absolute bottom-4 left-4 z-10 bg-[#11131a]/90 backdrop-blur-md border border-white/[0.06] rounded-lg p-2.5 max-w-[240px] hidden md:block">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block mb-1.5 font-semibold">
-            Communities
-          </span>
-          <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
-            {communities.slice(0, 6).map((comm, idx) => {
-              const pal = COMMUNITY_PALETTE[idx % COMMUNITY_PALETTE.length];
-              return (
-                <div key={comm} className="flex items-center gap-2 text-[11px] font-mono">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: pal.bg }} />
-                  <span className="text-zinc-300 truncate">{comm}</span>
+        {/* 3. Docked Right Panel: Inspector or Overview Drawer */}
+        {isDrawerOpen && (
+          <aside className="w-80 md:w-88 border-l border-white/[0.06] bg-[#0e1017]/95 backdrop-blur-md h-full flex flex-col z-30 shadow-2xl transition-all duration-200">
+            {selectedNode ? (
+              /* Selected Node Inspector */
+              <div className="h-full flex flex-col animate-fade-in">
+                <div className="p-4 border-b border-white/[0.06] flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <button
+                      onClick={() => {
+                        setSelectedNode(null);
+                        networkRef.current?.unselectAll();
+                        if (onSelectNode) onSelectNode(null);
+                      }}
+                      className="text-[10px] font-mono text-zinc-400 hover:text-white flex items-center gap-1 mb-1.5 transition-colors cursor-pointer"
+                    >
+                      <span>← Back to Overview</span>
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: selectedPalette.bg }}
+                      />
+                      <span className="text-xs font-mono font-bold text-white uppercase tracking-wider truncate">
+                        {selectedNode.type}
+                      </span>
+                      {selectedNode.props?.provenance === "INFERRED" && (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono font-semibold">
+                          INFERRED
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-sm font-bold text-white font-mono truncate mt-1">
+                      {selectedNode.label || selectedNode.id}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedNode(null);
+                      networkRef.current?.unselectAll();
+                      if (onSelectNode) onSelectNode(null);
+                    }}
+                    className="text-zinc-500 hover:text-zinc-300 p-1 rounded hover:bg-white/[0.06] transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-              );
-            })}
-          </div>
-        </div>
 
-        {/* 3. Docked Right Node Inspector Panel */}
-        {selectedNode && (
-          <aside className="w-80 border-l border-white/[0.06] bg-[#0e1017]/95 backdrop-blur-md h-full flex flex-col z-30 shadow-2xl animate-slide-left">
-            {/* Inspector Header */}
-            <div className="p-4 border-b border-white/[0.06] flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: selectedPalette.bg }}
-                  />
-                  <span className="text-xs font-mono font-bold text-white uppercase tracking-wider truncate">
-                    {selectedNode.type}
-                  </span>
+                {/* Inspector Content */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-5 text-xs font-mono">
+                  {/* File / Location */}
+                  {(selectedNode.props?.file_path || selectedNode.props?.path) && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
+                        File Location
+                      </span>
+                      <div className="flex items-center gap-1.5 text-zinc-300 bg-[#11131a] p-2 rounded-md border border-white/[0.06] break-all text-[11px]">
+                        <FileCode className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                        <span>{selectedNode.props.file_path || selectedNode.props.path}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Source Range */}
+                  {selectedNode.props?.start_line !== undefined && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
+                        Source Lines
+                      </span>
+                      <div className="text-zinc-300 bg-[#11131a] px-2.5 py-1.5 rounded border border-white/[0.06] text-[11px]">
+                        Lines {selectedNode.props.start_line} – {selectedNode.props.end_line || selectedNode.props.start_line}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Connections Metric */}
+                  <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className="bg-[#11131a] border border-white/[0.06] rounded p-2">
+                      <span className="text-[10px] text-zinc-500 block uppercase">Degree</span>
+                      <span className="text-sm font-bold text-white mt-0.5 block">
+                        {nodeDegrees.get(selectedNode.id) || 0}
+                      </span>
+                    </div>
+                    <div className="bg-[#11131a] border border-white/[0.06] rounded p-2">
+                      <span className="text-[10px] text-zinc-500 block uppercase">Community</span>
+                      <span className="text-[11px] font-semibold text-zinc-300 mt-1 block truncate">
+                        {getCommunityName(selectedNode)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Relationships: Defines */}
+                  {selectedDetails && selectedDetails.defines.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">
+                        Defines ({selectedDetails.defines.length})
+                      </span>
+                      <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                        {selectedDetails.defines.map((child) => (
+                          <button
+                            key={child.id}
+                            onClick={() => focusOnNode(child.id)}
+                            className="w-full text-left p-1.5 rounded bg-[#11131a] hover:bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] flex items-center justify-between text-[11px] text-zinc-300 transition-colors"
+                          >
+                            <span className="truncate">{child.label || child.id}</span>
+                            <ChevronRight className="w-3 h-3 text-zinc-500 shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Relationships: Calls */}
+                  {selectedDetails && selectedDetails.calls.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold text-indigo-400">
+                        Calls ({selectedDetails.calls.length})
+                      </span>
+                      <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                        {selectedDetails.calls.map((callee) => (
+                          <button
+                            key={callee.id}
+                            onClick={() => focusOnNode(callee.id)}
+                            className="w-full text-left p-1.5 rounded bg-[#11131a] hover:bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] flex items-center justify-between text-[11px] text-zinc-300 transition-colors"
+                          >
+                            <span className="truncate">{callee.label || callee.id}</span>
+                            <ChevronRight className="w-3 h-3 text-zinc-500 shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Relationships: Callers */}
+                  {selectedDetails && selectedDetails.callers.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold text-cyan-400">
+                        Called By ({selectedDetails.callers.length})
+                      </span>
+                      <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                        {selectedDetails.callers.map((caller) => (
+                          <button
+                            key={caller.id}
+                            onClick={() => focusOnNode(caller.id)}
+                            className="w-full text-left p-1.5 rounded bg-[#11131a] hover:bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] flex items-center justify-between text-[11px] text-zinc-300 transition-colors"
+                          >
+                            <span className="truncate">{caller.label || caller.id}</span>
+                            <ChevronRight className="w-3 h-3 text-zinc-500 shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Relationships: Imports */}
+                  {selectedDetails && selectedDetails.imports.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold text-teal-400">
+                        Imports ({selectedDetails.imports.length})
+                      </span>
+                      <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                        {selectedDetails.imports.map((imp) => (
+                          <button
+                            key={imp.id}
+                            onClick={() => focusOnNode(imp.id)}
+                            className="w-full text-left p-1.5 rounded bg-[#11131a] hover:bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] flex items-center justify-between text-[11px] text-zinc-300 transition-colors"
+                          >
+                            <span className="truncate">{imp.label || imp.id}</span>
+                            <ChevronRight className="w-3 h-3 text-zinc-500 shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <h3 className="text-sm font-bold text-white font-mono truncate mt-1">
-                  {selectedNode.label || selectedNode.id}
-                </h3>
               </div>
-              <button
-                onClick={() => {
-                  setSelectedNode(null);
-                  networkRef.current?.unselectAll();
-                  if (onSelectNode) onSelectNode(null);
-                }}
-                className="text-zinc-500 hover:text-zinc-300 p-1 rounded hover:bg-white/[0.06] transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Inspector Content */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-5 text-xs font-mono">
-              {/* File / Location */}
-              {(selectedNode.props?.file_path || selectedNode.props?.path) && (
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
-                    File Location
+            ) : (
+              /* Graphify Overview: Filter Presets, Most Connected, and Legend */
+              <div className="h-full flex flex-col divide-y divide-white/[0.06] text-xs font-mono animate-fade-in">
+                {/* Filter Presets */}
+                <div className="p-3.5 space-y-2">
+                  <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block">
+                    Filter Presets
                   </span>
-                  <div className="flex items-center gap-1.5 text-zinc-300 bg-[#11131a] p-2 rounded-md border border-white/[0.06] break-all text-[11px]">
-                    <FileCode className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                    <span>{selectedNode.props.file_path || selectedNode.props.path}</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => setFilterType(filterType === "Function" ? "ALL" : "Function")}
+                      className={`px-2 py-0.5 rounded text-[11px] border transition-colors cursor-pointer ${
+                        filterType === "Function"
+                          ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/40"
+                          : "bg-white/[0.03] text-zinc-400 border-white/[0.06] hover:text-white"
+                      }`}
+                    >
+                      kind: function
+                    </button>
+                    <button
+                      onClick={() => setFilterType(filterType === "File" ? "ALL" : "File")}
+                      className={`px-2 py-0.5 rounded text-[11px] border transition-colors cursor-pointer ${
+                        filterType === "File"
+                          ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/40"
+                          : "bg-white/[0.03] text-zinc-400 border-white/[0.06] hover:text-white"
+                      }`}
+                    >
+                      kind: file
+                    </button>
+                    <button
+                      onClick={() => setFilterType(filterType === "Inferred" ? "ALL" : "Inferred")}
+                      className={`px-2 py-0.5 rounded text-[11px] border transition-colors cursor-pointer ${
+                        filterType === "Inferred"
+                          ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                          : "bg-white/[0.03] text-zinc-400 border-white/[0.06] hover:text-white"
+                      }`}
+                    >
+                      prov: inferred
+                    </button>
                   </div>
                 </div>
-              )}
 
-              {/* Source Range */}
-              {selectedNode.props?.start_line !== undefined && (
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
-                    Source Lines
-                  </span>
-                  <div className="text-zinc-300 bg-[#11131a] px-2.5 py-1.5 rounded border border-white/[0.06] text-[11px]">
-                    Lines {selectedNode.props.start_line} – {selectedNode.props.end_line || selectedNode.props.start_line}
+                {/* Most Connected Panel */}
+                <div className="p-3.5 flex-1 min-h-0 flex flex-col">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                      Most connected
+                    </span>
+                    <span className="text-[10px] text-zinc-600">Top 15</span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+                    {mostConnectedNodes.map((n) => {
+                      const deg = nodeDegrees.get(n.id) || 0;
+                      const cIdx = communityMap.get(n.id) ?? 0;
+                      const pal = COMMUNITY_PALETTE[cIdx];
+                      const isInferred = n.props?.provenance === "INFERRED" || n.type === "Inferred";
+
+                      return (
+                        <button
+                          key={n.id}
+                          onClick={() => focusOnNode(n.id)}
+                          className="w-full text-left px-2.5 py-1.5 rounded bg-[#11131a] hover:bg-white/[0.05] border border-white/[0.05] hover:border-white/[0.12] flex items-center justify-between text-[11px] transition-colors cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-2 min-w-0 pr-2">
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: pal.bg }}
+                            />
+                            <span className="text-zinc-300 group-hover:text-white truncate font-medium">
+                              {n.label || n.id}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isInferred && (
+                              <span className="text-[9px] px-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                inf
+                              </span>
+                            )}
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-white/[0.04] text-zinc-400 group-hover:text-zinc-200">
+                              {deg}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-              )}
 
-              {/* Connections Metric */}
-              <div className="grid grid-cols-2 gap-2 text-center">
-                <div className="bg-[#11131a] border border-white/[0.06] rounded p-2">
-                  <span className="text-[10px] text-zinc-500 block uppercase">Degree</span>
-                  <span className="text-sm font-bold text-white mt-0.5 block">
-                    {nodeDegrees.get(selectedNode.id) || 0}
-                  </span>
-                </div>
-                <div className="bg-[#11131a] border border-white/[0.06] rounded p-2">
-                  <span className="text-[10px] text-zinc-500 block uppercase">Community</span>
-                  <span className="text-[11px] font-semibold text-zinc-300 mt-1 block truncate">
-                    {selectedPalette.name}
-                  </span>
+                {/* Legend Panel */}
+                <div className="p-3.5 max-h-56 overflow-y-auto">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                      Legend ({communities.length})
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {communities.map((comm, idx) => {
+                      const pal = COMMUNITY_PALETTE[idx % COMMUNITY_PALETTE.length];
+                      const count = communityCounts.get(comm) || 0;
+                      return (
+                        <div
+                          key={comm}
+                          className="flex items-center justify-between px-2 py-1 rounded bg-white/[0.02] border border-white/[0.04] text-[11px]"
+                        >
+                          <div className="flex items-center gap-2 min-w-0 pr-2">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: pal.bg }}
+                            />
+                            <span className="text-zinc-300 truncate">{comm}</span>
+                          </div>
+                          <span className="text-[10px] text-zinc-500 font-mono shrink-0 font-semibold">
+                            {count}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-
-              {/* Relationships: Defines */}
-              {selectedDetails && selectedDetails.defines.length > 0 && (
-                <div className="space-y-2">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">
-                    Defines ({selectedDetails.defines.length})
-                  </span>
-                  <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-                    {selectedDetails.defines.map((child) => (
-                      <button
-                        key={child.id}
-                        onClick={() => focusOnNode(child.id)}
-                        className="w-full text-left p-1.5 rounded bg-[#11131a] hover:bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] flex items-center justify-between text-[11px] text-zinc-300 transition-colors"
-                      >
-                        <span className="truncate">{child.label || child.id}</span>
-                        <ChevronRight className="w-3 h-3 text-zinc-500 shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Relationships: Calls */}
-              {selectedDetails && selectedDetails.calls.length > 0 && (
-                <div className="space-y-2">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold text-indigo-400">
-                    Calls ({selectedDetails.calls.length})
-                  </span>
-                  <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-                    {selectedDetails.calls.map((callee) => (
-                      <button
-                        key={callee.id}
-                        onClick={() => focusOnNode(callee.id)}
-                        className="w-full text-left p-1.5 rounded bg-[#11131a] hover:bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] flex items-center justify-between text-[11px] text-zinc-300 transition-colors"
-                      >
-                        <span className="truncate">{callee.label || callee.id}</span>
-                        <ChevronRight className="w-3 h-3 text-zinc-500 shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Relationships: Callers */}
-              {selectedDetails && selectedDetails.callers.length > 0 && (
-                <div className="space-y-2">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold text-cyan-400">
-                    Called By ({selectedDetails.callers.length})
-                  </span>
-                  <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-                    {selectedDetails.callers.map((caller) => (
-                      <button
-                        key={caller.id}
-                        onClick={() => focusOnNode(caller.id)}
-                        className="w-full text-left p-1.5 rounded bg-[#11131a] hover:bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] flex items-center justify-between text-[11px] text-zinc-300 transition-colors"
-                      >
-                        <span className="truncate">{caller.label || caller.id}</span>
-                        <ChevronRight className="w-3 h-3 text-zinc-500 shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Relationships: Imports */}
-              {selectedDetails && selectedDetails.imports.length > 0 && (
-                <div className="space-y-2">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold text-teal-400">
-                    Imports ({selectedDetails.imports.length})
-                  </span>
-                  <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-                    {selectedDetails.imports.map((imp) => (
-                      <button
-                        key={imp.id}
-                        onClick={() => focusOnNode(imp.id)}
-                        className="w-full text-left p-1.5 rounded bg-[#11131a] hover:bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] flex items-center justify-between text-[11px] text-zinc-300 transition-colors"
-                      >
-                        <span className="truncate">{imp.label || imp.id}</span>
-                        <ChevronRight className="w-3 h-3 text-zinc-500 shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
           </aside>
         )}
       </div>

@@ -44,7 +44,8 @@ function PRReviewContent() {
     setActionError(null);
     try {
       const repoFilter = selectedRepoFilter === "all" ? undefined : selectedRepoFilter;
-      const res = await prApi.listPullRequests(repoFilter, token || undefined);
+      const targetProjectIdentifier = activeProject?.id || projectSlug;
+      const res = await prApi.listPullRequests(repoFilter, token || undefined, targetProjectIdentifier);
       const data = res.pullRequests || [];
       setPullRequestsList(data);
       if (data.length > 0) {
@@ -57,7 +58,7 @@ function PRReviewContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedRepoFilter, token]);
+  }, [selectedRepoFilter, token, activeProject?.id, projectSlug]);
 
   useEffect(() => {
     loadPRs();

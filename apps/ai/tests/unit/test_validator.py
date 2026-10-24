@@ -48,3 +48,18 @@ def test_validator_minor_warnings_still_valid():
     report = validator.validate("owner/repo", "c0ffee12345678", stats)
     assert report.is_valid
     assert len(report.warnings) >= 1
+
+
+def test_validator_branch_names():
+    validator = IndexValidator()
+    stats = IndexingStats(
+        files_discovered=5,
+        files_parsed=5,
+        entities_created=10,
+        relationships_created=8,
+    )
+    # "master" has length 6, "dev" has length 3
+    for branch in ["master", "dev", "main", "feature/abc"]:
+        report = validator.validate("owner/repo", branch, stats)
+        assert report.is_valid, f"Failed for branch: {branch}"
+        assert not any("Target commit SHA" in e for e in report.fatal_errors)

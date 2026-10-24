@@ -17,6 +17,7 @@ import {
 import { db } from "../../db";
 import { indexJobs, connectedRepositories } from "../../db/schema";
 import { env } from "../../configs/env";
+import { listPullRequestsForProject } from "../pr/pr.service";
 
 const projectsRouter = new Hono<{ Variables: AuthContextVariables }>();
 
@@ -338,6 +339,19 @@ projectsRouter.get("/:projectIdOrSlug/graph", async (c) => {
       edges: [],
     });
   }
+});
+
+/**
+ * GET /:projectIdOrSlug/prs
+ * Lists PRs strictly scoped to repositories attached to this project.
+ */
+projectsRouter.get("/:projectIdOrSlug/prs", async (c) => {
+  const user = c.get("user");
+  const projectIdOrSlug = c.req.param("projectIdOrSlug");
+  const repoFullName = c.req.query("repoFullName");
+
+  const prs = await listPullRequestsForProject(user, projectIdOrSlug, repoFullName);
+  return c.json({ pullRequests: prs });
 });
 
 export default projectsRouter;

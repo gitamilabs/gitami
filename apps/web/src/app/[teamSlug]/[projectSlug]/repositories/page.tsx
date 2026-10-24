@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   FolderGit2,
   Plus,
@@ -13,9 +13,11 @@ import {
   Loader2,
   ExternalLink,
   Pencil,
+  CheckCircle2,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useProjectStore } from "@/store/projectStore";
+import { useRepoStore } from "@/store/repoStore";
 import { useBuildStore } from "@/store/buildStore";
 import { ConnectRepositoryModal } from "@/components/repositories/ConnectRepositoryModal";
 import { EditRepositoryModal } from "@/components/repositories/EditRepositoryModal";
@@ -35,10 +37,13 @@ function formatRelativeTime(dateString?: string): string {
 
 export default function RepositoriesPage() {
   const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const teamSlug = (params?.teamSlug as string) || "";
   const projectSlug = (params?.projectSlug as string) || "";
 
   const { token } = useAuthStore();
+  const { fetchConnectedRepos } = useRepoStore();
   const { projects, activeProject: storeActiveProject, fetchProjectDetails, detachRepository } = useProjectStore();
   const { startBuild } = useBuildStore();
 
@@ -46,12 +51,24 @@ export default function RepositoriesPage() {
   const [repoToEdit, setRepoToEdit] = useState<ConnectedRepository | null>(null);
   const [startingBuildId, setStartingBuildId] = useState<string | null>(null);
   const [detachingRepoId, setDetachingRepoId] = useState<string | null>(null);
+  const [installedSuccessBanner, setInstalledSuccessBanner] = useState(false);
 
   useEffect(() => {
     if (token && projectSlug) {
       fetchProjectDetails(token, projectSlug);
     }
   }, [token, projectSlug, fetchProjectDetails]);
+
+  // Handle GitHub App redirect return (?installed=true)
+  useEffect(() => {
+    const installed = searchParams.get("installed");
+    if (installed === "true" && token) {
+      setInstalledSuccessBanner(true);
+      fetchConnectedRepos(token, true);
+      setIsConnectOpen(true);
+      router.replace(`/${teamSlug}/${projectSlug}/repositories`);
+    }
+  }, [searchParams, token, teamSlug, projectSlug, fetchConnectedRepos, router]);
 
   const activeProject =
     (storeActiveProject?.slug === projectSlug || storeActiveProject?.id === projectSlug)
@@ -87,6 +104,21 @@ export default function RepositoriesPage() {
 
   return (
     <div className="p-8 max-w-5xl w-full mx-auto space-y-8 animate-fade-in text-zinc-200">
+      {installedSuccessBanner && (
+        <div className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs animate-fade-in">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>GitHub App connected successfully! Select a repository below to link it to this project.</span>
+          </div>
+          <button
+            onClick={() => setInstalledSuccessBanner(false)}
+            className="text-emerald-400/60 hover:text-emerald-300 text-xs font-mono cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/[0.06]">
         <div>
           <h1 className="text-xl font-semibold text-white tracking-tight font-mono">
@@ -97,13 +129,15 @@ export default function RepositoriesPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsConnectOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-zinc-200 text-black rounded-md text-xs font-semibold transition-colors cursor-pointer shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Connect Repository</span>
-        </button>
+        {repos.length > 0 && (
+          <button
+            onClick={() => setIsConnectOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-zinc-200 text-black rounded-md text-xs font-semibold transition-colors cursor-pointer shrink-0"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Connect Repository</span>
+          </button>
+        )}
       </div>
 
       {repos.length === 0 ? (

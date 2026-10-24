@@ -57,7 +57,7 @@ class RepositorySnapshot:
             # Fallback for non-git directories
             self.resolved_commit_sha = (
                 self.requested_commit_sha
-                if self.requested_commit_sha not in ("HEAD", "main")
+                if self.requested_commit_sha not in ("HEAD", "main", "master", "trunk", "dev") and self.requested_commit_sha
                 else "synthetic-commit-0000000000000000000000000000000000000000"
             )
 

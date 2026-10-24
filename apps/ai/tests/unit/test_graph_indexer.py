@@ -53,8 +53,9 @@ async def test_idempotent_entity_indexing():
     query_1 = mock_client.execute_query.call_args[0][0]
     params_1 = mock_client.execute_query.call_args[0][1]
 
-    # Verify MERGE on deterministic uid
+    # Verify MERGE on deterministic uid and :Symbol label assignment
     assert "MERGE (e:Function {uid: item.uid})" in query_1
+    assert "SET e:Symbol," in query_1
     assert params_1["batch"][0]["uid"] == "func:repo_a:math.py::calculate"
 
     # Run 2 (same repository and file)

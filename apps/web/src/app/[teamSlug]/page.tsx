@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Check,
   Users,
+  LogOut,
 } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
 import { useTeamStore } from "../../store/teamStore";
@@ -46,23 +47,28 @@ function TeamOverviewContent() {
   const router = useRouter();
   const teamSlug = (params?.teamSlug as string) || "";
 
-  const { token, user } = useAuthStore();
+  const { token, user, logout } = useAuthStore();
   const { teams, activeTeam, fetchTeams, setActiveTeam } = useTeamStore();
-  const { projects, fetchTeamProjects } = useProjectStore();
+  const { projects, loadedTeamSlug, isLoading: isProjectsLoading, fetchTeamProjects } = useProjectStore();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isTeamMenuOpen, setIsTeamMenuOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
   const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
   const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
   const teamMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (teamMenuRef.current && !teamMenuRef.current.contains(e.target as Node)) {
         setIsTeamMenuOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setIsUserMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -81,12 +87,30 @@ function TeamOverviewContent() {
     }
   }, [token, teamSlug, fetchTeamProjects]);
 
+  // Vercel-style auto-entry: If a team has exactly 1 project, navigate directly inside
+  useEffect(() => {
+    if (loadedTeamSlug === teamSlug && !isProjectsLoading && projects.length === 1) {
+      router.replace(`/${teamSlug}/${projects[0].slug}`);
+    }
+  }, [loadedTeamSlug, teamSlug, isProjectsLoading, projects, router]);
+
   const currentTeam = teams.find((t) => t.slug === teamSlug) || activeTeam;
 
   const filteredProjects = projects.filter((p) => {
     const q = searchQuery.toLowerCase().trim();
     return !q || p.name.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q);
   });
+
+  if (loadedTeamSlug === teamSlug && !isProjectsLoading && projects.length === 1) {
+    return (
+      <div className="min-h-screen bg-[#0c0d12] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-mono text-zinc-400">Opening {projects[0].name}...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0c0d12] text-zinc-200 flex flex-col">
@@ -183,15 +207,54 @@ function TeamOverviewContent() {
             <span>Settings</span>
           </Link>
           <div className="w-px h-4 bg-white/[0.06]" />
-          <button
-            onClick={() => setIsCreateTeamOpen(true)}
-            className="px-2.5 py-1 text-xs text-zinc-400 hover:text-white rounded hover:bg-white/[0.05] transition-colors cursor-pointer"
-          >
-            + Create Team
-          </button>
-          <div className="w-px h-4 bg-white/[0.06]" />
-          <div className="w-7 h-7 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-xs font-bold text-zinc-300">
-            {(user?.username || "U").charAt(0).toUpperCase()}
+
+          {/* User Profile Menu Dropdown */}
+          <div className="relative" ref={userMenuRef}>
+            <button
+              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              className="flex items-center gap-2 p-1 rounded-full hover:ring-2 hover:ring-white/[0.1] transition-all cursor-pointer"
+              title="User Account"
+            >
+              <div className="w-7 h-7 rounded-full bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-xs font-bold text-zinc-300">
+                {(user?.username || "U").charAt(0).toUpperCase()}
+              </div>
+            </button>
+
+            {isUserMenuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-52 bg-[#13151f] border border-white/[0.08] rounded-lg shadow-2xl py-1.5 z-50 animate-fade-in text-xs">
+                <div className="px-3 py-2 border-b border-white/[0.06]">
+                  <div className="text-xs font-semibold text-white truncate">
+                    {user?.name || user?.username || "User"}
+                  </div>
+                  <div className="text-[11px] text-zinc-500 font-mono truncate">
+                    {user?.email || (user?.username ? `@${user.username}` : "Personal Account")}
+                  </div>
+                </div>
+
+                <Link
+                  href={`/${teamSlug}/settings`}
+                  onClick={() => setIsUserMenuOpen(false)}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2 text-zinc-300 hover:text-white hover:bg-white/[0.05] transition-colors"
+                >
+                  <Settings className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Team Settings</span>
+                </Link>
+
+                <div className="border-t border-white/[0.06] my-1" />
+
+                <button
+                  onClick={async () => {
+                    setIsUserMenuOpen(false);
+                    await logout();
+                    router.push("/");
+                  }}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/20 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Log out</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>

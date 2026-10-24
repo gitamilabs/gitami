@@ -19,6 +19,7 @@ IGNORED_DIRECTORIES: Set[str] = {
     "coverage",
     ".idea",
     ".vscode",
+    ".pytest_cache",
 }
 
 IGNORED_EXTENSIONS: Set[str] = {

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   listPullRequests,
+  listPullRequestsForProject,
   syncPullRequests,
   getPullRequestDetails,
   evaluatePRWithAIService,
@@ -12,7 +13,7 @@ import {
   updatePRIssue,
 } from "./pr.service";
 import { syncPullRequestsForRepo } from "../github/github-app.service";
-import { verifySessionToken } from "../auth/auth.service";
+import { verifySessionToken, getUserById } from "../auth/auth.service";
 import {
   authMiddleware,
   type AuthContextVariables,
@@ -39,13 +40,25 @@ async function getOptionalUser(c: any): Promise<string | null> {
 
 /**
  * GET /api/prs
- * Lists PRs for repositories the authenticated caller owns (empty list if
- * unauthenticated or no repoFullName match), synchronizing with GitHub App.
+ * Lists PRs for repositories the authenticated caller owns, optionally scoped to a project.
  */
 const getPrListHandler = async (c: any) => {
   const repoFullName = c.req.query("repoFullName");
+  const projectId = c.req.query("projectId") || c.req.query("projectSlug");
   const userId = await getOptionalUser(c);
-  const prs = await listPullRequests(repoFullName, userId || undefined);
+
+  if (!userId) {
+    return c.json({ pullRequests: [] });
+  }
+
+  if (projectId) {
+    const user = await getUserById(userId);
+    if (!user) return c.json({ pullRequests: [] });
+    const prs = await listPullRequestsForProject(user, projectId, repoFullName);
+    return c.json({ pullRequests: prs });
+  }
+
+  const prs = await listPullRequests(repoFullName, userId);
   return c.json({ pullRequests: prs });
 };
 

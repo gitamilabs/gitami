@@ -252,17 +252,6 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenSearch, onOpenAddProject }
             </kbd>
           </button>
 
-          {/* Connect Repository Action (when in project) */}
-          {projectSlug && (
-            <button
-              onClick={() => setIsConnectRepoOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-zinc-200 text-black text-xs font-semibold rounded-md transition-colors cursor-pointer shrink-0"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span className="hidden md:inline">Connect Repository</span>
-            </button>
-          )}
-
           {/* Notifications */}
           <button
             className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-white/[0.05] transition-colors cursor-pointer"

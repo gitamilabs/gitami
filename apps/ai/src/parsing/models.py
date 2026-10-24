@@ -10,13 +10,19 @@ SymbolKind = Literal[
     "interface",
     "type",
     "test",
+    "variable",
+    "schema",
+    "enum",
+    "router",
+    "relation",
+    "constant",
 ]
 LanguageType = Literal["python", "javascript", "typescript", "tsx", "jsx", "unknown"]
 
 
 @dataclass
 class SymbolNode:
-    """Represents a code symbol (function, class, method, interface, type, test, etc.)."""
+    """Represents a code symbol (function, class, method, interface, type, test, schema, variable, etc.)."""
     name: str
     kind: SymbolKind
     file_path: str
@@ -30,6 +36,7 @@ class SymbolNode:
     class_name: Optional[str] = None
     superclasses: List[str] = field(default_factory=list)
     interfaces: List[str] = field(default_factory=list)
+    provenance: str = "EXTRACTED"
 
     def __post_init__(self):
         if not self.qualified_name:
