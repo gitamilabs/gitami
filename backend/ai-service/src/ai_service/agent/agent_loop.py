@@ -218,6 +218,17 @@ class AutonomousAgentLoop:
 
     async def _call_llm_json(self, prompt: str, system_prompt: str) -> str:
         """Helper to invoke LLM with JSON format expectation."""
+        if self.llm_client.orchestrator_provider == "ollama" and self.llm_client.has_ollama:
+            res = await self.llm_client._call_ollama(
+                prompt,
+                system_prompt,
+                model=self.llm_client.orchestrator_model or self.llm_client.ollama_model,
+                temperature=0.1,
+                json_mode=True,
+            )
+            if res:
+                return res
+
         if self.llm_client.has_gemini:
             res = await self.llm_client._call_gemini(prompt, system_prompt)
             if res:
@@ -225,6 +236,17 @@ class AutonomousAgentLoop:
 
         if self.llm_client.has_groq:
             res = await self.llm_client._call_groq(prompt, system_prompt, temperature=0.1, json_mode=True)
+            if res:
+                return res
+
+        if self.llm_client.has_ollama and self.llm_client.orchestrator_provider != "ollama":
+            res = await self.llm_client._call_ollama(
+                prompt,
+                system_prompt,
+                model=self.llm_client.ollama_model,
+                temperature=0.1,
+                json_mode=True,
+            )
             if res:
                 return res
 

@@ -32,7 +32,7 @@ class CompetitorConfig:
     # Paths
     repos_dir: Path = field(
         default_factory=lambda: Path(
-            os.environ.get("BENCHMARK_REPOS_DIR", r"D:\gitami-benchmark-repos")
+            os.environ.get("BENCHMARK_REPOS_DIR", "./benchmark_repos")
         )
     )
     results_dir: Path = field(
@@ -43,7 +43,7 @@ class CompetitorConfig:
 
     # Runtime options
     sample_size: Optional[int] = None
-    resume: bool = True
+    resume: bool = False
     inter_case_delay: float = 1.5
     cleanup_kb: bool = True
     branch: str = "benchmark_competitors"
@@ -177,7 +177,7 @@ def get_competitor_config(
         kb_label=preset["kb_label"],
         llm_label=preset["llm_label"],
         gate_label=preset["gate_label"],
-        repos_dir=repos_dir or Path(os.environ.get("BENCHMARK_REPOS_DIR", r"D:\gitami-benchmark-repos")),
+        repos_dir=repos_dir or Path(os.environ.get("BENCHMARK_REPOS_DIR", "./benchmark_repos")),
         results_dir=results_dir or Path(os.environ.get("BENCHMARK_RESULTS_DIR", "./benchmark_results")),
         sample_size=sample_size,
         resume=resume,

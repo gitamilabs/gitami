@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     # ── Groq ──────────────────────────────────────────────────────────────────
     groq_api_key: str = ""
 
+    # ── LLM Providers & Ollama ────────────────────────────────────────────────
+    worker_provider: str = "ollama"
+    orchestrator_provider: str = "ollama"
+    orchestrator_model: str = "qwen2.5-coder:32b"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen2.5-coder:14b"
+    ollama_timeout: float = 120.0
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

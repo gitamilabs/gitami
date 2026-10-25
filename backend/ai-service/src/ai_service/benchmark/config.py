@@ -13,7 +13,7 @@ class BenchmarkConfig:
     # Storage for cloned benchmark repositories (can be deleted independently)
     repos_dir: Path = field(
         default_factory=lambda: Path(
-            os.environ.get("BENCHMARK_REPOS_DIR", r"D:\gitami-benchmark-repos")
+            os.environ.get("BENCHMARK_REPOS_DIR", "./benchmark_repos")
         )
     )
 
@@ -27,8 +27,8 @@ class BenchmarkConfig:
     # Subsample test cases (e.g. 3 or 5 for quick testing, None for full suite)
     sample_size: Optional[int] = None
 
-    # Resume from checkpoint if available
-    resume: bool = True
+    # Resume from checkpoint if available (default False to evaluate test cases every run)
+    resume: bool = False
 
     # Inter-case delay in seconds to stay within free-tier API rate limits
     inter_case_delay: float = 1.0

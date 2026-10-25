@@ -167,6 +167,8 @@ class BenchmarkRunner:
             logger.info(
                 f"[CHECKPOINT] Loaded {len(case_scores)} previously completed case(s) from {checkpoint_file.name}."
             )
+        elif not do_resume:
+            checkpoint_mgr.clear()
 
         logger.info(
             f"Beginning evaluation: {len(all_cases)} total test cases planned "

@@ -1,5 +1,6 @@
 """Command-line interface commands for the GitAmi benchmarking framework."""
 
+import os
 import asyncio
 import logging
 from pathlib import Path
@@ -40,7 +41,7 @@ def benchmark_group():
 @click.option(
     "--repos-dir",
     type=click.Path(),
-    default=r"D:\gitami-benchmark-repos",
+    default=os.environ.get("BENCHMARK_REPOS_DIR", "./benchmark_repos"),
     help="Disk directory for benchmark repositories.",
 )
 @click.option(
@@ -56,7 +57,7 @@ def benchmark_group():
 )
 @click.option(
     "--resume/--no-resume",
-    default=True,
+    default=False,
     help="Resume from disk checkpoint if available, skipping already-scored test cases.",
 )
 @click.option(
@@ -169,7 +170,7 @@ def compare_runs(baseline: str, candidate: str, output: Optional[str]):
 @click.option(
     "--repos-dir",
     type=click.Path(),
-    default=r"D:\gitami-benchmark-repos",
+    default=os.environ.get("BENCHMARK_REPOS_DIR", "./benchmark_repos"),
     help="Disk directory for benchmark repositories.",
 )
 def cleanup_benchmark(prefix: str, purge_repos: bool, repos_dir: str):

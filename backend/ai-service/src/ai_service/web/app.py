@@ -150,11 +150,15 @@ async def get_system_config():
     return {
         "vector_db": settings.vector_db,
         "embedder": settings.embedder,
+        "worker_provider": settings.worker_provider,
+        "orchestrator_provider": settings.orchestrator_provider,
         "models": {
             "gemini_models": GEMINI_MODELS,
             "groq_models": GROQ_MODELS,
-            "primary_orchestrator": GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-3.6-flash",
-            "worker_model": GROQ_MODELS[0] if GROQ_MODELS else "openai/gpt-oss-120b",
+            "ollama_base_url": settings.ollama_base_url,
+            "ollama_model": settings.ollama_model,
+            "primary_orchestrator": settings.orchestrator_model if settings.orchestrator_provider == "ollama" else (GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-3.6-flash"),
+            "worker_model": settings.ollama_model if settings.worker_provider == "ollama" else (GROQ_MODELS[0] if GROQ_MODELS else "openai/gpt-oss-120b"),
         },
         "storage": {
             "qdrant_collection": settings.qdrant_collection,

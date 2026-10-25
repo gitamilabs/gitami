@@ -314,6 +314,8 @@ class CompetitorBenchmarkRunner:
             logger.info(
                 f"[CHECKPOINT] Restored {len(case_scores)} completed case(s) from {self.config.checkpoint_file.name}."
             )
+        elif not do_resume:
+            self.checkpoint_mgr.clear()
 
         logger.info(
             f"Evaluating [{self.config.config_id}]: {len(all_cases)} planned cases "

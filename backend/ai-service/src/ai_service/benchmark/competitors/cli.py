@@ -1,5 +1,6 @@
 """CLI commands for running and analyzing competitor and ablation benchmarks."""
 
+import os
 import asyncio
 import logging
 from pathlib import Path
@@ -55,7 +56,7 @@ def competitor_benchmark_group():
 )
 @click.option(
     "--resume/--no-resume",
-    default=True,
+    default=False,
     help="Resume from disk checkpoint, skipping already-scored cases.",
 )
 @click.option(
@@ -78,7 +79,7 @@ def competitor_benchmark_group():
 @click.option(
     "--repos-dir",
     type=click.Path(),
-    default=r"D:\gitami-benchmark-repos",
+    default=os.environ.get("BENCHMARK_REPOS_DIR", "./benchmark_repos"),
     help="Storage directory for benchmark repositories.",
 )
 @click.option(

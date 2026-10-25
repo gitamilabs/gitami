@@ -51,7 +51,11 @@ class DualLLMClient:
         self,
         gemini_api_key: Optional[str] = None,
         groq_api_key: Optional[str] = None,
+        ollama_base_url: Optional[str] = None,
+        ollama_model: Optional[str] = None,
     ):
+        from ai_service.config import settings
+
         if gemini_api_key:
             self.gemini_rotator = APIKeyRotator(
                 service_name="Gemini",
@@ -79,6 +83,111 @@ class DualLLMClient:
         self.has_gemini = self.gemini_rotator.has_keys
         self.has_groq = self.groq_rotator.has_keys
         self._groq_cooldown_until: float = 0.0
+
+        # Ollama configuration from arguments, env, or settings
+        raw_ollama_url = (
+            ollama_base_url
+            or os.environ.get("OLLAMA_BASE_URL")
+            or getattr(settings, "ollama_base_url", "")
+        )
+        self.ollama_base_url = (raw_ollama_url or "").rstrip("/")
+        self.ollama_model = (
+            ollama_model
+            or os.environ.get("OLLAMA_MODEL")
+            or getattr(settings, "ollama_model", "qwen2.5-coder:14b")
+        )
+        self.worker_provider = (
+            os.environ.get("WORKER_PROVIDER")
+            or getattr(settings, "worker_provider", "ollama" if self.ollama_base_url else "groq")
+        ).lower()
+        self.orchestrator_provider = (
+            os.environ.get("ORCHESTRATOR_PROVIDER")
+            or getattr(settings, "orchestrator_provider", "ollama" if self.ollama_base_url else "gemini")
+        ).lower()
+        self.orchestrator_model = (
+            os.environ.get("ORCHESTRATOR_MODEL")
+            or getattr(settings, "orchestrator_model", "qwen2.5-coder:32b")
+        )
+        try:
+            self.ollama_timeout = float(
+                os.environ.get("OLLAMA_TIMEOUT")
+                or getattr(settings, "ollama_timeout", 120.0)
+            )
+        except (ValueError, TypeError):
+            self.ollama_timeout = 120.0
+
+        self.has_ollama = bool(self.ollama_base_url)
+        self._ollama_cooldown_until: float = 0.0
+
+    async def _call_ollama(
+        self,
+        prompt: str,
+        system_prompt: str,
+        model: Optional[str] = None,
+        temperature: float = 0.2,
+        json_mode: bool = False,
+        max_retries: int = 2,
+    ) -> Optional[str]:
+        if not self.has_ollama:
+            return None
+
+        import time
+        if time.time() < self._ollama_cooldown_until:
+            logger.warning(f"[Ollama] In cooldown until {self._ollama_cooldown_until:.0f}")
+            return None
+
+        import httpx
+        target_model = model or self.ollama_model
+        url = f"{self.ollama_base_url}/api/chat"
+
+        eff_prompt = prompt
+        if json_mode and "json" not in system_prompt.lower() and "json" not in prompt.lower():
+            eff_prompt = f"{prompt}\nRespond in valid JSON format."
+
+        payload: Dict[str, Any] = {
+            "model": target_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": eff_prompt},
+            ],
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+            },
+        }
+        if json_mode:
+            payload["format"] = "json"
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.ollama_timeout) as client:
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        msg = data.get("message", {}).get("content", "")
+                        if msg:
+                            return msg
+                    elif resp.status_code == 404 and target_model != self.ollama_model:
+                        logger.warning(
+                            f"[Ollama] Model '{target_model}' not found on {self.ollama_base_url}; "
+                            f"falling back to '{self.ollama_model}'"
+                        )
+                        payload["model"] = self.ollama_model
+                        continue
+                    else:
+                        logger.warning(f"[Ollama HTTP {resp.status_code}] {resp.text[:200]}")
+                        if resp.status_code in (500, 502, 503, 504):
+                            self._ollama_cooldown_until = time.time() + 30
+                            return None
+            except Exception as e:
+                logger.warning(f"[Ollama attempt {attempt}/{max_retries}] Request error to {url}: {e}")
+                if attempt == max_retries:
+                    self._ollama_cooldown_until = time.time() + 30
+                    return None
+                await asyncio.sleep(2)
+
+        return None
+
 
     async def _call_gemini(
         self,
@@ -227,12 +336,30 @@ class DualLLMClient:
         user_prompt = f"Repository ID: '{repo_id}'\nUser Query: '{user_query}'\nSelect the best tool(s) to execute."
 
         raw_response = None
-        if self.has_gemini:
+        if self.orchestrator_provider == "ollama" and self.has_ollama:
+            raw_response = await self._call_ollama(
+                user_prompt,
+                system_prompt,
+                model=self.orchestrator_model or self.ollama_model,
+                temperature=0.1,
+                json_mode=True,
+            )
+
+        if not raw_response and self.has_gemini:
             raw_response = await self._call_gemini(user_prompt, system_prompt)
 
         if not raw_response and self.has_groq:
             raw_response = await self._call_groq(
                 user_prompt, system_prompt, temperature=0.1, json_mode=True
+            )
+
+        if not raw_response and self.has_ollama and self.orchestrator_provider != "ollama":
+            raw_response = await self._call_ollama(
+                user_prompt,
+                system_prompt,
+                model=self.ollama_model,
+                temperature=0.1,
+                json_mode=True,
             )
 
         if raw_response:
@@ -253,7 +380,17 @@ class DualLLMClient:
         return [{"tool_name": "hybrid_search", "args": {"query": user_query}}]
 
     async def run_orchestrator(self, prompt: str, system_prompt: str) -> str:
-        """Call Google Gemini for main orchestration; fail over to Groq if Gemini quota/error occurs."""
+        """Call primary orchestrator with failover (Ollama / Gemini / Groq based on ORCHESTRATOR_PROVIDER)."""
+        if self.orchestrator_provider == "ollama" and self.has_ollama:
+            res = await self._call_ollama(
+                prompt,
+                system_prompt,
+                model=self.orchestrator_model or self.ollama_model,
+                temperature=0.2,
+            )
+            if res:
+                return res
+
         if self.has_gemini:
             res = await self._call_gemini(prompt, system_prompt)
             if res:
@@ -264,7 +401,17 @@ class DualLLMClient:
             if res:
                 return res
 
-        # Local Intelligent RAG Synthesis if both LLMs are offline
+        if self.has_ollama and self.orchestrator_provider != "ollama":
+            res = await self._call_ollama(
+                prompt,
+                system_prompt,
+                model=self.ollama_model,
+                temperature=0.2,
+            )
+            if res:
+                return res
+
+        # Local Intelligent RAG Synthesis if all LLMs are offline
         return (
             "### Knowledge Base Intelligence Summary\n\n"
             "Retrieved relevant code passages and structural knowledge graph entities for your query. "
@@ -272,10 +419,33 @@ class DualLLMClient:
         )
 
     async def run_worker(self, prompt: str, system_prompt: str) -> str:
-        """Call Groq for fast parallel hunk review sub-tasks; fallback to Gemini."""
+        """Call worker node (Ollama / Groq / Gemini based on WORKER_PROVIDER) for diff inspection."""
         import time
+
+        if self.worker_provider == "ollama" and self.has_ollama:
+            res = await self._call_ollama(
+                prompt,
+                system_prompt,
+                model=self.ollama_model,
+                temperature=0.2,
+                json_mode=True,
+            )
+            if res:
+                return res
+
         if self.has_groq and time.time() >= DualLLMClient._groq_cooldown_until:
             res = await self._call_groq(prompt, system_prompt, temperature=0.2, json_mode=True)
+            if res:
+                return res
+
+        if self.has_ollama and self.worker_provider != "ollama":
+            res = await self._call_ollama(
+                prompt,
+                system_prompt,
+                model=self.ollama_model,
+                temperature=0.2,
+                json_mode=True,
+            )
             if res:
                 return res
 
@@ -285,3 +455,4 @@ class DualLLMClient:
                 return res
 
         return "[Worker Node - Offline Mode] Hunk analysis completed."
+

@@ -429,12 +429,27 @@ class PrReviewReActAgent:
             decision=decision,
             agent_rationale=agent_rationale,
             diff_hunks_count=len(hunks),
-            llm_orchestrator_used=self.llm_client.has_gemini,
+            llm_orchestrator_used=(
+                self.llm_client.has_gemini
+                or self.llm_client.has_ollama
+                or self.llm_client.has_groq
+            ),
             issues=structured_issues,
         )
 
     async def _call_llm(self, prompt: str, system_prompt: str) -> str:
-        """Call LLM with preference for Gemini free tier, failing over to Groq."""
+        """Call LLM with preference matching configured provider, failing over across available providers."""
+        if self.llm_client.orchestrator_provider == "ollama" and self.llm_client.has_ollama:
+            res = await self.llm_client._call_ollama(
+                prompt,
+                system_prompt,
+                model=self.llm_client.orchestrator_model or self.llm_client.ollama_model,
+                temperature=0.1,
+                json_mode=True,
+            )
+            if res:
+                return res
+
         if self.llm_client.has_gemini:
             res = await self.llm_client._call_gemini(prompt, system_prompt)
             if res:
@@ -442,6 +457,17 @@ class PrReviewReActAgent:
 
         if self.llm_client.has_groq:
             res = await self.llm_client._call_groq(prompt, system_prompt, temperature=0.1, json_mode=True)
+            if res:
+                return res
+
+        if self.llm_client.has_ollama and self.llm_client.orchestrator_provider != "ollama":
+            res = await self.llm_client._call_ollama(
+                prompt,
+                system_prompt,
+                model=self.llm_client.ollama_model,
+                temperature=0.1,
+                json_mode=True,
+            )
             if res:
                 return res
 
