@@ -296,8 +296,9 @@ projectsRouter.get("/:projectIdOrSlug/graph", async (c) => {
   const repoKey = encodeURIComponent(targetRepo.fullName);
 
   try {
+    const effectiveProjectId = targetRepo.projectId || result.project.id;
     const res = await fetch(
-      `${aiServiceUrl}/api/graph/${repoKey}?branch=${encodeURIComponent(branch)}&max_nodes=${maxNodes}`
+      `${aiServiceUrl}/api/graph/${repoKey}?branch=${encodeURIComponent(branch)}&max_nodes=${maxNodes}&project_id=${encodeURIComponent(effectiveProjectId)}`
     );
 
     if (!res.ok) {

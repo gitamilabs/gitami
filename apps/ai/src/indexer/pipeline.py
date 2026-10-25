@@ -69,6 +69,7 @@ class RepositoryIndexer:
         target_commit_sha: str = "HEAD",
         branch: str = "main",
         project_id: str = "default",
+        team_id: Optional[str] = None,
         job_type: IndexJobType = IndexJobType.INITIAL,
         validate_only: bool = False,
         stage_callback: Optional[Any] = None,
@@ -89,6 +90,7 @@ class RepositoryIndexer:
                 target_commit_sha=target_commit_sha,
                 branch=branch,
                 project_id=project_id,
+                team_id=team_id,
                 job_type=job_type,
                 validate_only=validate_only,
                 stage_callback=stage_callback,
@@ -102,6 +104,7 @@ class RepositoryIndexer:
         target_commit_sha: str = "HEAD",
         branch: str = "main",
         project_id: str = "default",
+        team_id: Optional[str] = None,
         job_type: IndexJobType = IndexJobType.INITIAL,
         validate_only: bool = False,
         stage_callback: Optional[Any] = None,
@@ -110,6 +113,7 @@ class RepositoryIndexer:
         start_time = time.time()
         job = IndexJob(
             project_id=project_id,
+            team_id=team_id,
             repository_id=repo_id,
             type=job_type,
             target_commit_sha=target_commit_sha,
@@ -219,6 +223,7 @@ class RepositoryIndexer:
                     repo_id=repo_id,
                     commit_sha=resolved_sha,
                     branch=branch,
+                    team_id=team_id,
                 )
 
                 dirs_count, files_count = await graph_indexer.index_directories_and_files(
@@ -226,6 +231,8 @@ class RepositoryIndexer:
                     commit_sha=resolved_sha,
                     branch=branch,
                     parse_results=parse_results,
+                    project_id=project_id,
+                    team_id=team_id,
                 )
 
                 symbols_count = await graph_indexer.index_symbols_and_entities(
@@ -233,6 +240,8 @@ class RepositoryIndexer:
                     commit_sha=resolved_sha,
                     branch=branch,
                     parse_results=parse_results,
+                    project_id=project_id,
+                    team_id=team_id,
                 )
 
                 heritage_count = await graph_indexer.index_heritage(
@@ -294,6 +303,8 @@ class RepositoryIndexer:
                     vector_entries = []
                     for sym in curated_symbols:
                         vector_entries.append({
+                            "project_id": project_id,
+                            "team_id": team_id or "",
                             "repo": repo_id,
                             "branch": branch,
                             "file_path": sym.file_path,
@@ -733,12 +744,16 @@ class RepositoryIndexer:
                                 commit_sha=resolved_target_sha,
                                 branch=branch,
                                 parse_results=added_prs,
+                                project_id=project_id,
+                                team_id=team_id,
                             )
                             s_cnt = await graph_indexer.index_symbols_and_entities(
                                 repo_id=repo_id,
                                 commit_sha=resolved_target_sha,
                                 branch=branch,
                                 parse_results=added_prs,
+                                project_id=project_id,
+                                team_id=team_id,
                             )
                             stats.entities_created += d_cnt + f_cnt + s_cnt
 
@@ -750,6 +765,8 @@ class RepositoryIndexer:
                                 new_symbols=pr.symbols,
                                 commit_sha=resolved_target_sha,
                                 branch=branch,
+                                project_id=project_id,
+                                team_id=team_id,
                             )
                             stats.entities_reconciled += c_cnt + u_cnt + d_cnt
 
@@ -809,6 +826,7 @@ class RepositoryIndexer:
                             repo_id=repo_id,
                             commit_sha=resolved_target_sha,
                             branch=branch,
+                            team_id=team_id,
                         )
 
                     # ── Incremental Vector Sync ─────────────────────────────────
@@ -816,32 +834,35 @@ class RepositoryIndexer:
                         try:
                             # 1. Purge vector entries for deleted files and renamed old paths
                             for df in diff_res.deleted:
-                                self.vector_client.delete(where={
-                                    "$and": [
-                                        {"repo": repo_id},
-                                        {"branch": branch},
-                                        {"file_path": df.path},
-                                    ]
-                                })
+                                del_filter = [
+                                    {"repo": repo_id},
+                                    {"branch": branch},
+                                    {"file_path": df.path},
+                                ]
+                                if project_id and project_id != "default":
+                                    del_filter.append({"project_id": project_id})
+                                self.vector_client.delete(where={"$and": del_filter})
                             for rf in diff_res.renamed:
                                 if rf.old_path:
-                                    self.vector_client.delete(where={
-                                        "$and": [
-                                            {"repo": repo_id},
-                                            {"branch": branch},
-                                            {"file_path": rf.old_path},
-                                        ]
-                                    })
+                                    ren_filter = [
+                                        {"repo": repo_id},
+                                        {"branch": branch},
+                                        {"file_path": rf.old_path},
+                                    ]
+                                    if project_id and project_id != "default":
+                                        ren_filter.append({"project_id": project_id})
+                                    self.vector_client.delete(where={"$and": ren_filter})
 
                             # 2. Purge old vector entries for modified files
                             for mf in diff_res.modified:
-                                self.vector_client.delete(where={
-                                    "$and": [
-                                        {"repo": repo_id},
-                                        {"branch": branch},
-                                        {"file_path": mf.path},
-                                    ]
-                                })
+                                mod_filter = [
+                                    {"repo": repo_id},
+                                    {"branch": branch},
+                                    {"file_path": mf.path},
+                                ]
+                                if project_id and project_id != "default":
+                                    mod_filter.append({"project_id": project_id})
+                                self.vector_client.delete(where={"$and": mod_filter})
 
                             # 3. Add cleaned symbols for added and modified files
                             raw_inc_symbols = []
@@ -858,6 +879,8 @@ class RepositoryIndexer:
                             inc_vector_entries = []
                             for sym in curated_inc_symbols:
                                 inc_vector_entries.append({
+                                    "project_id": project_id,
+                                    "team_id": team_id or "",
                                     "repo": repo_id,
                                     "branch": branch,
                                     "file_path": sym.file_path,

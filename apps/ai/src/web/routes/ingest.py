@@ -8,9 +8,8 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from src.web.deps import get_shared_graph_client, get_shared_vector_client
 from src.web.schemas import IngestRequest, IngestUrlRequest, ReindexRequest
-from src.graph.client import Neo4jClient
-from src.vector.client import VectorKBClient
 from src.jobs.init_job import run_init_job
 from src.repo.streamer import stream_and_parse_github_repo
 
@@ -25,13 +24,10 @@ async def ingest_repository(req: IngestRequest):
     Ingest a repository codebase into Neo4j Graph DB and ChromaDB Vector DB.
     Streams real stage events as NDJSON for durable build tracking.
     """
+    graph_client = await get_shared_graph_client()
+    vector_client = get_shared_vector_client()
+
     async def stream_progress():
-        graph_client = Neo4jClient()
-        try:
-            await graph_client.connect()
-        except Exception:
-            pass
-        vector_client = VectorKBClient()
         queue = asyncio.Queue()
 
         async def queue_cb(stage: str, status: str, stage_stats: Optional[Dict[str, Any]] = None, stage_error: Optional[str] = None):
@@ -63,6 +59,8 @@ async def ingest_repository(req: IngestRequest):
                         vector_client=vector_client,
                         extraction_mode=req.extraction_mode or "fast",
                         stage_callback=queue_cb,
+                        project_id=req.project_id or "default",
+                        team_id=req.team_id,
                     )
                 elif req.repo_dir:
                     repo_path = Path(req.repo_dir)
@@ -78,6 +76,8 @@ async def ingest_repository(req: IngestRequest):
                         vector_client=vector_client,
                         extraction_mode=req.extraction_mode or "fast",
                         stage_callback=queue_cb,
+                        project_id=req.project_id or "default",
+                        team_id=req.team_id,
                     )
                 else:
                     await queue_cb("FAILED", "FAILED", {}, "Must provide either 'full_name' or 'repo_dir'")
@@ -148,13 +148,8 @@ async def ingest_from_github_url(req: IngestUrlRequest):
         if total_size > 500 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="Repository exceeds maximum allowed size (500 MB).")
 
-        graph_client = Neo4jClient()
-        try:
-            await graph_client.connect()
-        except Exception:
-            pass
-
-        vector_client = VectorKBClient()
+        graph_client = await get_shared_graph_client()
+        vector_client = get_shared_vector_client()
         try:
             init_res = await run_init_job(
                 repo_id=repo_id,
@@ -163,6 +158,8 @@ async def ingest_from_github_url(req: IngestUrlRequest):
                 client=graph_client,
                 vector_client=vector_client,
                 extraction_mode=req.extraction_mode or "fast",
+                project_id=req.project_id or "default",
+                team_id=req.team_id,
             )
 
             return {
@@ -173,11 +170,6 @@ async def ingest_from_github_url(req: IngestUrlRequest):
             }
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Ingestion from GitHub URL failed: {str(e)}")
-        finally:
-            try:
-                await graph_client.close()
-            except Exception:
-                pass
 
 
 @router.post("/reindex")
@@ -190,13 +182,10 @@ async def reindex_repository(req: ReindexRequest):
     from src.indexer.pipeline import RepositoryIndexer
     from src.indexer.contracts import IndexJobType
 
+    graph_client = await get_shared_graph_client()
+    vector_client = get_shared_vector_client()
+
     async def stream_progress():
-        graph_client = Neo4jClient()
-        try:
-            await graph_client.connect()
-        except Exception:
-            pass
-        vector_client = VectorKBClient()
         queue = asyncio.Queue()
 
         async def queue_cb(stage: str, status: str, stage_stats: Optional[Dict[str, Any]] = None, stage_error: Optional[str] = None):
@@ -226,6 +215,7 @@ async def reindex_repository(req: ReindexRequest):
                             target_commit_sha=req.target_commit_sha or "HEAD",
                             base_commit_sha=req.base_commit_sha,
                             branch=req.branch or "main",
+                            project_id=req.project_id or "default",
                         )
                     else:
                         job, state, report = await indexer.run(
@@ -233,6 +223,7 @@ async def reindex_repository(req: ReindexRequest):
                             repo_id=req.repo_id,
                             target_commit_sha=req.target_commit_sha or "HEAD",
                             branch=req.branch or "main",
+                            project_id=req.project_id or "default",
                             job_type=IndexJobType.FULL_REINDEX if req.force_full else IndexJobType.INITIAL,
                             stage_callback=queue_cb,
                         )
@@ -248,6 +239,7 @@ async def reindex_repository(req: ReindexRequest):
                         repo_id=req.repo_id,
                         target_commit_sha=req.target_commit_sha or req.branch or "HEAD",
                         branch=req.branch or "main",
+                        project_id=req.project_id or "default",
                         job_type=IndexJobType.FULL_REINDEX if req.force_full else IndexJobType.INITIAL,
                         stage_callback=queue_cb,
                         parse_results=parse_results,
@@ -267,10 +259,6 @@ async def reindex_repository(req: ReindexRequest):
                 await queue_cb("FAILED", "FAILED", {}, str(e))
             finally:
                 await queue.put(None)
-                try:
-                    await graph_client.close()
-                except Exception:
-                    pass
 
         asyncio.create_task(worker())
 

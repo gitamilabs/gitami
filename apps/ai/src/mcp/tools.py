@@ -153,6 +153,7 @@ async def tool_vector_search(
     repo_id: Optional[str] = None,
     content_type: Optional[str] = None,
     n_results: int = 5,
+    project_id: Optional[str] = None,
 ) -> str:
     """Semantic similarity search across code, PRs, commits, and issues in Vector KB (non-blocking)."""
     import asyncio
@@ -160,6 +161,8 @@ async def tool_vector_search(
     where_clause = {}
     if repo_id:
         where_clause["repo"] = repo_id
+    if project_id and project_id != "default":
+        where_clause["project_id"] = project_id
     if content_type:
         ct_lower = content_type.lower()
         if "code" in ct_lower:
@@ -176,6 +179,7 @@ async def tool_vector_search(
         query_texts=[query_text],
         n_results=n_results,
         where=where_clause if where_clause else None,
+        project_id=project_id,
     )
 
     hits = []
@@ -195,6 +199,7 @@ async def tool_hybrid_search(
     query_text: str,
     branch: str = "main",
     n_results: int = 5,
+    project_id: Optional[str] = None,
 ) -> str:
     """Perform hybrid search combining vector semantic search and graph structural search."""
     from src.kb_unified import UnifiedKB
@@ -204,6 +209,7 @@ async def tool_hybrid_search(
         query_text=query_text,
         branch=branch,
         n_results=n_results,
+        project_id=project_id,
     )
     return json.dumps(res, indent=2)
 

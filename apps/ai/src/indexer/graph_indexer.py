@@ -141,6 +141,9 @@ class GraphIndexer:
             "CREATE INDEX dir_repo_idx IF NOT EXISTS FOR (d:Directory) ON (d.repo_id, d.path)",
             "CREATE INDEX func_repo_idx IF NOT EXISTS FOR (fn:Function) ON (fn.repo_id, fn.name)",
             "CREATE INDEX sym_repo_name_idx IF NOT EXISTS FOR (s:Symbol) ON (s.repo_id, s.name)",
+            "CREATE INDEX repo_project_idx IF NOT EXISTS FOR (r:Repository) ON (r.project_id)",
+            "CREATE INDEX file_project_idx IF NOT EXISTS FOR (f:File) ON (f.project_id, f.repo_id)",
+            "CREATE INDEX sym_project_idx IF NOT EXISTS FOR (s:Symbol) ON (s.project_id, s.repo_id)",
         ]
 
         for query in constraints + indexes:
@@ -150,7 +153,12 @@ class GraphIndexer:
                 logger.warning(f"Notice executing schema constraint/index '{query[:40]}...': {e}")
 
     async def index_repository_node(
-        self, project_id: str, repo_id: str, commit_sha: str, branch: str = "main"
+        self,
+        project_id: str,
+        repo_id: str,
+        commit_sha: str,
+        branch: str = "main",
+        team_id: Optional[str] = None,
     ) -> str:
         """Upsert the top-level :Repository node."""
         repo_uid = f"repo:{repo_id}"
@@ -158,6 +166,7 @@ class GraphIndexer:
         MERGE (r:Repository {uid: $uid})
         SET r.repo_id = $repo_id,
             r.project_id = $project_id,
+            r.team_id = $team_id,
             r.latest_commit_sha = $commit_sha,
             r.default_branch = $branch,
             r.indexed_at = $indexed_at,
@@ -168,6 +177,7 @@ class GraphIndexer:
             "uid": repo_uid,
             "repo_id": repo_id,
             "project_id": project_id,
+            "team_id": team_id or "",
             "commit_sha": commit_sha,
             "branch": branch,
             "indexed_at": datetime.now(timezone.utc).isoformat(),
@@ -177,7 +187,13 @@ class GraphIndexer:
         return repo_uid
 
     async def index_directories_and_files(
-        self, repo_id: str, commit_sha: str, branch: str, parse_results: List[ParseResult]
+        self,
+        repo_id: str,
+        commit_sha: str,
+        branch: str,
+        parse_results: List[ParseResult],
+        project_id: str = "default",
+        team_id: Optional[str] = None,
     ) -> Tuple[int, int]:
         """
         Upsert hierarchical :Directory and :File nodes with strict recursive :CONTAINS containment:
@@ -206,6 +222,8 @@ class GraphIndexer:
                     "language": pr.language,
                     "parent_dir": "",
                     "repo_id": repo_id,
+                    "project_id": project_id,
+                    "team_id": team_id or "",
                     "commit_sha": commit_sha,
                     "branch": branch,
                     "indexed_at": now_str,
@@ -226,6 +244,8 @@ class GraphIndexer:
                             "parent_path": prev_dir if prev_dir else None,
                             "parent_uid": f"dir:{repo_id}:{prev_dir}" if prev_dir else None,
                             "repo_id": repo_id,
+                            "project_id": project_id,
+                            "team_id": team_id or "",
                             "commit_sha": commit_sha,
                             "branch": branch,
                         }
@@ -239,6 +259,8 @@ class GraphIndexer:
                     "parent_dir": parent_dir,
                     "parent_dir_uid": f"dir:{repo_id}:{parent_dir}",
                     "repo_id": repo_id,
+                    "project_id": project_id,
+                    "team_id": team_id or "",
                     "commit_sha": commit_sha,
                     "branch": branch,
                     "indexed_at": now_str,
@@ -253,6 +275,8 @@ class GraphIndexer:
                 d.name = item.name,
                 d.depth = item.depth,
                 d.repo_id = item.repo_id,
+                d.project_id = item.project_id,
+                d.team_id = item.team_id,
                 d.commit_sha = item.commit_sha,
                 d.branch = item.branch
             """
@@ -298,6 +322,8 @@ class GraphIndexer:
                 f.language = item.language,
                 f.parent_dir = item.parent_dir,
                 f.repo_id = item.repo_id,
+                f.project_id = item.project_id,
+                f.team_id = item.team_id,
                 f.commit_sha = item.commit_sha,
                 f.branch = item.branch,
                 f.indexed_at = item.indexed_at,
@@ -341,7 +367,13 @@ class GraphIndexer:
         return len(all_dirs), len(all_files)
 
     async def index_symbols_and_entities(
-        self, repo_id: str, commit_sha: str, branch: str, parse_results: List[ParseResult]
+        self,
+        repo_id: str,
+        commit_sha: str,
+        branch: str,
+        parse_results: List[ParseResult],
+        project_id: str = "default",
+        team_id: Optional[str] = None,
     ) -> int:
         """
         Upsert Class, Function, Method, Interface, Type, and Test nodes with DEFINES & HAS_METHOD.
@@ -384,6 +416,8 @@ class GraphIndexer:
                     "qualified_name": sym.qualified_name,
                     "class_name": sym.class_name,
                     "repo_id": repo_id,
+                    "project_id": project_id,
+                    "team_id": team_id or "",
                     "commit_sha": commit_sha,
                     "branch": branch,
                     "indexed_at": now_str,
@@ -411,6 +445,8 @@ class GraphIndexer:
                 e.qualified_name = item.qualified_name,
                 e.class_name = item.class_name,
                 e.repo_id = item.repo_id,
+                e.project_id = item.project_id,
+                e.team_id = item.team_id,
                 e.commit_sha = item.commit_sha,
                 e.branch = item.branch,
                 e.parser_version = $parser_version,
@@ -550,7 +586,6 @@ class GraphIndexer:
         )
 
         file_dep_batch = []
-        symbol_import_batch = []
         package_batch = []
         call_batch = []
         file_call_batch = []
@@ -576,16 +611,6 @@ class GraphIndexer:
                         "line": imp.line,
                         "commit_sha": commit_sha,
                     })
-                    if imp.imported_symbol and imp.imported_symbol != "*":
-                        symbol_import_batch.append({
-                            "file_uid": file_uid,
-                            "target_file": target_file,
-                            "symbol_name": imp.imported_symbol,
-                            "module_path": mod,
-                            "line": imp.line,
-                            "repo_id": repo_id,
-                            "commit_sha": commit_sha,
-                        })
                 else:
                     if mod and not mod.startswith("."):
                         clean_pkg = (
@@ -697,35 +722,26 @@ class GraphIndexer:
             """
             await self.client.execute_query(pkg_query, {"batch": package_batch})
 
-        # Upsert DEPENDS_ON_FILE
+        # Upsert file IMPORTS and DEPENDS_ON_FILE (strictly File -> File)
         if file_dep_batch:
             file_dep_query = """
             UNWIND $batch AS item
             MATCH (f1:File {uid: item.importer_uid})
             MATCH (f2:File {uid: item.target_uid})
-            MERGE (f1)-[r:DEPENDS_ON_FILE]->(f2)
+            MERGE (f1)-[r:IMPORTS]->(f2)
             SET r.provenance = 'DETERMINISTIC',
                 r.confidence = 1.0,
                 r.module_path = item.module_path,
                 r.line = item.line,
                 r.commit_sha = item.commit_sha
+            MERGE (f1)-[r2:DEPENDS_ON_FILE]->(f2)
+            SET r2.provenance = 'DETERMINISTIC',
+                r2.confidence = 1.0,
+                r2.module_path = item.module_path,
+                r2.line = item.line,
+                r2.commit_sha = item.commit_sha
             """
             await self.client.execute_query(file_dep_query, {"batch": file_dep_batch})
-
-        # Upsert internal IMPORTS
-        if symbol_import_batch:
-            sym_imp_query = """
-            UNWIND $batch AS item
-            MATCH (f:File {uid: item.file_uid})
-            MATCH (s:Symbol {repo_id: item.repo_id, file_path: item.target_file, name: item.symbol_name})
-            MERGE (f)-[r:IMPORTS]->(s)
-            SET r.provenance = 'DETERMINISTIC',
-                r.confidence = 1.0,
-                r.module_path = item.module_path,
-                r.line = item.line,
-                r.commit_sha = item.commit_sha
-            """
-            await self.client.execute_query(sym_imp_query, {"batch": symbol_import_batch})
 
         # Upsert Symbol -> Symbol/Inferred CALLS
         calls_count = 0
@@ -760,7 +776,7 @@ class GraphIndexer:
             await self.client.execute_query(file_calls_query, {"batch": file_call_batch})
             calls_count += len(file_call_batch)
 
-        total_relationships = len(file_dep_batch) + len(symbol_import_batch) + len(package_batch)
+        total_relationships = len(file_dep_batch) + len(package_batch)
         return calls_count, total_relationships
 
     async def index_tests(
@@ -833,6 +849,8 @@ class GraphIndexer:
         new_symbols: List[SymbolNode],
         commit_sha: str,
         branch: str,
+        project_id: str = "default",
+        team_id: Optional[str] = None,
     ) -> Tuple[int, int, int]:
         """
         Reconcile symbols for a modified file:
@@ -871,11 +889,20 @@ class GraphIndexer:
         MATCH (f:File {uid: $file_uid})
         SET f.commit_sha = $commit_sha,
             f.branch = $branch,
+            f.project_id = $project_id,
+            f.team_id = $team_id,
             f.indexed_at = $indexed_at
         """
         await self.client.execute_query(
             update_file_query,
-            {"file_uid": file_uid, "commit_sha": commit_sha, "branch": branch, "indexed_at": now_str}
+            {
+                "file_uid": file_uid,
+                "commit_sha": commit_sha,
+                "branch": branch,
+                "project_id": project_id,
+                "team_id": team_id or "",
+                "indexed_at": now_str,
+            }
         )
 
         # 4. Delete stale symbols canonically owned by this file
@@ -906,6 +933,8 @@ class GraphIndexer:
                 "qualified_name": sym.qualified_name,
                 "class_name": sym.class_name,
                 "repo_id": repo_id,
+                "project_id": project_id,
+                "team_id": team_id or "",
                 "commit_sha": commit_sha,
                 "branch": branch,
                 "indexed_at": now_str,
@@ -930,6 +959,8 @@ class GraphIndexer:
                 e.qualified_name = item.qualified_name,
                 e.class_name = item.class_name,
                 e.repo_id = item.repo_id,
+                e.project_id = item.project_id,
+                e.team_id = item.team_id,
                 e.commit_sha = item.commit_sha,
                 e.branch = item.branch,
                 e.parser_version = $parser_version,

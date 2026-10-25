@@ -152,11 +152,13 @@ export const getNodeCategory = (node: GraphNode): NodeCategory => {
 export const getCanonicalEdgeCategory = (rel: string): EdgeCategory => {
   const r = rel.toUpperCase();
   if (r === "CALLS") return "CALLS";
-  if (r === "IMPORTS") return "IMPORTS";
-  if (r === "DEPENDS_ON" || r === "DEPENDS_ON_FILE") return "DEPENDS_ON";
+  if (r === "IMPORTS" || r === "DEPENDS_ON_FILE") return "IMPORTS";
+  if (r === "DEPENDS_ON") return "DEPENDS_ON";
   if (r === "EXTENDS" || r === "IMPLEMENTS") return "EXTENDS";
   return "CONTAINS";
 };
+
+export type PresetType = "architecture" | "callGraph" | "dataModels" | "all" | "dependencies" | "pureSemantic";
 
 export const VisGraph: React.FC<VisGraphProps> = ({
   data,
@@ -168,23 +170,29 @@ export const VisGraph: React.FC<VisGraphProps> = ({
   const nodesDataSetRef = useRef<any>(null);
   const edgesDataSetRef = useRef<any>(null);
 
-  // Scope & Filter States
+  // Preset & Spotlight States
+  const [activePreset, setActivePreset] = useState<PresetType>("architecture");
+  const [isSpotlightEnabled, setIsSpotlightEnabled] = useState(true);
+  const isSpotlightEnabledRef = useRef(true);
+  useEffect(() => {
+    isSpotlightEnabledRef.current = isSpotlightEnabled;
+  }, [isSpotlightEnabled]);
+
+  // Scope & Filter States (Default to clean Architecture view)
   const [scopeFilter, setScopeFilter] = useState<"all" | "containers" | "files" | "folders">("all");
   const [selectedNodeCategories, setSelectedNodeCategories] = useState<Set<NodeCategory>>(
-    () => new Set(ALL_NODE_CATEGORIES.map((c) => c.id))
+    () => new Set(["Directory", "File", "Package"])
   );
   const [selectedEdgeTypes, setSelectedEdgeTypes] = useState<Set<EdgeCategory>>(
-    () => new Set(ALL_EDGE_CATEGORIES.map((e) => e.id))
+    () => new Set(["IMPORTS", "DEPENDS_ON", "CONTAINS"])
   );
   const [selectedCommunity, setSelectedCommunity] = useState<string | null>(null);
-  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
-  const filterMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<string>("ALL");
   const [filterRel, setFilterRel] = useState<string>("ALL");
-  const [isPhysicsActive, setIsPhysicsActive] = useState(true);
+  const [isPhysicsActive, setIsPhysicsActive] = useState<boolean>(true);
   const [isSearching, setIsSearching] = useState(false);
   const [canvasTheme, setCanvasTheme] = useState<CanvasThemeKey>("slate");
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
@@ -270,19 +278,6 @@ export const VisGraph: React.FC<VisGraphProps> = ({
     };
   }, [updateZoomBadge]);
 
-  // Close filter popover on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (filterMenuRef.current && !filterMenuRef.current.contains(e.target as Node)) {
-        setIsFilterMenuOpen(false);
-      }
-    };
-    if (isFilterMenuOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [isFilterMenuOpen]);
-
   const toggleNodeCategory = useCallback((cat: NodeCategory) => {
     setSelectedNodeCategories((prev) => {
       const next = new Set(prev);
@@ -324,6 +319,7 @@ export const VisGraph: React.FC<VisGraphProps> = ({
   }, []);
 
   const resetAllFilters = useCallback(() => {
+    setActivePreset("all");
     setSelectedNodeCategories(new Set(ALL_NODE_CATEGORIES.map((c) => c.id)));
     setSelectedEdgeTypes(new Set(ALL_EDGE_CATEGORIES.map((e) => e.id)));
     setSelectedCommunity(null);
@@ -332,33 +328,20 @@ export const VisGraph: React.FC<VisGraphProps> = ({
     setFilterRel("ALL");
   }, []);
 
-  const applyPreset = useCallback(
-    (preset: "all" | "callGraph" | "dependencies" | "architecture" | "pureSemantic") => {
-      if (preset === "all") {
-        resetAllFilters();
-      } else if (preset === "callGraph") {
-        setSelectedNodeCategories(new Set(["Function", "Class", "File", "Inferred"]));
-        setSelectedEdgeTypes(new Set(["CALLS"]));
-        setSelectedCommunity(null);
-        setScopeFilter("all");
-      } else if (preset === "dependencies") {
-        setSelectedNodeCategories(new Set(["File", "Package", "Schema", "Class"]));
-        setSelectedEdgeTypes(new Set(["IMPORTS", "DEPENDS_ON"]));
-        setSelectedCommunity(null);
-        setScopeFilter("files");
-      } else if (preset === "architecture") {
-        setSelectedNodeCategories(new Set(["Directory", "File"]));
-        setSelectedEdgeTypes(new Set(["CONTAINS", "DEPENDS_ON"]));
-        setSelectedCommunity(null);
-        setScopeFilter("files");
-      } else if (preset === "pureSemantic") {
-        setSelectedNodeCategories(new Set(ALL_NODE_CATEGORIES.map((c) => c.id)));
-        setSelectedEdgeTypes(new Set(["CALLS", "IMPORTS", "DEPENDS_ON", "EXTENDS"]));
-        setSelectedCommunity(null);
+  const toggleSpotlight = useCallback(() => {
+    setIsSpotlightEnabled((prev) => {
+      const next = !prev;
+      isSpotlightEnabledRef.current = next;
+      if (networkRef.current) {
+        networkRef.current.setOptions({
+          interaction: {
+            hoverConnectedEdges: next,
+          },
+        });
       }
-    },
-    [resetAllFilters]
-  );
+      return next;
+    });
+  }, []);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -497,6 +480,19 @@ export const VisGraph: React.FC<VisGraphProps> = ({
     return cMap;
   }, [parentMap]);
 
+  // Helper to collect folder container IDs (Repository, Directory) - leaves files collapsed for clean architecture overview
+  const getFolderContainerIds = useCallback(() => {
+    const folders = new Set<string>();
+    if (rootId) folders.add(rootId);
+    data.nodes.forEach((n) => {
+      const t = n.type || "Symbol";
+      if (t === "Directory" || t === "Repository") {
+        folders.add(n.id);
+      }
+    });
+    return folders;
+  }, [rootId, data.nodes]);
+
   // Helper to collect all container node IDs (Repository, Directory, File, Class, Package, or any node with children)
   const getAllContainerIds = useCallback(() => {
     const containers = new Set<string>();
@@ -519,25 +515,8 @@ export const VisGraph: React.FC<VisGraphProps> = ({
   }, [rootId, data.nodes, childrenMap]);
 
   // Expansion State: stores IDs of currently expanded containers
-  // Initial state: Completely open graph by default! All containers start expanded.
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(() => {
-    const initial = new Set<string>();
-    if (rootId) initial.add(rootId);
-    data.nodes.forEach((n) => {
-      const t = n.type || "Symbol";
-      const hasChildren = (childrenMap.get(n.id)?.length || 0) > 0;
-      if (
-        t === "Directory" ||
-        t === "Repository" ||
-        t === "File" ||
-        t === "Class" ||
-        t === "Package" ||
-        hasChildren
-      ) {
-        initial.add(n.id);
-      }
-    });
-    return initial;
+    return getAllContainerIds();
   });
 
   // Re-sync initial expanded state when repo/root or dataset changes
@@ -549,6 +528,51 @@ export const VisGraph: React.FC<VisGraphProps> = ({
       setExpandedNodeIds(getAllContainerIds());
     }
   }, [rootId, data.nodes.length, getAllContainerIds]);
+
+  const applyPreset = useCallback(
+    (preset: PresetType) => {
+      setActivePreset(preset);
+      if (preset === "all") {
+        resetAllFilters();
+        setExpandedNodeIds(getAllContainerIds());
+      } else if (preset === "architecture") {
+        setSelectedNodeCategories(new Set(["Directory", "File", "Package"]));
+        setSelectedEdgeTypes(new Set(["IMPORTS", "DEPENDS_ON", "CONTAINS"]));
+        setSelectedCommunity(null);
+        setScopeFilter("all");
+        setExpandedNodeIds(getFolderContainerIds());
+      } else if (preset === "callGraph") {
+        setSelectedNodeCategories(new Set<NodeCategory>(["File", "Function", "Class", "Inferred"]));
+        setSelectedEdgeTypes(new Set<EdgeCategory>(["CALLS", "IMPORTS"]));
+        setSelectedCommunity(null);
+        setScopeFilter("all");
+        setExpandedNodeIds(getAllContainerIds());
+      } else if (preset === "dataModels") {
+        setSelectedNodeCategories(new Set<NodeCategory>(["Class", "Schema", "File"]));
+        setSelectedEdgeTypes(new Set<EdgeCategory>(["EXTENDS", "DEPENDS_ON", "CONTAINS"]));
+        setSelectedCommunity(null);
+        setScopeFilter("all");
+        setExpandedNodeIds(getAllContainerIds());
+      } else if (preset === "dependencies") {
+        setSelectedNodeCategories(new Set<NodeCategory>(["Directory", "File", "Package"]));
+        setSelectedEdgeTypes(new Set<EdgeCategory>(["IMPORTS", "DEPENDS_ON"]));
+        setSelectedCommunity(null);
+        setScopeFilter("all");
+        setExpandedNodeIds(getFolderContainerIds());
+      } else if (preset === "pureSemantic") {
+        setSelectedNodeCategories(new Set<NodeCategory>(["Function", "Class", "Schema", "Variable", "Inferred"]));
+        setSelectedEdgeTypes(new Set<EdgeCategory>(["CALLS", "EXTENDS"]));
+        setSelectedCommunity(null);
+        setScopeFilter("all");
+        setExpandedNodeIds(getAllContainerIds());
+      }
+    },
+    [resetAllFilters, getAllContainerIds, getFolderContainerIds]
+  );
+
+  const collapseToFiles = useCallback(() => {
+    setExpandedNodeIds(getFolderContainerIds());
+  }, [getFolderContainerIds]);
 
   // Deterministic, non-overlapping hierarchical radial pre-layout
   // Distributes nodes across broad angular sectors by folder and file hierarchy so 200+ nodes start sparse without collision
@@ -602,7 +626,7 @@ export const VisGraph: React.FC<VisGraphProps> = ({
       const totalAngleSpan = endAngle - startAngle;
       let currentAngle = startAngle;
 
-      children.forEach((childId) => {
+      children.forEach((childId, childIdx) => {
         if (visitedForLayout.has(childId)) return;
         visitedForLayout.add(childId);
 
@@ -616,21 +640,33 @@ export const VisGraph: React.FC<VisGraphProps> = ({
         const childMidAngle = childStartAngle + angleShare / 2;
         currentAngle += angleShare;
 
-        // Radius from parent based on hierarchical tier
-        let radius = 220;
+        // Universal density-adaptive radius:
+        // Automatically expands when a node has many children so dense subtrees stay sparse and uncluttered
+        const siblingCount = children.length;
+        let baseRadius = 180;
         if (parentDepth === 0) {
-          // Direct children of root repository
-          radius = childType === "Directory" ? 780 : 420;
+          // Direct children of root repository (e.g. apps, src, packages, config files)
+          baseRadius = childType === "Directory"
+            ? Math.max(680, 420 + Math.min(siblingCount * 28, 450))
+            : Math.max(380, 260 + Math.min(siblingCount * 18, 260));
         } else if (childType === "Directory") {
-          radius = 500;
+          baseRadius = Math.max(440, 280 + Math.min(siblingCount * 22, 360));
         } else if (childType === "File") {
-          radius = 320;
+          baseRadius = Math.max(280, 190 + Math.min(siblingCount * 14, 260));
         } else if (childType === "Class" || childType === "Schema" || childType === "Router") {
-          radius = 220;
+          baseRadius = Math.max(200, 140 + Math.min(siblingCount * 10, 180));
         } else {
-          // Method, Function, Variable, Enum, Type
-          radius = 160;
+          // Method, Function, Variable, Enum, Type (Leaf symbols)
+          baseRadius = Math.max(160, 110 + Math.min(siblingCount * 7, 220));
         }
+
+        // Concentric shell staggering for populated nodes (> 6 children)
+        // Staggers alternating children across 2 or 3 radial tiers so labels never overlap along a single circumference
+        const ringStagger = siblingCount > 6
+          ? (childIdx % (siblingCount > 18 ? 3 : 2)) * 52
+          : 0;
+
+        const radius = baseRadius + ringStagger;
 
         const childPos = {
           x: Math.round(parentPos.x + Math.cos(childMidAngle) * radius),
@@ -1247,12 +1283,12 @@ export const VisGraph: React.FC<VisGraphProps> = ({
           size = 11;
           labelPrefix = "📦 ";
         } else {
-          // Method / Function / Variable / Type
+          // Method / Function / Variable / Type (Leaf nodes)
           shape = "dot";
           bgColor = "#10b981";
           borderColor = "#6ee7b7";
           borderWidth = 1.2;
-          size = 9;
+          size = 7;
           labelPrefix = t === "Method" || t === "Function" ? "⚡ " : "";
         }
 
@@ -1292,7 +1328,7 @@ export const VisGraph: React.FC<VisGraphProps> = ({
           },
           font: {
             color: isHighlighted ? (canvasTheme === "light" ? "#0f172a" : "#f8fafc") : "#64748b",
-            size: t === "Repository" ? 14 : t === "Directory" ? 12 : t === "File" ? 10 : 9,
+            size: t === "Repository" ? 14 : t === "Directory" ? 12 : t === "File" ? 10 : 8,
             face: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace",
             strokeWidth: 4,
             strokeColor: canvasTheme === "light" ? "#ffffff" : CANVAS_THEMES[canvasTheme].bgColor,
@@ -1337,38 +1373,45 @@ export const VisGraph: React.FC<VisGraphProps> = ({
         const parentNode = nodeMap.get(expandedId);
         const parentType = parentNode?.type || "Symbol";
 
+        const visibleChildCount = children.filter((cid) => isAllowedAndVisible(cid)).length;
+        const densityBonus = Math.min(visibleChildCount * 7.5, 260);
+
         children.forEach((childId) => {
           if (isAllowedAndVisible(childId) && isAllowedAndVisible(expandedId)) {
           const childNode = nodeMap.get(childId);
           const childType = childNode?.type || "Symbol";
+          const childDegree = nodeDegrees.get(childId) || 0;
+          const trafficBonus = Math.min(childDegree * 4, 70);
 
-          let edgeLength = 160;
+          let baseSpring = 180;
           let edgeWidth = 1.6;
-          let edgeColor = isLight ? "rgba(217, 119, 6, 0.75)" : "rgba(245, 158, 11, 0.7)";
+          let edgeColor = isLight ? "rgba(100, 116, 139, 0.6)" : "rgba(148, 163, 184, 0.5)";
 
           if (parentType === "Repository") {
-            edgeLength = 320;
+            baseSpring = 340;
             edgeWidth = 2.4;
             edgeColor = isLight ? "rgba(59, 130, 246, 0.8)" : "rgba(96, 165, 250, 0.75)";
           } else if (parentType === "Directory") {
             if (childType === "Directory") {
-              edgeLength = 260;
+              baseSpring = 280;
               edgeWidth = 2.0;
               edgeColor = isLight ? "rgba(217, 119, 6, 0.8)" : "rgba(245, 158, 11, 0.75)";
             } else {
-              edgeLength = 200;
+              baseSpring = 210;
               edgeWidth = 1.6;
               edgeColor = isLight ? "rgba(2, 132, 199, 0.75)" : "rgba(56, 189, 248, 0.7)";
             }
           } else if (parentType === "File") {
-            edgeLength = 130;
+            baseSpring = 150;
             edgeWidth = 1.2;
             edgeColor = isLight ? "rgba(99, 102, 241, 0.65)" : "rgba(165, 180, 252, 0.6)";
           } else if (parentType === "Class") {
-            edgeLength = 85;
+            baseSpring = 100;
             edgeWidth = 1.0;
             edgeColor = isLight ? "rgba(16, 185, 129, 0.65)" : "rgba(110, 231, 183, 0.6)";
           }
+
+          const edgeLength = baseSpring + densityBonus + trafficBonus;
 
           containmentEdges.push({
             id: `containment-${expandedId}->${childId}`,
@@ -1385,6 +1428,9 @@ export const VisGraph: React.FC<VisGraphProps> = ({
               hover: "#fde047",
             },
             width: edgeWidth,
+            baseColor: edgeColor,
+            baseWidth: edgeWidth,
+            baseOpacity: 1.0,
             dashes: false,
             smooth: {
               enabled: true,
@@ -1483,21 +1529,42 @@ export const VisGraph: React.FC<VisGraphProps> = ({
       const edgeCat = getCanonicalEdgeCategory(rel);
       if (!selectedEdgeTypes.has(edgeCat)) return;
 
-      const rawSp = getVisibleProxy(rawEdge.source);
-      const rawTp = getVisibleProxy(rawEdge.target);
+      let effectiveTarget = rawEdge.target;
+      let effectiveSource = rawEdge.source;
+
+      // File imports strictly belong to the file level and must NEVER point to internal variables or functions
+      if (edgeCat === "IMPORTS") {
+        const containingTargetFile = getContainingFile(rawEdge.target);
+        if (containingTargetFile) effectiveTarget = containingTargetFile;
+        const containingSourceFile = getContainingFile(rawEdge.source);
+        if (containingSourceFile) effectiveSource = containingSourceFile;
+      }
+
+      const rawSp = getVisibleProxy(effectiveSource);
+      const rawTp = getVisibleProxy(effectiveTarget);
 
       if (!rawSp || !rawTp) return;
 
-      // Resolve source and target endpoints:
-      // If either endpoint is an expanded container, resolve down to its visible internal things
-      const sp = resolveEndpoint(rawEdge.source, rawSp, false, rawEdge.target);
-      const tp = resolveEndpoint(rawEdge.target, rawTp, true, rawEdge.source);
+      let sp: string | null;
+      let tp: string | null;
+
+      if (edgeCat === "IMPORTS") {
+        // File imports connect strictly File to File and must NEVER resolve down to child variables or functions
+        sp = rawSp;
+        tp = rawTp;
+      } else {
+        // Resolve source and target endpoints:
+        // If either endpoint is an expanded container, resolve down to its visible internal things
+        sp = resolveEndpoint(rawEdge.source, rawSp, false, rawEdge.target);
+        tp = resolveEndpoint(rawEdge.target, rawTp, true, rawEdge.source);
+      }
 
       // Both resolved endpoints must exist, be visible, and not form self-loops
       if (!sp || !tp || sp === tp) return;
 
       // An expanded container must NEVER receive an inward semantic edge or originate an outward semantic edge
-      if (isExpandedContainer(tp) || isExpandedContainer(sp)) return;
+      // (Except for IMPORTS where the files themselves are the true semantic endpoints)
+      if (edgeCat !== "IMPORTS" && (isExpandedContainer(tp) || isExpandedContainer(sp))) return;
 
       const key = `${sp}-->${tp}`;
       const existing = edgeGroups.get(key);
@@ -1526,32 +1593,45 @@ export const VisGraph: React.FC<VisGraphProps> = ({
 
       if (!selectedEdgeTypes.has(getCanonicalEdgeCategory(primaryRel))) return;
 
-      let color = isLight ? "rgba(100, 116, 139, 0.45)" : "rgba(148, 163, 184, 0.35)";
-      let width = Math.min(1.2 + group.count * 0.25, 3.2);
+      let color = isLight ? "rgba(100, 116, 139, 0.85)" : "rgba(148, 163, 184, 0.85)";
+      let width = Math.min(1.3 + group.count * 0.25, 3.5);
       let dashes: boolean | number[] = false;
-      let springLength = 360;
-
+      let baseLength = 320;
       if (primaryRel === "CALLS") {
-        color = isLight ? "rgba(147, 51, 234, 0.9)" : "rgba(168, 85, 247, 0.85)";
-        springLength = 360;
+        color = isLight ? "rgba(147, 51, 234, 0.95)" : "rgba(168, 85, 247, 0.9)";
+        baseLength = 320;
         dashes = false;
       } else if (primaryRel === "IMPORTS") {
-        color = isLight ? "rgba(5, 150, 105, 0.9)" : "rgba(52, 211, 153, 0.8)";
+        color = isLight ? "rgba(5, 150, 105, 0.95)" : "rgba(52, 211, 153, 0.9)";
         dashes = [6, 4];
-        springLength = 380;
+        baseLength = 380;
       } else if (primaryRel === "DEPENDS_ON_FILE") {
-        color = isLight ? "rgba(5, 150, 105, 0.85)" : "rgba(52, 211, 153, 0.75)";
+        color = isLight ? "rgba(5, 150, 105, 0.9)" : "rgba(52, 211, 153, 0.85)";
         dashes = [6, 4];
-        springLength = 380;
+        baseLength = 380;
       } else if (primaryRel === "DEPENDS_ON") {
-        color = isLight ? "rgba(2, 132, 199, 0.85)" : "rgba(56, 189, 248, 0.75)";
-        dashes = [3, 3];
-        springLength = 320;
-      } else if (primaryRel === "EXTENDS") {
-        color = isLight ? "rgba(217, 119, 6, 0.85)" : "rgba(251, 191, 36, 0.8)";
+        color = isLight ? "rgba(2, 132, 199, 0.9)" : "rgba(56, 189, 248, 0.85)";
         dashes = [4, 4];
-        springLength = 340;
+        baseLength = 340;
+      } else if (primaryRel === "EXTENDS") {
+        color = isLight ? "rgba(217, 119, 6, 0.9)" : "rgba(251, 191, 36, 0.85)";
+        dashes = [4, 4];
+        baseLength = 300;
       }
+
+      // Universal density & clutter adaptation:
+      // High-traffic hubs and dense connectors get longer springs dynamically
+      // so clusters remain clearly separated and never pull into a dense knot
+      const fromDegree = nodeDegrees.get(group.from) || 0;
+      const toDegree = nodeDegrees.get(group.to) || 0;
+      const hubTraffic = Math.max(fromDegree, toDegree);
+      const hubBonus = Math.min(hubTraffic * 6, 260);
+
+      // Root connections always have extra spacing so the central root doesn't crowd perimeter clusters
+      const isRootConnected = group.to === rootId || group.from === rootId;
+      const rootBonus = isRootConnected ? 160 : 0;
+
+      const springLength = baseLength + hubBonus + rootBonus;
 
       const isHighlighted = highlightedChain
         ? highlightedChain.has(group.from) && highlightedChain.has(group.to)
@@ -1597,6 +1677,9 @@ export const VisGraph: React.FC<VisGraphProps> = ({
           hover: "#fde047",
         },
         width: isHighlighted ? width : 0.8,
+        baseColor: color,
+        baseWidth: width,
+        baseOpacity: 1.0,
         dashes,
         smooth: hasReciprocal
           ? {
@@ -1627,10 +1710,10 @@ export const VisGraph: React.FC<VisGraphProps> = ({
         enabled: isPhysicsActive,
         solver: "barnesHut",
         barnesHut: {
-          gravitationalConstant: -26000,
-          centralGravity: 0.02,
-          springLength: 350,
-          springConstant: 0.04,
+          gravitationalConstant: -38000,
+          centralGravity: 0.011,
+          springLength: 360,
+          springConstant: 0.035,
           damping: 0.65,
           avoidOverlap: 1.0,
         },
@@ -1638,13 +1721,14 @@ export const VisGraph: React.FC<VisGraphProps> = ({
         minVelocity: 0.75,
         stabilization: {
           enabled: true,
-          iterations: 120,
+          iterations: 140,
           updateInterval: 25,
           fit: true,
         },
       },
       interaction: {
         hover: true,
+        hoverConnectedEdges: isSpotlightEnabled,
         tooltipDelay: 120,
         selectable: true,
         selectConnectedEdges: true,
@@ -1780,6 +1864,8 @@ export const VisGraph: React.FC<VisGraphProps> = ({
           updateZoomBadge(targetScale);
         }
       });
+
+
     } else {
       // Smooth update of existing canvas without resetting camera or view
       const existingPositions = networkRef.current.getPositions();
@@ -1813,7 +1899,8 @@ export const VisGraph: React.FC<VisGraphProps> = ({
           const pPos = existingPositions[parentId];
           // Distribute evenly along a wide circumference so labels never touch
           const angle = (idx / total) * 2 * Math.PI - Math.PI / 2;
-          const radius = 240 + Math.min(total * 18, 260);
+          const ringStagger = total > 6 ? (idx % (total > 16 ? 3 : 2)) * 48 : 0;
+          const radius = 220 + Math.min(total * 12, 260) + ringStagger;
           return {
             ...node,
             x: pPos.x + Math.cos(angle) * radius,
@@ -1867,6 +1954,16 @@ export const VisGraph: React.FC<VisGraphProps> = ({
     parentMap,
     initialPositionsMap,
   ]);
+
+  // Sync physics state
+  useEffect(() => {
+    if (networkRef.current) {
+      networkRef.current.setOptions({ physics: { enabled: isPhysicsActive } });
+      if (isPhysicsActive) {
+        networkRef.current.startSimulation();
+      }
+    }
+  }, [isPhysicsActive]);
 
   // Focus on node with automatic expansion of ancestor path
   const focusOnNode = useCallback(
@@ -1983,308 +2080,102 @@ export const VisGraph: React.FC<VisGraphProps> = ({
             )}
           </div>
 
-          {/* Scope / Level of Detail (LOD) Selector */}
-          <div className="flex items-center gap-1 bg-white/[0.03] p-0.5 rounded-md border border-white/[0.06] text-xs">
-            <span className="text-[10px] text-zinc-500 px-1 font-mono uppercase hidden sm:inline">Scope:</span>
-            {(["all", "containers", "files", "folders"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setScopeFilter(s)}
-                className={`px-2 py-0.5 rounded font-mono text-[10px] capitalize transition-colors cursor-pointer ${
-                  scopeFilter === s
-                    ? "bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
+          {/* View Presets */}
+          <div className="flex items-center gap-1 bg-white/[0.03] p-0.5 rounded-md border border-white/[0.06] text-xs shrink-0">
+            <button
+              onClick={() => applyPreset("architecture")}
+              className={`px-2 py-0.5 rounded font-mono text-[10px] flex items-center gap-1 transition-colors cursor-pointer ${
+                activePreset === "architecture"
+                  ? "bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30 shadow-sm shadow-amber-500/10"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title="Architecture view: Folders, Files, and Package dependencies"
+            >
+              <span>🏛️</span>
+              <span className="hidden sm:inline">Architecture</span>
+            </button>
+            <button
+              onClick={() => applyPreset("callGraph")}
+              className={`px-2 py-0.5 rounded font-mono text-[10px] flex items-center gap-1 transition-colors cursor-pointer ${
+                activePreset === "callGraph"
+                  ? "bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30 shadow-sm shadow-purple-500/10"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title="Call Flow: Functions, Methods, and execution call lines"
+            >
+              <span>⚡</span>
+              <span className="hidden sm:inline">Call Flow</span>
+            </button>
+            <button
+              onClick={() => applyPreset("dataModels")}
+              className={`px-2 py-0.5 rounded font-mono text-[10px] flex items-center gap-1 transition-colors cursor-pointer ${
+                activePreset === "dataModels"
+                  ? "bg-sky-500/20 text-sky-300 font-semibold border border-sky-500/30 shadow-sm shadow-sky-500/10"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title="Data Models: Classes, Schemas, Enums, and inheritance"
+            >
+              <span>🔷</span>
+              <span className="hidden sm:inline">Data Models</span>
+            </button>
+            <button
+              onClick={() => applyPreset("all")}
+              className={`px-2 py-0.5 rounded font-mono text-[10px] flex items-center gap-1 transition-colors cursor-pointer ${
+                activePreset === "all"
+                  ? "bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+              title="Full Graph: All nodes and relationships"
+            >
+              <span>🌐</span>
+              <span className="hidden sm:inline">All</span>
+            </button>
           </div>
 
+          {/* Hover Spotlight Toggle */}
+          <button
+            onClick={toggleSpotlight}
+            className={`px-2 py-1 rounded-md border text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 ${
+              isSpotlightEnabled
+                ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 shadow-sm shadow-emerald-500/10"
+                : "bg-white/[0.03] border-white/[0.08] text-zinc-500 hover:text-zinc-300"
+            }`}
+            title="Spotlight: Hovering over any node dims unrelated nodes and highlights connected paths"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span className="hidden lg:inline">Spotlight</span>
+          </button>
+
           {/* Collapsible Hierarchy Controls */}
-          <div className="flex items-center gap-1 bg-white/[0.03] p-0.5 rounded-md border border-white/[0.06] text-xs">
+          <div className="flex items-center gap-1 bg-white/[0.03] p-0.5 rounded-md border border-white/[0.06] text-xs shrink-0">
             <button
               onClick={collapseAll}
               className="px-2 py-0.5 rounded font-mono text-[10px] text-zinc-400 hover:text-amber-300 hover:bg-white/[0.04] transition-colors flex items-center gap-1 cursor-pointer"
               title="Collapse all folders to root view"
             >
               <FolderMinus className="w-3 h-3 text-amber-400" />
-              <span className="hidden xl:inline">Collapse All</span>
+              <span className="hidden xl:inline">Root</span>
+            </button>
+            <button
+              onClick={collapseToFiles}
+              className="px-2 py-0.5 rounded font-mono text-[10px] text-zinc-400 hover:text-sky-300 hover:bg-white/[0.04] transition-colors flex items-center gap-1 cursor-pointer"
+              title="Expand folders but collapse files (Architecture view)"
+            >
+              <FolderTree className="w-3 h-3 text-sky-400" />
+              <span className="hidden xl:inline">Files</span>
             </button>
             <button
               onClick={expandAll}
-              className="px-2 py-0.5 rounded font-mono text-[10px] text-zinc-400 hover:text-amber-300 hover:bg-white/[0.04] transition-colors flex items-center gap-1 cursor-pointer"
-              title="Expand all folders"
+              className="px-2 py-0.5 rounded font-mono text-[10px] text-zinc-400 hover:text-emerald-300 hover:bg-white/[0.04] transition-colors flex items-center gap-1 cursor-pointer"
+              title="Expand all folders and files"
             >
-              <FolderPlus className="w-3 h-3 text-amber-400" />
-              <span className="hidden xl:inline">Expand All</span>
+              <FolderPlus className="w-3 h-3 text-emerald-400" />
+              <span className="hidden xl:inline">All</span>
             </button>
           </div>
 
-          {/* Interactive Filters Dropdown Popover */}
-          <div className="relative" ref={filterMenuRef}>
-            <button
-              onClick={() => setIsFilterMenuOpen((prev) => !prev)}
-              className={`px-2.5 py-1 rounded-md border text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer ${
-                activeFilterCount > 0
-                  ? "bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25 shadow-sm shadow-amber-500/10"
-                  : isFilterMenuOpen
-                  ? "bg-white/[0.08] border-white/20 text-white"
-                  : "bg-white/[0.03] border-white/[0.08] text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
-              }`}
-              title="Filter graph nodes and edge relations"
-            >
-              <Filter className="w-3.5 h-3.5" />
-              <span>Filters</span>
-              {activeFilterCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-black text-[10px] font-bold">
-                  {activeFilterCount}
-                </span>
-              )}
-              <ChevronDown
-                className={`w-3 h-3 transition-transform ${isFilterMenuOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {/* Floating Filter Popover Dropdown */}
-            {isFilterMenuOpen && (
-              <div className="absolute left-0 top-full mt-2 w-80 sm:w-96 bg-[#0e1017] border border-white/10 rounded-xl shadow-2xl p-3.5 z-50 animate-fade-in text-xs font-mono space-y-3.5 divide-y divide-white/[0.06] max-h-[85vh] overflow-y-auto">
-                {/* Header & Reset */}
-                <div className="flex items-center justify-between pb-1">
-                  <div className="flex items-center gap-2">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
-                    <span className="font-bold text-white text-xs">Graph Filters</span>
-                    {activeFilterCount > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        {activeFilterCount} active
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {activeFilterCount > 0 && (
-                      <button
-                        onClick={resetAllFilters}
-                        className="text-[11px] text-amber-400 hover:text-amber-300 underline cursor-pointer"
-                      >
-                        Reset All
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setIsFilterMenuOpen(false)}
-                      className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06] cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Quick Presets */}
-                <div className="pt-2 space-y-1.5">
-                  <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block">
-                    Presets
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    <button
-                      onClick={() => applyPreset("all")}
-                      className={`px-2 py-0.5 rounded text-[10px] border transition-colors cursor-pointer ${
-                        activeFilterCount === 0
-                          ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/40 font-semibold"
-                          : "bg-white/[0.02] text-zinc-400 border-white/[0.06] hover:text-white"
-                      }`}
-                    >
-                      All
-                    </button>
-                    <button
-                      onClick={() => applyPreset("callGraph")}
-                      className="px-2 py-0.5 rounded text-[10px] border bg-white/[0.02] text-zinc-400 border-white/[0.06] hover:text-purple-300 hover:border-purple-500/30 transition-colors cursor-pointer"
-                    >
-                      ⚡ Call Graph
-                    </button>
-                    <button
-                      onClick={() => applyPreset("dependencies")}
-                      className="px-2 py-0.5 rounded text-[10px] border bg-white/[0.02] text-zinc-400 border-white/[0.06] hover:text-emerald-300 hover:border-emerald-500/30 transition-colors cursor-pointer"
-                    >
-                      📦 Dependencies
-                    </button>
-                    <button
-                      onClick={() => applyPreset("architecture")}
-                      className="px-2 py-0.5 rounded text-[10px] border bg-white/[0.02] text-zinc-400 border-white/[0.06] hover:text-amber-300 hover:border-amber-500/30 transition-colors cursor-pointer"
-                    >
-                      📁 Architecture
-                    </button>
-                    <button
-                      onClick={() => applyPreset("pureSemantic")}
-                      className="px-2 py-0.5 rounded text-[10px] border bg-white/[0.02] text-zinc-400 border-white/[0.06] hover:text-sky-300 hover:border-sky-500/30 transition-colors cursor-pointer"
-                    >
-                      ✨ Pure Semantic
-                    </button>
-                  </div>
-                </div>
-
-                {/* Node Types Section */}
-                <div className="pt-2 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
-                      Node Kinds ({selectedNodeCategories.size}/{ALL_NODE_CATEGORIES.length})
-                    </span>
-                    <button
-                      onClick={selectAllNodeCategories}
-                      className="text-[10px] text-zinc-500 hover:text-zinc-300 cursor-pointer"
-                    >
-                      Select All
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {ALL_NODE_CATEGORIES.map((cat) => {
-                      const isSelected = selectedNodeCategories.has(cat.id);
-                      const count = nodeCategoryCounts[cat.id] || 0;
-                      return (
-                        <div
-                          key={`popover-node-${cat.id}`}
-                          className={`group flex items-center justify-between px-2 py-1.5 rounded-md border text-[11px] transition-colors cursor-pointer ${
-                            isSelected
-                              ? "bg-white/[0.05] border-white/[0.12] text-zinc-200"
-                              : "bg-white/[0.01] border-white/[0.04] text-zinc-500 opacity-60"
-                          }`}
-                          onClick={() => toggleNodeCategory(cat.id)}
-                        >
-                          <div className="flex items-center gap-1.5 min-w-0 pr-1">
-                            <span className="text-xs">{cat.icon}</span>
-                            <span className="truncate">{cat.label}</span>
-                          </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <span className="text-[10px] text-zinc-500 font-mono">
-                              {count}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                isolateNodeCategory(cat.id);
-                              }}
-                              className="text-[9px] uppercase px-1 py-0.2 rounded bg-white/[0.06] hover:bg-white/[0.15] text-zinc-400 hover:text-white hidden group-hover:inline-block cursor-pointer"
-                              title={`Show only ${cat.label}`}
-                            >
-                              only
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Edge Types Section */}
-                <div className="pt-2 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
-                      Edge Types ({selectedEdgeTypes.size}/{ALL_EDGE_CATEGORIES.length})
-                    </span>
-                    <button
-                      onClick={selectAllEdgeTypes}
-                      className="text-[10px] text-zinc-500 hover:text-zinc-300 cursor-pointer"
-                    >
-                      Select All
-                    </button>
-                  </div>
-                  <div className="space-y-1">
-                    {ALL_EDGE_CATEGORIES.map((edge) => {
-                      const isSelected = selectedEdgeTypes.has(edge.id);
-                      const count = edgeCategoryCounts[edge.id] || 0;
-                      return (
-                        <div
-                          key={`popover-edge-${edge.id}`}
-                          className={`group flex items-center justify-between p-1.5 rounded-md border text-[11px] transition-colors cursor-pointer ${
-                            isSelected
-                              ? "bg-white/[0.05] border-white/[0.12] text-zinc-200"
-                              : "bg-white/[0.01] border-white/[0.04] text-zinc-500 opacity-60"
-                          }`}
-                          onClick={() => toggleEdgeType(edge.id)}
-                        >
-                          <div className="flex items-center gap-2 min-w-0 pr-2">
-                            <span className={`font-mono text-xs font-bold ${edge.color}`}>
-                              {edge.symbol}
-                            </span>
-                            <div className="min-w-0">
-                              <span className="block truncate">{edge.label}</span>
-                              <span className="text-[9px] text-zinc-500 block truncate font-mono">
-                                {edge.desc}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className="text-[10px] text-zinc-400 font-mono font-semibold">
-                              {count}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                isolateEdgeType(edge.id);
-                              }}
-                              className="text-[9px] uppercase px-1 py-0.2 rounded bg-white/[0.06] hover:bg-white/[0.15] text-zinc-400 hover:text-white hidden group-hover:inline-block cursor-pointer"
-                              title={`Show only ${edge.label}`}
-                            >
-                              only
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Active Community Filter Info */}
-                {selectedCommunity && (
-                  <div className="pt-2 flex items-center justify-between p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
-                    <div className="min-w-0 pr-2">
-                      <span className="text-[10px] text-indigo-400 block uppercase font-bold">
-                        Isolated Code Area
-                      </span>
-                      <span className="text-zinc-200 truncate block font-mono text-[11px]">
-                        {selectedCommunity}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setSelectedCommunity(null)}
-                      className="px-2 py-0.5 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 text-[10px] border border-indigo-500/30 cursor-pointer shrink-0"
-                    >
-                      Clear Area
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Middle: Graphify Statistic Pill Badges */}
-        <div className="hidden lg:flex items-center gap-1.5 overflow-x-auto py-1">
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-mono">
-            <Folder className="w-3 h-3 text-amber-400" />
-            <span className="font-bold text-amber-400">{stats.directories}</span>
-            <span className="text-amber-400/80 text-[10px]">Folders</span>
-          </div>
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-xs font-mono">
-            <FileText className="w-3 h-3 text-sky-400" />
-            <span className="font-bold text-sky-400">{stats.files}</span>
-            <span className="text-sky-400/80 text-[10px]">Files</span>
-          </div>
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-xs font-mono">
-            <span className="font-bold text-indigo-400">{stats.symbols}</span>
-            <span className="text-indigo-400/80 text-[10px]">Symbols</span>
-          </div>
-          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs font-mono">
-            <span className="font-bold text-white">{stats.edges}</span>
-            <span className="text-zinc-400 text-[10px]">Edges</span>
-          </div>
-          {stats.inferred > 0 && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-mono">
-              <span className="font-bold text-amber-400">{stats.inferred}</span>
-              <span className="text-amber-400/80 text-[10px]">Inferred</span>
-            </div>
-          )}
-        </div>
 
         {/* Right: Canvas Controls & Sidebar Toggle */}
         <div className="flex items-center gap-1.5 shrink-0">
@@ -2375,17 +2266,25 @@ export const VisGraph: React.FC<VisGraphProps> = ({
 
           <div className="h-4 w-px bg-white/[0.08]" />
 
-          {/* Sidebar Toggle Button */}
+          {/* Sidebar Toggle Button (Filters & Details) */}
           <button
             onClick={() => setIsDrawerOpen(!isDrawerOpen)}
-            className={`p-1.5 rounded-md border text-xs transition-colors cursor-pointer flex items-center gap-1 ${
+            className={`px-2.5 py-1 rounded-md border text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer ${
               isDrawerOpen
-                ? "bg-white/[0.08] border-white/[0.12] text-white"
-                : "bg-white/[0.03] border-white/[0.06] text-zinc-400 hover:text-white"
+                ? "bg-white/[0.08] border-white/20 text-white shadow-sm"
+                : activeFilterCount > 0
+                ? "bg-amber-500/15 border-amber-500/40 text-amber-300 hover:bg-amber-500/25 shadow-sm shadow-amber-500/10"
+                : "bg-white/[0.03] border-white/[0.08] text-zinc-400 hover:text-white hover:bg-white/[0.06]"
             }`}
-            title={isDrawerOpen ? "Collapse Sidebar" : "Expand Sidebar"}
+            title={isDrawerOpen ? "Close Filters & Info Sidebar" : "Open Filters & Info Sidebar"}
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-black text-[10px] font-bold">
+                {activeFilterCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -2652,58 +2551,6 @@ export const VisGraph: React.FC<VisGraphProps> = ({
                   </div>
                 )}
 
-                {/* Filter Presets */}
-                <div className="p-3.5 space-y-2 shrink-0">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block">
-                      Quick Presets
-                    </span>
-                    {activeFilterCount > 0 && (
-                      <button
-                        onClick={resetAllFilters}
-                        className="text-[10px] text-amber-400 hover:text-amber-300 underline cursor-pointer"
-                      >
-                        Reset
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    <button
-                      onClick={() => applyPreset("all")}
-                      className={`px-2 py-0.5 rounded text-[10px] border transition-colors cursor-pointer ${
-                        activeFilterCount === 0
-                          ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/40 font-semibold"
-                          : "bg-white/[0.02] text-zinc-400 border-white/[0.06] hover:text-white"
-                      }`}
-                    >
-                      All
-                    </button>
-                    <button
-                      onClick={() => applyPreset("callGraph")}
-                      className="px-2 py-0.5 rounded text-[10px] border bg-white/[0.02] text-zinc-400 border-white/[0.06] hover:text-purple-300 hover:border-purple-500/30 transition-colors cursor-pointer"
-                    >
-                      ⚡ Call Graph
-                    </button>
-                    <button
-                      onClick={() => applyPreset("dependencies")}
-                      className="px-2 py-0.5 rounded text-[10px] border bg-white/[0.02] text-zinc-400 border-white/[0.06] hover:text-emerald-300 hover:border-emerald-500/30 transition-colors cursor-pointer"
-                    >
-                      📦 Dependencies
-                    </button>
-                    <button
-                      onClick={() => applyPreset("architecture")}
-                      className="px-2 py-0.5 rounded text-[10px] border bg-white/[0.02] text-zinc-400 border-white/[0.06] hover:text-amber-300 hover:border-amber-500/30 transition-colors cursor-pointer"
-                    >
-                      📁 Architecture
-                    </button>
-                    <button
-                      onClick={() => applyPreset("pureSemantic")}
-                      className="px-2 py-0.5 rounded text-[10px] border bg-white/[0.02] text-zinc-400 border-white/[0.06] hover:text-sky-300 hover:border-sky-500/30 transition-colors cursor-pointer"
-                    >
-                      ✨ Pure Semantic
-                    </button>
-                  </div>
-                </div>
 
                 {/* Node Kinds Filter */}
                 <div className="p-3.5 space-y-2 shrink-0">

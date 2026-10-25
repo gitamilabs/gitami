@@ -1,5 +1,6 @@
 from pathlib import Path
 import tempfile
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
@@ -12,21 +13,31 @@ from src.analysis.graph_analysis import (
     find_surprising_connections,
 )
 from src.analysis.report import generate_graph_report
-from src.graph.client import Neo4jClient
 from src.graph.reader import get_entire_graph
+from src.web.deps import get_shared_graph_client
 
 router = APIRouter(tags=["graph"])
 
 
 @router.get("/api/graph/{repo_id:path}")
-async def get_graph_data(repo_id: str, branch: str = "main", max_nodes: int = 500):
+async def get_graph_data(
+    repo_id: str,
+    branch: str = "main",
+    max_nodes: int = 500,
+    project_id: Optional[str] = None,
+):
     """
     Returns actual Neo4j nodes and edges for the interactive knowledge graph.
     """
-    graph_client = Neo4jClient()
     try:
-        await graph_client.connect()
-        raw_data = await get_entire_graph(graph_client, repo_id=repo_id, branch=branch, max_nodes=max_nodes)
+        graph_client = await get_shared_graph_client()
+        raw_data = await get_entire_graph(
+            graph_client,
+            repo_id=repo_id,
+            branch=branch,
+            max_nodes=max_nodes,
+            project_id=project_id,
+        )
         presentation = compute_graph_presentation(raw_data)
         return {
             "status": "success",
@@ -41,11 +52,6 @@ async def get_graph_data(repo_id: str, branch: str = "main", max_nodes: int = 50
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        try:
-            await graph_client.close()
-        except Exception:
-            pass
 
 
 @router.get("/api/graph-report/{repo_id:path}")
@@ -54,9 +60,8 @@ async def get_graph_report(repo_id: str, branch: str = "main"):
     Generates and returns the Graphify architectural report (GRAPH_REPORT.md).
     Runs community clustering, god node detection, and import cycle analysis.
     """
-    graph_client = Neo4jClient()
     try:
-        await graph_client.connect()
+        graph_client = await get_shared_graph_client()
         graph_data = await get_entire_graph(graph_client, repo_id=repo_id, branch=branch)
         G = build_networkx_graph(graph_data)
 
@@ -86,8 +91,3 @@ async def get_graph_report(repo_id: str, branch: str = "main"):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        try:
-            await graph_client.close()
-        except Exception:
-            pass

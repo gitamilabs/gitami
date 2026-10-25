@@ -17,20 +17,30 @@ class Neo4jClient:
         password: Optional[str] = None,
         database: Optional[str] = None,
     ):
-        self.uri = uri or settings.neo4j_uri
-        self.user = user or settings.neo4j_user
-        self.password = password or settings.neo4j_password
-        self.database = database or settings.neo4j_database
+        self.uri = uri or settings.neo4j_uri or "bolt://localhost:7687"
+        self.user = user or settings.neo4j_user or "neo4j"
+        self.password = password or settings.neo4j_password or "gitamipassword"
+        self.database = database or settings.neo4j_database or "neo4j"
         self._driver: Optional[AsyncDriver] = None
 
     async def connect(self) -> None:
         if not self._driver:
+            config_kwargs: Dict[str, Any] = {}
+            try:
+                from neo4j import NotificationDisabledClassification
+                config_kwargs["notifications_disabled_classifications"] = [
+                    NotificationDisabledClassification.UNRECOGNIZED
+                ]
+            except (ImportError, AttributeError):
+                pass
+
             self._driver = AsyncGraphDatabase.driver(
                 self.uri,
                 auth=(self.user, self.password),
                 connection_timeout=10.0,
                 connection_acquisition_timeout=15.0,
                 max_connection_lifetime=300,
+                **config_kwargs,
             )
 
     async def close(self) -> None:

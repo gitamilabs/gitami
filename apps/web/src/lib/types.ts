@@ -145,6 +145,8 @@ export interface ChatRequest {
   repo_id: string;
   message: string;
   branch?: string;
+  project_id?: string;
+  team_id?: string;
   history?: ChatMessage[];
 }
 

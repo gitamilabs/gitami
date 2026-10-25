@@ -44,6 +44,8 @@ async def run_init_job(
     vector_client: Optional[VectorKBClient] = None,
     extraction_mode: str = "fast",
     stage_callback: Optional[Any] = None,
+    project_id: str = "default",
+    team_id: Optional[str] = None,
 ) -> InitResult:
     """
     Canonical V1 Repository Initialization.
@@ -62,6 +64,8 @@ async def run_init_job(
             repo_id=repo_id,
             target_commit_sha=branch or "HEAD",
             branch=branch or "main",
+            project_id=project_id,
+            team_id=team_id,
             job_type=IndexJobType.INITIAL,
             validate_only=(client is None),
             stage_callback=stage_callback,

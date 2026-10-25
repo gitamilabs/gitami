@@ -1,4 +1,4 @@
-﻿"""Gemini embedding model implementation using google-genai SDK."""
+"""Gemini embedding model implementation using google-genai SDK."""
 import time
 from typing import List, Dict, Any
 
@@ -57,3 +57,11 @@ class GeminiEmbedder(EmbeddingFunction):
                 return embeddings
 
         return [[0.0] * self.dimension for _ in input]
+
+    def embed_query(self, input: Any) -> Embeddings:
+        if isinstance(input, str):
+            input = [input]
+        return self.__call__(input)
+
+    def embed_documents(self, input: Documents) -> Embeddings:
+        return self.__call__(input)

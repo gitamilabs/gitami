@@ -1,4 +1,4 @@
-﻿"""Factory: resolve EMBEDDER env key -> concrete BaseEmbedder instance."""
+"""Factory: resolve EMBEDDER env key -> concrete BaseEmbedder instance."""
 import logging
 
 from src.vector.embedders.gemini_embedder import GeminiEmbedder
@@ -28,6 +28,9 @@ def get_embedding_function(settings) -> GeminiEmbedder | OpenAIEmbedder | FastEm
 
     match key:
         case "gemini":
+            if not settings.gemini_api_key:
+                logger.warning("GEMINI_API_KEY is not set. Falling back to local FastEmbed embedder.")
+                return FastEmbedEmbedder(model_name=settings.fastembed_model)
             return GeminiEmbedder(
                 api_key=settings.gemini_api_key,
                 model_name=settings.gemini_embedding_model,

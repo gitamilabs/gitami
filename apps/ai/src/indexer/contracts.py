@@ -131,6 +131,7 @@ class IndexJob(BaseModel):
     """Canonical model for a repository indexing execution job."""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     project_id: str = "default"
+    team_id: Optional[str] = None
     repository_id: str
     type: IndexJobType = IndexJobType.INITIAL
     base_commit_sha: Optional[str] = None
@@ -166,6 +167,8 @@ class IndexJob(BaseModel):
 
 class RepositoryIndexState(BaseModel):
     """Canonical state representation of an indexed repository branch."""
+    project_id: str = "default"
+    team_id: Optional[str] = None
     repository_id: str
     branch: str = "main"
     indexed_commit_sha: str

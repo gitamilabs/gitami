@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from src.graph.client import Neo4jClient
 from src.parsing.models import SymbolNode, CallEdge, ImportEdge
 
@@ -160,3 +160,153 @@ async def delete_repo_data(client: Neo4jClient, repo_id: str, branch: Optional[s
         params = {"repo_id": repo_id}
 
     await client.execute_query(query, params)
+
+
+async def repair_graph_hierarchy(client: Neo4jClient, repo_id: Optional[str] = None) -> dict:
+    """Rebuilds missing Directory nodes and strict hierarchical CONTAINS edges."""
+    where_clause = "WHERE f.repo_id = $repo_id" if repo_id else ""
+    params = {"repo_id": repo_id} if repo_id else {}
+
+    files = await client.execute_query(
+        f"MATCH (f:File) {where_clause} RETURN f.repo_id as repo_id, f.file_path as path, f.commit_sha as commit_sha, f.branch as branch",
+        params
+    )
+    all_dirs = set()
+    for f in files:
+        r_id = f["repo_id"]
+        path = f["path"]
+        parts = path.split("/")
+        if len(parts) > 1:
+            curr = ""
+            for p in parts[:-1]:
+                curr = f"{curr}/{p}" if curr else p
+                all_dirs.add((r_id, curr, f.get("commit_sha") or "unknown", f.get("branch") or "main"))
+
+    batch = [
+        {
+            "uid": f"dir:{r_id}:{d}",
+            "path": d,
+            "name": d.split("/")[-1],
+            "depth": len(d.split("/")),
+            "repo_id": r_id,
+            "commit_sha": sha,
+            "branch": br,
+        }
+        for r_id, d, sha, br in all_dirs
+    ]
+
+    if batch:
+        await client.execute_query(
+            """
+            UNWIND $batch AS item
+            MERGE (d:Directory {uid: item.uid})
+            SET d.path = item.path,
+                d.name = item.name,
+                d.depth = item.depth,
+                d.repo_id = item.repo_id,
+                d.commit_sha = item.commit_sha,
+                d.branch = item.branch
+            """,
+            {"batch": batch},
+        )
+
+    # Delete existing CONTAINS edges for the target scope
+    if repo_id:
+        del_res = await client.execute_query(
+            "MATCH (a)-[r:CONTAINS]->(b) WHERE a.repo_id = $repo_id DELETE r RETURN count(r) as c",
+            {"repo_id": repo_id}
+        )
+    else:
+        del_res = await client.execute_query("MATCH ()-[r:CONTAINS]->() DELETE r RETURN count(r) as c")
+
+    # Wire Repository -> Root Directory
+    await client.execute_query(
+        """
+        MATCH (d:Directory)
+        WHERE NOT d.path CONTAINS '/'
+        """ + (" AND d.repo_id = $repo_id" if repo_id else "") + """
+        MATCH (r:Repository {repo_id: d.repo_id})
+        MERGE (r)-[:CONTAINS]->(d)
+        """,
+        params
+    )
+
+    # Wire Directory -> Subdirectory
+    await client.execute_query(
+        """
+        MATCH (sub:Directory)
+        WHERE sub.path CONTAINS '/'
+        """ + (" AND sub.repo_id = $repo_id" if repo_id else "") + """
+        WITH sub, substring(sub.path, 0, size(sub.path) - size(split(sub.path, '/')[-1]) - 1) as parent_path
+        MATCH (parent:Directory {path: parent_path, repo_id: sub.repo_id})
+        MERGE (parent)-[:CONTAINS]->(sub)
+        """,
+        params
+    )
+
+    # Wire Directory -> File
+    await client.execute_query(
+        """
+        MATCH (f:File)
+        WHERE f.file_path CONTAINS '/'
+        """ + (" AND f.repo_id = $repo_id" if repo_id else "") + """
+        WITH f, substring(f.file_path, 0, size(f.file_path) - size(split(f.file_path, '/')[-1]) - 1) as parent_path
+        MATCH (parent:Directory {path: parent_path, repo_id: f.repo_id})
+        MERGE (parent)-[:CONTAINS]->(f)
+        """,
+        params
+    )
+
+    # Wire Repository -> Root File
+    await client.execute_query(
+        """
+        MATCH (f:File)
+        WHERE NOT f.file_path CONTAINS '/'
+        """ + (" AND f.repo_id = $repo_id" if repo_id else "") + """
+        MATCH (r:Repository {repo_id: f.repo_id})
+        MERGE (r)-[:CONTAINS]->(f)
+        """,
+        params
+    )
+
+    return {
+        "directories_ensured": len(all_dirs),
+        "deleted_old_contains": del_res[0]["c"] if del_res else 0,
+    }
+
+
+async def repair_import_edges(client: Neo4jClient, repo_id: Optional[str] = None) -> Dict[str, int]:
+    """
+    Ensure all file imports strictly connect File to File, removing any legacy File -> Symbol import edges
+    and re-wiring DEPENDS_ON_FILE relationships as IMPORTS between Files.
+    """
+    params = {"repo_id": repo_id} if repo_id else {}
+    where_repo = "WHERE f.repo_id = $repo_id" if repo_id else ""
+    where_f1 = "WHERE f1.repo_id = $repo_id" if repo_id else ""
+
+    # 1. Delete any legacy File -> Symbol IMPORTS relationships (e.g. pointing to variables or functions)
+    del_sym_imports = await client.execute_query(
+        f"MATCH (f:File)-[r:IMPORTS]->(s:Symbol) {where_repo} DELETE r RETURN count(r) as c",
+        params
+    )
+
+    # 2. Re-wire all file dependencies as direct File -> File IMPORTS relationships
+    add_file_imports = await client.execute_query(
+        f"""
+        MATCH (f1:File)-[r:DEPENDS_ON_FILE]->(f2:File)
+        {where_f1}
+        MERGE (f1)-[r2:IMPORTS]->(f2)
+        SET r2.provenance = COALESCE(r.provenance, 'DETERMINISTIC'),
+            r2.module_path = r.module_path,
+            r2.line = r.line,
+            r2.commit_sha = r.commit_sha
+        RETURN count(r2) as c
+        """,
+        params
+    )
+
+    return {
+        "deleted_symbol_imports": del_sym_imports[0]["c"] if del_sym_imports else 0,
+        "ensured_file_imports": add_file_imports[0]["c"] if add_file_imports else 0,
+    }
+

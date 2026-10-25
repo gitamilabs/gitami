@@ -1,5 +1,8 @@
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
+import { eq } from "drizzle-orm";
+import { db } from "../../db";
+import { connectedRepositories } from "../../db/schema";
 import { env } from "../../configs/env";
 import {
   authMiddleware,
@@ -9,6 +12,34 @@ import {
 const intelligenceRouter = new Hono<{ Variables: AuthContextVariables }>();
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://localhost:8000";
+
+async function enrichPayloadWithTenancy(body: any, user?: any): Promise<any> {
+  const enriched = { ...body };
+  if (!enriched.project_id && enriched.repo_id) {
+    try {
+      const [repo] = await db
+        .select({ projectId: connectedRepositories.projectId, userId: connectedRepositories.userId })
+        .from(connectedRepositories)
+        .where(eq(connectedRepositories.fullName, enriched.repo_id))
+        .limit(1);
+      if (repo) {
+        enriched.project_id = repo.projectId || "default";
+        if (!enriched.team_id && repo.userId) {
+          enriched.team_id = repo.userId;
+        }
+      }
+    } catch {
+      // Graceful fallback to default if DB lookup is unavailable
+    }
+  }
+  if (!enriched.project_id) {
+    enriched.project_id = "default";
+  }
+  if (!enriched.team_id && user?.id) {
+    enriched.team_id = user.id;
+  }
+  return enriched;
+}
 
 /**
  * Health check proxy
@@ -134,11 +165,12 @@ intelligenceRouter.get("/graph-report/:repoId", async (c) => {
  */
 intelligenceRouter.post("/chat", async (c) => {
   const body = await c.req.json().catch(() => ({}));
+  const payload = await enrichPayloadWithTenancy(body, c.get("user"));
   try {
     const res = await fetch(`${AI_SERVICE_URL}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
@@ -153,12 +185,13 @@ intelligenceRouter.post("/chat", async (c) => {
  */
 intelligenceRouter.post("/chat/stream", async (c) => {
   const body = await c.req.json().catch(() => ({}));
+  const payload = await enrichPayloadWithTenancy(body, c.get("user"));
 
   try {
     const res = await fetch(`${AI_SERVICE_URL}/api/chat/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok || !res.body) {
@@ -191,11 +224,12 @@ intelligenceRouter.post("/chat/stream", async (c) => {
  */
 intelligenceRouter.post("/investigate", async (c) => {
   const body = await c.req.json().catch(() => ({}));
+  const payload = await enrichPayloadWithTenancy(body, c.get("user"));
   try {
     const res = await fetch(`${AI_SERVICE_URL}/api/investigate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
@@ -209,11 +243,12 @@ intelligenceRouter.post("/investigate", async (c) => {
  */
 intelligenceRouter.post("/issue/analyze", async (c) => {
   const body = await c.req.json().catch(() => ({}));
+  const payload = await enrichPayloadWithTenancy(body, c.get("user"));
   try {
     const res = await fetch(`${AI_SERVICE_URL}/api/issue/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
@@ -227,11 +262,12 @@ intelligenceRouter.post("/issue/analyze", async (c) => {
  */
 intelligenceRouter.post("/doc/generate", async (c) => {
   const body = await c.req.json().catch(() => ({}));
+  const payload = await enrichPayloadWithTenancy(body, c.get("user"));
   try {
     const res = await fetch(`${AI_SERVICE_URL}/api/doc/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
@@ -245,11 +281,12 @@ intelligenceRouter.post("/doc/generate", async (c) => {
  */
 intelligenceRouter.post("/code/plan", async (c) => {
   const body = await c.req.json().catch(() => ({}));
+  const payload = await enrichPayloadWithTenancy(body, c.get("user"));
   try {
     const res = await fetch(`${AI_SERVICE_URL}/api/code/plan`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
@@ -263,11 +300,12 @@ intelligenceRouter.post("/code/plan", async (c) => {
  */
 intelligenceRouter.post("/code/execute", async (c) => {
   const body = await c.req.json().catch(() => ({}));
+  const payload = await enrichPayloadWithTenancy(body, c.get("user"));
   try {
     const res = await fetch(`${AI_SERVICE_URL}/api/code/execute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);

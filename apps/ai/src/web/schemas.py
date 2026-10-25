@@ -12,6 +12,8 @@ class ChatRequest(BaseModel):
     message: str
     branch: Optional[str] = "main"
     history: Optional[List[ChatMessage]] = []
+    project_id: Optional[str] = "default"
+    team_id: Optional[str] = None
 
 
 class Citation(BaseModel):
@@ -51,6 +53,8 @@ class IngestRequest(BaseModel):
     access_token: Optional[str] = None
     branch: Optional[str] = "main"
     extraction_mode: Optional[str] = "fast"
+    project_id: Optional[str] = "default"
+    team_id: Optional[str] = None
 
 
 class IngestUrlRequest(BaseModel):
@@ -58,6 +62,8 @@ class IngestUrlRequest(BaseModel):
     repo_id: Optional[str] = None
     branch: Optional[str] = "main"
     extraction_mode: Optional[str] = "fast"
+    project_id: Optional[str] = "default"
+    team_id: Optional[str] = None
 
 
 class ReindexRequest(BaseModel):
@@ -69,6 +75,8 @@ class ReindexRequest(BaseModel):
     full_name: Optional[str] = None
     access_token: Optional[str] = None
     force_full: Optional[bool] = False
+    project_id: Optional[str] = "default"
+    team_id: Optional[str] = None
 
 
 class PromptUpdateRequest(BaseModel):
@@ -97,6 +105,8 @@ class PRReviewRequest(BaseModel):
     title: str
     body: Optional[str] = ""
     diff_text: Optional[str] = None
+    project_id: Optional[str] = "default"
+    team_id: Optional[str] = None
 
 
 class PRFixRequest(BaseModel):

@@ -75,7 +75,11 @@ async def get_all_symbols(client: Neo4jClient, repo_id: str, branch: str) -> Lis
 
 
 async def get_entire_graph(
-    client: Neo4jClient, repo_id: str, branch: str, max_nodes: int = 500
+    client: Neo4jClient,
+    repo_id: str,
+    branch: str = "main",
+    max_nodes: int = 500,
+    project_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Fetch nodes (Files, Symbols, Packages, Inferred) and edges (DEFINES, CALLS, IMPORTS, DEPENDS_ON, DEPENDS_ON_FILE, EXTENDS, IMPLEMENTS, TESTS) for a repo."""
     nodes = []
@@ -87,13 +91,14 @@ async def get_entire_graph(
     repo_records = await client.execute_query(
         """
         MATCH (r:Repository)
-        WHERE toLower(r.repo_id) = toLower($repo_id)
+        WHERE (toLower(r.repo_id) = toLower($repo_id)
            OR toLower(r.repo_id) ENDS WITH '/' + toLower($repo_id)
-           OR toLower($repo_id) ENDS WITH '/' + toLower(r.repo_id)
+           OR toLower($repo_id) ENDS WITH '/' + toLower(r.repo_id))
+           AND ($project_id IS NULL OR r.project_id = $project_id OR r.project_id = 'default')
         RETURN r.repo_id AS canonical_id, r.uid AS id, properties(r) AS props
         LIMIT 1
         """,
-        {"repo_id": repo_id},
+        {"repo_id": repo_id, "project_id": project_id},
     )
     if repo_records:
         canonical_repo_id = repo_records[0].get("canonical_id", repo_id)
@@ -123,11 +128,12 @@ async def get_entire_graph(
     dir_query = """
     MATCH (d:Directory)
     WHERE toLower(d.repo_id) = toLower($canonical_repo_id)
+      AND ($project_id IS NULL OR d.project_id = $project_id OR d.project_id = 'default')
     RETURN d.uid AS uid, d.path AS path, COALESCE(d.name, split(d.path, '/')[-1]) AS label,
            COALESCE(d.depth, size(split(d.path, '/'))) AS depth, properties(d) AS props
     LIMIT 300
     """
-    dir_records = await client.execute_query(dir_query, {"canonical_repo_id": canonical_repo_id})
+    dir_records = await client.execute_query(dir_query, {"canonical_repo_id": canonical_repo_id, "project_id": project_id})
     for r in dir_records:
         did = r["path"]
         if did in node_ids:
@@ -153,6 +159,7 @@ async def get_entire_graph(
     MATCH (f:File)
     WHERE toLower(f.repo_id) = toLower($canonical_repo_id)
       AND (f.branch IS NULL OR f.branch = $branch OR $branch = '' OR $branch = 'main')
+      AND ($project_id IS NULL OR f.project_id = $project_id OR f.project_id = 'default')
     RETURN f.file_path AS id,
            split(f.file_path, '/')[-1] AS label,
            f.parent_dir AS parent_dir,
@@ -161,7 +168,12 @@ async def get_entire_graph(
     LIMIT $limit
     """
     file_records = await client.execute_query(
-        file_query, {"canonical_repo_id": canonical_repo_id, "branch": branch, "limit": max_nodes // 3 or 100}
+        file_query, {
+            "canonical_repo_id": canonical_repo_id,
+            "branch": branch,
+            "project_id": project_id,
+            "limit": max_nodes // 3 or 100
+        }
     )
     for r in file_records:
         fid = r["id"]
@@ -191,6 +203,7 @@ async def get_entire_graph(
     WHERE (s:Symbol OR s:Function OR s:Class OR s:Method OR s:Interface OR s:Type OR s:Test OR s:Schema OR s:Enum OR s:Router OR s:Relation OR s:Variable OR s:Inferred)
       AND toLower(s.repo_id) = toLower($canonical_repo_id)
       AND (s.branch IS NULL OR s.branch = $branch OR $branch = '' OR $branch = 'main')
+      AND ($project_id IS NULL OR s.project_id = $project_id OR s.project_id = 'default')
       AND NOT (s.name STARTS WITH "{" OR s.name STARTS WITH "[" OR s.name CONTAINS ",")
     RETURN COALESCE(s.qualified_name, s.uid, s.name) AS id,
            COALESCE(s.name, s.qualified_name, s.uid) AS label,
@@ -199,7 +212,12 @@ async def get_entire_graph(
     LIMIT $limit
     """
     sym_records = await client.execute_query(
-        sym_query, {"canonical_repo_id": canonical_repo_id, "branch": branch, "limit": max_nodes}
+        sym_query, {
+            "canonical_repo_id": canonical_repo_id,
+            "branch": branch,
+            "project_id": project_id,
+            "limit": max_nodes
+        }
     )
     for r in sym_records:
         name_val = str(r.get("label") or "")
@@ -317,132 +335,140 @@ async def get_entire_graph(
     for r in defines_records:
         add_edge(r["source"], r["target"], r["relation"])
 
+    # Discover relationship types currently present in DBMS catalog to avoid querying
+    # non-existent relationship types (which triggers Neo4j DBMS warnings for IMPLEMENTS, TESTS, etc.).
+    try:
+        rel_types_res = await client.execute_query(
+            "CALL db.relationshipTypes() YIELD relationshipType RETURN collect(relationshipType) AS types",
+            {},
+        )
+        existing_rel_types = set(rel_types_res[0].get("types", [])) if rel_types_res else set()
+    except Exception as e:
+        logger.debug(f"Could not fetch relationship types: {e}")
+        existing_rel_types = {"DEFINES", "CALLS", "IMPORTS", "DEPENDS_ON", "DEPENDS_ON_FILE", "EXTENDS", "CONTAINS", "HAS_METHOD"}
+
     # 8. Fetch HAS_METHOD edges (Class -> Method)
-    has_method_query = """
-    MATCH (c:Class)-[r:HAS_METHOD]->(m:Method)
-    WHERE toLower(c.repo_id) = toLower($canonical_repo_id)
-      AND toLower(m.repo_id) = toLower($canonical_repo_id)
-    RETURN COALESCE(c.qualified_name, c.uid, c.name) AS source,
-           COALESCE(m.qualified_name, m.uid, m.name) AS target,
-           "HAS_METHOD" AS relation,
-           properties(r) AS props
-    LIMIT $limit
-    """
-    has_method_records = await client.execute_query(
-        has_method_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes}
-    )
-    for r in has_method_records:
-        add_edge(r["source"], r["target"], r["relation"], r.get("props"))
+    if "HAS_METHOD" in existing_rel_types:
+        has_method_query = """
+        MATCH (c:Class)-[r:HAS_METHOD]->(m:Method)
+        WHERE toLower(c.repo_id) = toLower($canonical_repo_id)
+          AND toLower(m.repo_id) = toLower($canonical_repo_id)
+        RETURN COALESCE(c.qualified_name, c.uid, c.name) AS source,
+               COALESCE(m.qualified_name, m.uid, m.name) AS target,
+               "HAS_METHOD" AS relation,
+               properties(r) AS props
+        LIMIT $limit
+        """
+        has_method_records = await client.execute_query(
+            has_method_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes}
+        )
+        for r in has_method_records:
+            add_edge(r["source"], r["target"], r["relation"], r.get("props"))
 
     # 9. Fetch CALLS edges (Symbol/File -> Symbol/Inferred)
-    calls_query = """
-    MATCH (s1)-[r:CALLS]->(s2)
-    WHERE toLower(s1.repo_id) = toLower($canonical_repo_id)
-      AND toLower(s2.repo_id) = toLower($canonical_repo_id)
-    RETURN COALESCE(s1.qualified_name, s1.file_path, s1.uid, s1.name) AS source,
-           COALESCE(s2.qualified_name, s2.uid, s2.name) AS target,
-           "CALLS" AS relation,
-           properties(r) AS props
-    LIMIT $limit
-    """
-    calls_records = await client.execute_query(
-        calls_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes * 2}
-    )
-    for r in calls_records:
-        add_edge(r["source"], r["target"], r["relation"], r.get("props"))
+    if "CALLS" in existing_rel_types:
+        calls_query = """
+        MATCH (s1)-[r:CALLS]->(s2)
+        WHERE toLower(s1.repo_id) = toLower($canonical_repo_id)
+          AND toLower(s2.repo_id) = toLower($canonical_repo_id)
+        RETURN COALESCE(s1.qualified_name, s1.file_path, s1.uid, s1.name) AS source,
+               COALESCE(s2.qualified_name, s2.uid, s2.name) AS target,
+               "CALLS" AS relation,
+               properties(r) AS props
+        LIMIT $limit
+        """
+        calls_records = await client.execute_query(
+            calls_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes * 2}
+        )
+        for r in calls_records:
+            add_edge(r["source"], r["target"], r["relation"], r.get("props"))
 
-    # 10. Fetch IMPORTS edges (File -> Symbol)
-    imports_query = """
-    MATCH (f:File)-[r:IMPORTS]->(s)
-    WHERE toLower(f.repo_id) = toLower($canonical_repo_id)
-      AND toLower(s.repo_id) = toLower($canonical_repo_id)
-    RETURN f.file_path AS source, COALESCE(s.qualified_name, s.uid, s.name) AS target, "IMPORTS" AS relation, properties(r) AS props
-    LIMIT $limit
-    """
-    imports_records = await client.execute_query(
-        imports_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes * 2}
-    )
-    for r in imports_records:
-        add_edge(r["source"], r["target"], r["relation"], r.get("props"))
+    # 10. Fetch IMPORTS edges (File -> File)
+    # File imports strictly belong to the file level and connect File to File,
+    # never pointing directly at variables, functions, or other internal symbols.
+    if "IMPORTS" in existing_rel_types or "DEPENDS_ON_FILE" in existing_rel_types:
+        imports_query = """
+        MATCH (f1:File)-[r:IMPORTS|DEPENDS_ON_FILE]->(f2:File)
+        WHERE toLower(f1.repo_id) = toLower($canonical_repo_id)
+          AND toLower(f2.repo_id) = toLower($canonical_repo_id)
+          AND f1.file_path <> f2.file_path
+        RETURN f1.file_path AS source, f2.file_path AS target, "IMPORTS" AS relation, properties(r) AS props
+        LIMIT $limit
+        """
+        imports_records = await client.execute_query(
+            imports_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes * 2}
+        )
+        for r in imports_records:
+            add_edge(r["source"], r["target"], r["relation"], r.get("props"))
 
     # 11. Fetch DEPENDS_ON edges (File -> Package)
-    depends_query = """
-    MATCH (f:File)-[r:DEPENDS_ON]->(p:Package)
-    WHERE toLower(f.repo_id) = toLower($canonical_repo_id)
-      AND toLower(p.repo_id) = toLower($canonical_repo_id)
-    RETURN f.file_path AS source, COALESCE(p.uid, p.name) AS target, "DEPENDS_ON" AS relation, properties(r) AS props
-    LIMIT $limit
-    """
-    depends_records = await client.execute_query(
-        depends_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes}
-    )
-    for r in depends_records:
-        add_edge(r["source"], r["target"], r["relation"], r.get("props"))
+    if "DEPENDS_ON" in existing_rel_types:
+        depends_query = """
+        MATCH (f:File)-[r:DEPENDS_ON]->(p:Package)
+        WHERE toLower(f.repo_id) = toLower($canonical_repo_id)
+          AND toLower(p.repo_id) = toLower($canonical_repo_id)
+        RETURN f.file_path AS source, COALESCE(p.uid, p.name) AS target, "DEPENDS_ON" AS relation, properties(r) AS props
+        LIMIT $limit
+        """
+        depends_records = await client.execute_query(
+            depends_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes}
+        )
+        for r in depends_records:
+            add_edge(r["source"], r["target"], r["relation"], r.get("props"))
 
-    # 12. Fetch DEPENDS_ON_FILE edges (File -> File)
-    file_dep_query = """
-    MATCH (f1:File)-[r:DEPENDS_ON_FILE]->(f2:File)
-    WHERE toLower(f1.repo_id) = toLower($canonical_repo_id)
-      AND toLower(f2.repo_id) = toLower($canonical_repo_id)
-    RETURN f1.file_path AS source, f2.file_path AS target, "DEPENDS_ON_FILE" AS relation, properties(r) AS props
-    LIMIT $limit
-    """
-    file_dep_records = await client.execute_query(
-        file_dep_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes}
-    )
-    for r in file_dep_records:
-        add_edge(r["source"], r["target"], r["relation"], r.get("props"))
+    # 12. Fetch EXTENDS edges (Class -> Class)
+    if "EXTENDS" in existing_rel_types:
+        extends_query = """
+        MATCH (c1:Class)-[r:EXTENDS]->(c2:Class)
+        WHERE toLower(c1.repo_id) = toLower($canonical_repo_id)
+          AND toLower(c2.repo_id) = toLower($canonical_repo_id)
+        RETURN COALESCE(c1.qualified_name, c1.uid, c1.name) AS source,
+               COALESCE(c2.qualified_name, c2.uid, c2.name) AS target,
+               "EXTENDS" AS relation,
+               properties(r) AS props
+        LIMIT $limit
+        """
+        extends_records = await client.execute_query(
+            extends_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes}
+        )
+        for r in extends_records:
+            add_edge(r["source"], r["target"], r["relation"], r.get("props"))
 
-    # 13. Fetch EXTENDS edges (Class -> Class)
-    extends_query = """
-    MATCH (c1:Class)-[r:EXTENDS]->(c2:Class)
-    WHERE toLower(c1.repo_id) = toLower($canonical_repo_id)
-      AND toLower(c2.repo_id) = toLower($canonical_repo_id)
-    RETURN COALESCE(c1.qualified_name, c1.uid, c1.name) AS source,
-           COALESCE(c2.qualified_name, c2.uid, c2.name) AS target,
-           "EXTENDS" AS relation,
-           properties(r) AS props
-    LIMIT $limit
-    """
-    extends_records = await client.execute_query(
-        extends_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes}
-    )
-    for r in extends_records:
-        add_edge(r["source"], r["target"], r["relation"], r.get("props"))
+    # 13. Fetch IMPLEMENTS edges (Class -> Interface)
+    if "IMPLEMENTS" in existing_rel_types:
+        implements_query = """
+        MATCH (c:Class)-[r:IMPLEMENTS]->(i:Interface)
+        WHERE toLower(c.repo_id) = toLower($canonical_repo_id)
+          AND toLower(i.repo_id) = toLower($canonical_repo_id)
+        RETURN COALESCE(c.qualified_name, c.uid, c.name) AS source,
+               COALESCE(i.qualified_name, i.uid, i.name) AS target,
+               "IMPLEMENTS" AS relation,
+               properties(r) AS props
+        LIMIT $limit
+        """
+        implements_records = await client.execute_query(
+            implements_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes}
+        )
+        for r in implements_records:
+            add_edge(r["source"], r["target"], r["relation"], r.get("props"))
 
-    # 14. Fetch IMPLEMENTS edges (Class -> Interface)
-    implements_query = """
-    MATCH (c:Class)-[r:IMPLEMENTS]->(i:Interface)
-    WHERE toLower(c.repo_id) = toLower($canonical_repo_id)
-      AND toLower(i.repo_id) = toLower($canonical_repo_id)
-    RETURN COALESCE(c.qualified_name, c.uid, c.name) AS source,
-           COALESCE(i.qualified_name, i.uid, i.name) AS target,
-           "IMPLEMENTS" AS relation,
-           properties(r) AS props
-    LIMIT $limit
-    """
-    implements_records = await client.execute_query(
-        implements_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes}
-    )
-    for r in implements_records:
-        add_edge(r["source"], r["target"], r["relation"], r.get("props"))
-
-    # 15. Fetch TESTS edges (Test -> Target)
-    tests_query = """
-    MATCH (t:Test)-[r:TESTS]->(tgt)
-    WHERE toLower(t.repo_id) = toLower($canonical_repo_id)
-      AND toLower(tgt.repo_id) = toLower($canonical_repo_id)
-    RETURN COALESCE(t.qualified_name, t.uid, t.name) AS source,
-           COALESCE(tgt.qualified_name, tgt.uid, tgt.name) AS target,
-           "TESTS" AS relation,
-           properties(r) AS props
-    LIMIT $limit
-    """
-    tests_records = await client.execute_query(
-        tests_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes}
-    )
-    for r in tests_records:
-        add_edge(r["source"], r["target"], r["relation"], r.get("props"))
+    # 14. Fetch TESTS edges (Test -> Target)
+    if "TESTS" in existing_rel_types:
+        tests_query = """
+        MATCH (t:Test)-[r:TESTS]->(tgt)
+        WHERE toLower(t.repo_id) = toLower($canonical_repo_id)
+          AND toLower(tgt.repo_id) = toLower($canonical_repo_id)
+        RETURN COALESCE(t.qualified_name, t.uid, t.name) AS source,
+               COALESCE(tgt.qualified_name, tgt.uid, tgt.name) AS target,
+               "TESTS" AS relation,
+               properties(r) AS props
+        LIMIT $limit
+        """
+        tests_records = await client.execute_query(
+            tests_query, {"canonical_repo_id": canonical_repo_id, "limit": max_nodes}
+        )
+        for r in tests_records:
+            add_edge(r["source"], r["target"], r["relation"], r.get("props"))
 
     # 16. Fallback synthesis for structural containment: guarantee all directories and files are connected
     existing_edges = {(e["source"], e["target"]) for e in edges}
@@ -508,6 +534,43 @@ async def get_entire_graph(
             "synthesizedCount": 0,
             "observedCount": 0,
         },
+    }
+
+
+async def inspect_graph(client: Neo4jClient, repo_id: Optional[str] = None) -> Dict[str, Any]:
+    """Inspect graph node counts, relationship counts, and orphan symbols."""
+    where = "WHERE n.repo_id = $repo_id" if repo_id else ""
+    params = {"repo_id": repo_id} if repo_id else {}
+
+    node_query = f"""
+    MATCH (n) {where}
+    RETURN labels(n)[0] AS label, count(n) AS count
+    ORDER BY count DESC
+    """
+    node_records = await client.execute_query(node_query, params)
+    node_counts = {r["label"]: r["count"] for r in node_records if r.get("label")}
+
+    edge_where = "WHERE a.repo_id = $repo_id" if repo_id else ""
+    edge_query = f"""
+    MATCH (a)-[r]->(b) {edge_where}
+    RETURN type(r) AS rel_type, count(r) AS count
+    ORDER BY count DESC
+    """
+    edge_records = await client.execute_query(edge_query, params)
+    edge_counts = {r["rel_type"]: r["count"] for r in edge_records if r.get("rel_type")}
+
+    orphan_where = "WHERE NOT ()-[:DEFINES]->(s)" + (" AND s.repo_id = $repo_id" if repo_id else "")
+    orphan_query = f"""
+    MATCH (s:Symbol) {orphan_where}
+    RETURN count(s) AS orphan_count
+    """
+    orphan_records = await client.execute_query(orphan_query, params)
+    orphan_count = orphan_records[0]["orphan_count"] if orphan_records else 0
+
+    return {
+        "nodes": node_counts,
+        "edges": edge_counts,
+        "orphan_symbols": orphan_count,
     }
 
 

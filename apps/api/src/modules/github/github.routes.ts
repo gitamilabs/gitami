@@ -368,6 +368,8 @@ githubRouter.post("/repositories/:id/ingest", authMiddleware, async (c) => {
     full_name: repo.fullName,
     access_token: token,
     branch,
+    project_id: repo.projectId || "default",
+    team_id: repo.userId,
   };
 
   try {

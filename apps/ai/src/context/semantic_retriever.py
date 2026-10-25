@@ -38,11 +38,16 @@ class SemanticRetriever:
 
         for repo_id in scope.allowed_repo_ids:
             try:
-                # Query with where filter on repo
+                # Query with where filter on repo and project_id
+                where_filter = {"repo": repo_id}
+                if scope.project_id and scope.project_id != "default":
+                    where_filter["project_id"] = scope.project_id
+
                 res = self.client.query(
                     query_texts=[query],
                     n_results=n_per_repo,
-                    where={"repo": repo_id},
+                    where=where_filter,
+                    project_id=scope.project_id,
                 )
             except Exception as e:
                 logger.warning(f"Vector search failed for repo '{repo_id}': {e}")
@@ -66,6 +71,13 @@ class SemanticRetriever:
                 if hit_repo not in scope.allowed_repo_ids:
                     logger.warning(
                         f"Cross-repo vector leakage prevented! Hit repo '{hit_repo}' not in authorized scope {scope.allowed_repo_ids}"
+                    )
+                    continue
+
+                hit_proj = meta.get("project_id")
+                if hit_proj and scope.project_id and scope.project_id != "default" and hit_proj != "default" and hit_proj != scope.project_id:
+                    logger.warning(
+                        f"Cross-project vector leakage prevented! Hit project '{hit_proj}' does not match authorized scope project '{scope.project_id}'"
                     )
                     continue
 

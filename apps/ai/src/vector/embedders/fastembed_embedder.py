@@ -1,8 +1,8 @@
-"""FastEmbed local embedding model using ONNX runtime (~130 MB, no GPU needed)."""
-from typing import List
+from typing import Any, List
+from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 
 
-class FastEmbedEmbedder:
+class FastEmbedEmbedder(EmbeddingFunction):
     """
     Local ONNX-based embedding using the fastembed library (by Qdrant).
     Default model: BAAI/bge-small-en-v1.5 (~130 MB download on first use).
@@ -19,7 +19,6 @@ class FastEmbedEmbedder:
         from fastembed import TextEmbedding
         self._model = TextEmbedding(model_name=model_name)
         self.model_name = model_name
-        # bge-small-en-v1.5 dim=384; bge-base-en-v1.5 dim=768
         dim_map = {
             "BAAI/bge-small-en-v1.5": 384,
             "BAAI/bge-base-en-v1.5": 768,
@@ -34,7 +33,15 @@ class FastEmbedEmbedder:
     def get_config(self) -> dict:
         return {"model_name": self.model_name}
 
-    def __call__(self, input: List[str]) -> List[List[float]]:
+    def __call__(self, input: Documents) -> Embeddings:
         if not input:
             return []
         return [emb.tolist() for emb in self._model.embed(list(input))]
+
+    def embed_query(self, input: Any) -> Embeddings:
+        if isinstance(input, str):
+            input = [input]
+        return self.__call__(input)
+
+    def embed_documents(self, input: Documents) -> Embeddings:
+        return self.__call__(input)

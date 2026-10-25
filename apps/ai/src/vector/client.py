@@ -8,7 +8,9 @@ All callers (cli.py, init_job.py, pr_eval_job.py, web/app.py, mcp/server.py, etc
 continue to instantiate VectorKBClient() with no arguments — the factories handle
 backend selection transparently.
 """
+import hashlib
 import logging
+import re
 import time
 from enum import Enum
 from typing import List, Dict, Any, Optional
@@ -20,10 +22,34 @@ from src.vector.splitter import split_markdown_text
 
 logger = logging.getLogger(__name__)
 
-# Chroma Cloud enforces a maximum document size limit of 16,384 bytes (16 KB) per document.
+# Chroma Cloud enforces a maximum document size limit of 16,384 bytes (16 KB) per document
+# and an ID size quota limit of 128 bytes per document ID.
 # We set safe limits with headroom to guarantee no upsert payload fails quota validation.
 MAX_DOCUMENT_BYTES = 12000
 MAX_CODE_BODY_CHARS = 4000
+MAX_DOC_ID_BYTES = 64
+
+
+def generate_doc_id(prefix: str, unique_key: str, hint: str = "", max_bytes: int = MAX_DOC_ID_BYTES) -> str:
+    """
+    Generate a deterministic, collision-proof document ID guaranteed to be <= max_bytes
+    (default 64, well within Chroma Cloud's 128-byte quota limit).
+
+    Includes a human-readable slug from `hint` (e.g. symbol or filename) + 32-hex-char SHA256 of `unique_key`.
+    Format: {prefix}_{clean_hint[:24]}_{sha256(unique_key)[:32]}
+    """
+    clean_hint = re.sub(r"[^a-zA-Z0-9_]", "_", hint).strip("_")
+    if clean_hint:
+        clean_hint = clean_hint[:24]
+        slug = f"{prefix}_{clean_hint}"
+    else:
+        slug = prefix
+
+    key_hash = hashlib.sha256(unique_key.encode("utf-8")).hexdigest()[:32]
+    candidate = f"{slug}_{key_hash}"
+    if len(candidate.encode("utf-8")) <= max_bytes:
+        return candidate
+    return f"{prefix}_{key_hash}"
 
 
 def _sanitize_document_size(doc: str, max_bytes: int = MAX_DOCUMENT_BYTES) -> str:
@@ -107,10 +133,13 @@ class VectorKBClient:
         commit_hash: str,
         start_line: Optional[int] = None,
         code_body: str = "",
+        project_id: str = "default",
+        team_id: Optional[str] = None,
     ) -> None:
         """Add or update a single code symbol entry."""
-        line_suffix = f"_{start_line}" if start_line is not None else ""
-        doc_id = f"code_{repo}_{branch}_{file_path}_{symbol}{line_suffix}"
+        line_suffix = f":{start_line}" if start_line is not None else ""
+        unique_key = f"{project_id}:{repo}:{branch}:{file_path}:{symbol}{line_suffix}"
+        doc_id = generate_doc_id("code", unique_key, hint=symbol)
 
         doc_parts = [
             f"File: {file_path}" + (f" (lines {start_line})" if start_line else ""),
@@ -125,6 +154,8 @@ class VectorKBClient:
         document = _sanitize_document_size("\n\n".join(doc_parts))
 
         metadata = {
+            "project_id": project_id,
+            "team_id": team_id or "",
             "repo": repo,
             "branch": branch,
             "file_path": file_path,
@@ -146,8 +177,11 @@ class VectorKBClient:
         unique_map: Dict[str, tuple] = {}
         for item in entries:
             start_line = item.get("start_line")
-            line_suffix = f"_{start_line}" if start_line is not None else ""
-            doc_id = f"code_{item['repo']}_{item['branch']}_{item['file_path']}_{item['symbol']}{line_suffix}"
+            project_id = item.get("project_id", "default")
+            team_id = item.get("team_id", "")
+            line_suffix = f":{start_line}" if start_line is not None else ""
+            unique_key = f"{project_id}:{item['repo']}:{item['branch']}:{item['file_path']}:{item['symbol']}{line_suffix}"
+            doc_id = generate_doc_id("code", unique_key, hint=item["symbol"])
 
             doc_parts = [
                 f"File: {item['file_path']}" + (f" (lines {start_line})" if start_line else ""),
@@ -163,6 +197,8 @@ class VectorKBClient:
             document = _sanitize_document_size("\n\n".join(doc_parts))
 
             metadata = {
+                "project_id": project_id,
+                "team_id": team_id,
                 "repo": item["repo"],
                 "branch": item["branch"],
                 "file_path": item["file_path"],
@@ -215,7 +251,13 @@ class VectorKBClient:
 
         return {"total": len(doc_ids), "successful": successful_count, "failed": failed_count}
 
-    async def batch_upsert(self, repo: str, records: List[Dict[str, Any]]) -> Dict[str, int]:
+    async def batch_upsert(
+        self,
+        repo: str,
+        records: List[Dict[str, Any]],
+        project_id: str = "default",
+        team_id: Optional[str] = None,
+    ) -> Dict[str, int]:
         """
         Asynchronously batch upsert arbitrary records (used by DocAgent and agentic workflows).
         Validates document sizes and falls back to item-by-item upsert if batch fails.
@@ -230,10 +272,14 @@ class VectorKBClient:
         for idx, rec in enumerate(records):
             file_path = rec.get("file_path", f"doc_{idx}")
             raw_name = rec.get("name", str(idx))
-            safe_name = raw_name.replace(" ", "_").replace("/", "_")
-            doc_id = f"doc_{repo}_{safe_name}_{idx}"
+            rec_proj = rec.get("project_id", project_id)
+            rec_team = rec.get("team_id", team_id or "")
+            unique_key = f"{rec_proj}:{repo}:{file_path}:{raw_name}:{idx}"
+            doc_id = generate_doc_id("doc", unique_key, hint=raw_name)
             content = _sanitize_document_size(rec.get("content", ""))
             meta = {
+                "project_id": rec_proj,
+                "team_id": rec_team,
                 "repo": repo,
                 "file_path": file_path,
                 "kind": rec.get("kind", "documentation"),
@@ -267,6 +313,8 @@ class VectorKBClient:
         pr_id: str,
         description_text: str,
         commit_hash: str,
+        project_id: str = "default",
+        team_id: Optional[str] = None,
     ) -> None:
         """Add or update a Pull Request entry, splitting into semantic markdown chunks if large."""
         chunks = split_markdown_text(description_text, chunk_size=800, chunk_overlap=80)
@@ -274,8 +322,11 @@ class VectorKBClient:
             chunks = [description_text]
 
         for idx, chunk in enumerate(chunks):
-            doc_id = f"pr_{repo}_{branch}_{pr_id}" if len(chunks) == 1 else f"pr_{repo}_{branch}_{pr_id}_chunk_{idx}"
+            unique_key = f"{project_id}:{repo}:{branch}:{pr_id}:{idx}"
+            doc_id = generate_doc_id("pr", unique_key, hint=f"pr_{pr_id}_{idx}")
             metadata = {
+                "project_id": project_id,
+                "team_id": team_id or "",
                 "repo": repo,
                 "branch": branch,
                 "pr_id": pr_id,
@@ -293,6 +344,8 @@ class VectorKBClient:
         branch: str,
         commit_hash: str,
         commit_message: str,
+        project_id: str = "default",
+        team_id: Optional[str] = None,
     ) -> None:
         """Add a commit message entry, chunking if message is extensive."""
         chunks = split_markdown_text(commit_message, chunk_size=800, chunk_overlap=80)
@@ -300,8 +353,11 @@ class VectorKBClient:
             chunks = [commit_message]
 
         for idx, chunk in enumerate(chunks):
-            doc_id = f"commit_{repo}_{branch}_{commit_hash}" if len(chunks) == 1 else f"commit_{repo}_{branch}_{commit_hash}_chunk_{idx}"
+            unique_key = f"{project_id}:{repo}:{branch}:{commit_hash}:{idx}"
+            doc_id = generate_doc_id("commit", unique_key, hint=commit_hash[:8])
             metadata = {
+                "project_id": project_id,
+                "team_id": team_id or "",
                 "repo": repo,
                 "branch": branch,
                 "content_type": ContentType.COMMIT.value,
@@ -317,6 +373,8 @@ class VectorKBClient:
         repo: str,
         issue_id: str,
         issue_text: str,
+        project_id: str = "default",
+        team_id: Optional[str] = None,
     ) -> None:
         """Add or update an Issue entry, chunking long issue descriptions semantically."""
         chunks = split_markdown_text(issue_text, chunk_size=800, chunk_overlap=80)
@@ -324,8 +382,11 @@ class VectorKBClient:
             chunks = [issue_text]
 
         for idx, chunk in enumerate(chunks):
-            doc_id = f"issue_{repo}_{issue_id}" if len(chunks) == 1 else f"issue_{repo}_{issue_id}_chunk_{idx}"
+            unique_key = f"{project_id}:{repo}:{issue_id}:{idx}"
+            doc_id = generate_doc_id("issue", unique_key, hint=f"issue_{issue_id}_{idx}")
             metadata = {
+                "project_id": project_id,
+                "team_id": team_id or "",
                 "repo": repo,
                 "issue_id": issue_id,
                 "content_type": ContentType.ISSUE.value,
@@ -396,11 +457,19 @@ class VectorKBClient:
         query_texts: List[str],
         n_results: int = 5,
         where: Optional[Dict[str, Any]] = None,
+        project_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Semantic similarity search with automatic $and formatting and empty-result fallback.
+        Semantic similarity search with automatic $and formatting and scoped fallback.
         """
-        parsed_where = self._normalize_where(where)
+        norm_where = dict(where) if where else {}
+        if project_id and project_id != "default":
+            if "$and" in norm_where:
+                norm_where["$and"].append({"project_id": project_id})
+            elif "project_id" not in norm_where:
+                norm_where["project_id"] = project_id
+
+        parsed_where = self._normalize_where(norm_where) if norm_where else None
         try:
             res = self._store.query(
                 query_texts=query_texts,
@@ -410,9 +479,10 @@ class VectorKBClient:
         except Exception:
             res = self._store.query(query_texts=query_texts, n_results=n_results)
 
-        # Fallback: if filtered query returned nothing, retry without filter
+        # Fallback: only relax query if no project or repo constraint was specified
         if parsed_where and res and res.get("documents") and res["documents"][0] == []:
-            res = self._store.query(query_texts=query_texts, n_results=n_results)
+            if not project_id and "repo" not in norm_where:
+                res = self._store.query(query_texts=query_texts, n_results=n_results)
 
         return res
 

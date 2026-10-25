@@ -1,6 +1,7 @@
+from dataclasses import dataclass
 import logging
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import List, Literal, Optional, Set
 import git
 from git import Repo
 
@@ -8,6 +9,15 @@ from src.indexer.contracts import ChangedFile, ChangedFileType, DiffResult
 from src.indexer.discovery import FileDiscovery
 
 logger = logging.getLogger(__name__)
+
+FileStatus = Literal["added", "modified", "deleted", "renamed"]
+
+
+@dataclass
+class LegacyChangedFile:
+    file_path: str
+    status: FileStatus
+    old_path: Optional[str] = None
 
 
 class GitDiffer:
@@ -216,3 +226,42 @@ class GitDiffer:
 
         finally:
             repo.close()
+
+
+def get_changed_files(repo_path: str | Path, base_ref: str, head_ref: str) -> List[LegacyChangedFile]:
+    """Compute changed files between base_ref and head_ref using canonical GitDiffer."""
+    differ = GitDiffer()
+    result = differ.compute_diff(repo_path, base_ref, head_ref)
+    legacy_files: List[LegacyChangedFile] = []
+    for cf in result.changed_files:
+        status: FileStatus = cf.change_type.value.lower()  # type: ignore
+        legacy_files.append(
+            LegacyChangedFile(
+                file_path=cf.path,
+                status=status,
+                old_path=cf.old_path,
+            )
+        )
+    return legacy_files
+
+
+def get_changed_symbols(repo_path: str | Path, base_ref: str, head_ref: str) -> List[str]:
+    """Identify exact symbol qualified names affected by code changes between base_ref and head_ref."""
+    from src.parsing.parser import CodeParser
+
+    root = Path(repo_path)
+    changed_files = get_changed_files(root, base_ref, head_ref)
+    parser = CodeParser()
+    changed_symbols: List[str] = []
+
+    for cf in changed_files:
+        if cf.status in ("added", "modified"):
+            file_abs_path = root / cf.file_path
+            parse_res = parser.parse_file(file_abs_path)
+            if parse_res and parse_res.symbols:
+                for sym in parse_res.symbols:
+                    changed_symbols.append(sym.qualified_name)
+        elif cf.status in ("deleted", "renamed"):
+            changed_symbols.append(f"{cf.file_path}::<deleted>")
+
+    return changed_symbols

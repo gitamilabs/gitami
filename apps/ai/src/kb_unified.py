@@ -32,6 +32,7 @@ class UnifiedKB:
         query_text: str,
         branch: str = "main",
         n_results: int = 5,
+        project_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Perform a hybrid search:
@@ -40,10 +41,15 @@ class UnifiedKB:
         Returns a dictionary combining both vector and graph hits.
         """
         # 1. Vector similarity search
+        where = {"repo": repo_id}
+        if project_id and project_id != "default":
+            where["project_id"] = project_id
+
         vector_res = self.vector.query(
             query_texts=[query_text],
             n_results=n_results,
-            where={"repo": repo_id},
+            where=where,
+            project_id=project_id,
         )
 
         vector_hits = []
@@ -72,7 +78,8 @@ class UnifiedKB:
         # Query Cypher for symbols matching any token
         graph_query = """
         MATCH (s:Symbol {repo_id: $repo_id})
-        WHERE ANY(t IN $tokens WHERE toLower(s.name) CONTAINS t OR toLower(s.qualified_name) CONTAINS t)
+        WHERE ($project_id IS NULL OR s.project_id = $project_id OR s.project_id = 'default')
+          AND ANY(t IN $tokens WHERE toLower(s.name) CONTAINS t OR toLower(s.qualified_name) CONTAINS t)
         RETURN properties(s) AS symbol
         LIMIT $limit
         """
@@ -80,7 +87,7 @@ class UnifiedKB:
         try:
             graph_recs = await self.graph.execute_query(
                 graph_query,
-                {"repo_id": repo_id, "tokens": tokens, "limit": n_results},
+                {"repo_id": repo_id, "project_id": project_id, "tokens": tokens, "limit": n_results},
             )
             graph_hits = [r["symbol"] for r in graph_recs if "symbol" in r]
 
@@ -88,13 +95,14 @@ class UnifiedKB:
             if len(graph_hits) < n_results:
                 file_query = """
                 MATCH (f:File {repo_id: $repo_id})
-                WHERE ANY(t IN $tokens WHERE toLower(f.file_path) CONTAINS t)
+                WHERE ($project_id IS NULL OR f.project_id = $project_id OR f.project_id = 'default')
+                  AND ANY(t IN $tokens WHERE toLower(f.file_path) CONTAINS t)
                 RETURN {name: f.file_path, qualified_name: f.file_path, kind: "file", file_path: f.file_path, language: f.language} AS symbol
                 LIMIT $limit
                 """
                 file_recs = await self.graph.execute_query(
                     file_query,
-                    {"repo_id": repo_id, "tokens": tokens, "limit": n_results - len(graph_hits)},
+                    {"repo_id": repo_id, "project_id": project_id, "tokens": tokens, "limit": n_results - len(graph_hits)},
                 )
                 file_hits = [r["symbol"] for r in file_recs if "symbol" in r]
                 graph_hits.extend(file_hits)

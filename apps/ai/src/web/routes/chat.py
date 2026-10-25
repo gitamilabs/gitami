@@ -19,6 +19,7 @@ from src.mcp.tools import (
     tool_vector_search,
 )
 from src.vector.client import VectorKBClient
+from src.web.deps import get_shared_graph_client, get_shared_vector_client
 from src.web.schemas import ChatRequest, ChatResponse, Citation, ToolStep
 
 router = APIRouter(tags=["chat"])
@@ -31,31 +32,27 @@ async def agent_chat_stream(req: ChatRequest):
     1. Agent runs iterative ReAct reasoning loop.
     2. Streams thoughts, tool calls, tool responses, answer text deltas, and citations.
     """
-    graph_client = Neo4jClient()
-    try:
-        await graph_client.connect()
-    except Exception:
-        pass
-
-    vector_client = VectorKBClient()
+    graph_client = await get_shared_graph_client()
+    vector_client = get_shared_vector_client()
     llm_client = DualLLMClient()
     agent_loop = AutonomousAgentLoop(llm_client=llm_client)
 
+    history_payload = (
+        [{"role": m.role, "content": m.content} for m in req.history]
+        if req.history
+        else None
+    )
+
     async def event_generator():
-        try:
-            async for event in agent_loop.run_stream(
-                user_query=req.message,
-                repo_id=req.repo_id,
-                branch=req.branch or "main",
-                graph_client=graph_client,
-                vector_client=vector_client,
-            ):
-                yield event
-        finally:
-            try:
-                await graph_client.close()
-            except Exception:
-                pass
+        async for event in agent_loop.run_stream(
+            user_query=req.message,
+            repo_id=req.repo_id,
+            branch=req.branch or "main",
+            graph_client=graph_client,
+            vector_client=vector_client,
+            history=history_payload,
+        ):
+            yield event
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -80,7 +77,13 @@ async def _execute_single_tool(
         if t_name == "vector_search":
             t_title = "ChromaDB Semantic Vector Search"
             q = t_args.get("query", req.message)
-            raw_str = await tool_vector_search(vector_client, query_text=q, repo_id=req.repo_id, n_results=5)
+            raw_str = await tool_vector_search(
+                vector_client,
+                query_text=q,
+                repo_id=req.repo_id,
+                n_results=5,
+                project_id=req.project_id,
+            )
             t_raw = json.loads(raw_str)
             hits = t_raw.get("results", [])
             t_summary = f"Retrieved {len(hits)} semantic vector code passages from ChromaDB."
@@ -114,6 +117,7 @@ async def _execute_single_tool(
                 query_text=q,
                 branch=req.branch or "main",
                 n_results=5,
+                project_id=req.project_id,
             )
             t_raw = json.loads(raw_str)
             vec_hits = t_raw.get("vector_hits", [])
@@ -308,13 +312,8 @@ async def agent_chat_query(req: ChatRequest):
     citation_id_counter = 1
     context_chunks = []
 
-    graph_client = Neo4jClient()
-    try:
-        await graph_client.connect()
-    except Exception:
-        pass
-
-    vector_client = VectorKBClient()
+    graph_client = await get_shared_graph_client()
+    vector_client = get_shared_vector_client()
     llm_client = DualLLMClient()
 
     # Step 1: Agent plans dynamic tool calls
@@ -404,11 +403,6 @@ async def agent_chat_query(req: ChatRequest):
     )
 
     total_latency = (time.perf_counter() - total_start) * 1000.0
-
-    try:
-        await graph_client.close()
-    except Exception:
-        pass
 
     return ChatResponse(
         answer=synthesis_response,

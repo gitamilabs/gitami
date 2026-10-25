@@ -400,12 +400,20 @@ async function executeBackgroundBuild(
 
   const isLocal = repo.githubRepoId.startsWith("local:");
   const payload = isLocal
-    ? { repo_id: repo.name, repo_dir: repo.fullName, branch }
+    ? {
+        repo_id: repo.name,
+        repo_dir: repo.fullName,
+        branch,
+        project_id: repo.projectId || "default",
+        team_id: repo.userId,
+      }
     : {
         repo_id: repo.fullName,
         full_name: repo.fullName,
         access_token: token,
         branch,
+        project_id: repo.projectId || "default",
+        team_id: repo.userId,
       };
 
   const controller = new AbortController();

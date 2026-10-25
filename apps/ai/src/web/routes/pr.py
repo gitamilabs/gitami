@@ -3,8 +3,7 @@ from fastapi import APIRouter
 from src.agents.fixer import run_autonomous_pr_fixer
 from src.agents.llm_client import DualLLMClient
 from src.agents.reviewer import run_agentic_pr_review
-from src.graph.client import Neo4jClient
-from src.vector.client import VectorKBClient
+from src.web.deps import get_shared_graph_client, get_shared_vector_client
 from src.web.schemas import PRFixRequest, PRReviewRequest
 
 router = APIRouter(tags=["pr"])
@@ -27,13 +26,8 @@ async def review_pull_request(req: PRReviewRequest):
             "status": "skipped_ai_fix",
         }
 
-    graph_client = Neo4jClient()
-    try:
-        await graph_client.connect()
-    except Exception:
-        pass
-
-    vector_client = VectorKBClient()
+    graph_client = await get_shared_graph_client()
+    vector_client = get_shared_vector_client()
     llm_client = DualLLMClient()
 
     raw_diff = req.diff_text or ""
@@ -46,32 +40,26 @@ async def review_pull_request(req: PRReviewRequest):
             f"/// PR Diff changes in {req.repo_id} for head branch {req.head_branch} ///\n"
         )
 
-    try:
-        result = await run_agentic_pr_review(
-            client=graph_client,
-            repo_id=req.repo_id,
-            branch=req.head_branch,
-            changed_symbols=[],
-            raw_diff_text=raw_diff,
-            symbols=[],
-            vector_client=vector_client,
-            llm_client=llm_client,
-        )
+    result = await run_agentic_pr_review(
+        client=graph_client,
+        repo_id=req.repo_id,
+        branch=req.head_branch,
+        changed_symbols=[],
+        raw_diff_text=raw_diff,
+        symbols=[],
+        vector_client=vector_client,
+        llm_client=llm_client,
+    )
 
-        return {
-            "verdict": result.decision.verdict,
-            "risk_score": result.decision.risk_score,
-            "summary": result.decision.summary,
-            "agent_rationale": result.agent_rationale,
-            "issues": result.issues,
-            "diff_hunks_count": result.diff_hunks_count,
-            "llm_orchestrator_used": result.llm_orchestrator_used,
-        }
-    finally:
-        try:
-            await graph_client.close()
-        except Exception:
-            pass
+    return {
+        "verdict": result.decision.verdict,
+        "risk_score": result.decision.risk_score,
+        "summary": result.decision.summary,
+        "agent_rationale": result.agent_rationale,
+        "issues": result.issues,
+        "diff_hunks_count": result.diff_hunks_count,
+        "llm_orchestrator_used": result.llm_orchestrator_used,
+    }
 
 
 @router.post("/api/pr/fix")

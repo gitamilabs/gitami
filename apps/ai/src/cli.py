@@ -143,11 +143,125 @@ def eval_pr(repo_id: str, branch: str, repo_dir: str, base_ref: str, head_ref: s
 @click.option("--repo-id", help="Filter by repo ID.")
 @click.option("--n-results", default=5, help="Number of results to return.")
 def vector_search(query: str, repo_id: Optional[str], n_results: int):
-    """Run semantic similarity search on ChromaDB vector knowledge base."""
-    from src.mcp.tools import tool_vector_search
-    vector_client = VectorKBClient()
-    res = tool_vector_search(vector_client, query_text=query, repo_id=repo_id, n_results=n_results)
-    click.echo(res)
+    """Run semantic similarity search on vector knowledge base."""
+    async def _run():
+        from src.mcp.tools import tool_vector_search
+        vector_client = VectorKBClient()
+        res = await tool_vector_search(vector_client, query_text=query, repo_id=repo_id, n_results=n_results)
+        click.echo(res)
+
+    asyncio.run(_run())
+
+
+@main.command()
+def doctor():
+    """Diagnose connectivity and health of Neo4j, Vector DB, and Gemini LLM."""
+    from src.config import settings
+    import time
+
+    async def _run():
+        click.echo("Running AI Service diagnostics...\n")
+
+        # 1. Neo4j
+        neo_status = "FAILED"
+        neo_latency = 0.0
+        neo_details = ""
+        try:
+            g_start = time.perf_counter()
+            gc = Neo4jClient()
+            await gc.connect()
+            recs = await gc.execute_query("RETURN 1 as ping")
+            neo_latency = (time.perf_counter() - g_start) * 1000
+            node_counts = await gc.execute_query("MATCH (n) RETURN count(n) as cnt")
+            cnt = node_counts[0]["cnt"] if node_counts else 0
+            neo_status = "OK"
+            neo_details = f"{cnt} nodes in DB ({settings.neo4j_uri or 'bolt://localhost:7687'})"
+            await gc.close()
+        except Exception as e:
+            neo_details = str(e)
+
+        # 2. Vector DB
+        vec_status = "FAILED"
+        vec_latency = 0.0
+        vec_details = ""
+        try:
+            v_start = time.perf_counter()
+            vc = VectorKBClient()
+            v_count = vc.count()
+            vec_latency = (time.perf_counter() - v_start) * 1000
+            vec_status = "OK"
+            vec_details = f"Active backend: {settings.vector_db} ({v_count} vectors)"
+        except Exception as e:
+            vec_details = str(e)
+
+        # 3. Gemini / LLM
+        llm_status = "FAILED"
+        llm_details = ""
+        try:
+            if settings.gemini_api_key:
+                masked_key = f"{settings.gemini_api_key[:6]}...{settings.gemini_api_key[-4:]}"
+                llm_status = "CONFIGURED"
+                llm_details = f"Key: {masked_key}"
+            else:
+                llm_status = "MISSING KEY"
+                llm_details = "GEMINI_API_KEY environment variable not set"
+        except Exception as e:
+            llm_details = str(e)
+
+        click.echo(f"  [Neo4j Graph DB]  {neo_status:10} ({neo_latency:6.1f}ms) - {neo_details}")
+        click.echo(f"  [Vector DB]       {vec_status:10} ({vec_latency:6.1f}ms) - {vec_details}")
+        click.echo(f"  [Gemini LLM]      {llm_status:10}           - {llm_details}")
+
+    asyncio.run(_run())
+
+
+@main.group()
+def graph():
+    """Graph database inspection and repair commands."""
+    pass
+
+
+@graph.command(name="inspect")
+@click.option("--repo-id", help="Filter inspection to a specific repository ID.")
+def graph_inspect(repo_id: Optional[str]):
+    """Inspect Neo4j node counts, edge relationships, and orphan symbols."""
+    from src.graph.reader import inspect_graph
+
+    async def _run():
+        gc = Neo4jClient()
+        await gc.connect()
+        try:
+            res = await inspect_graph(gc, repo_id=repo_id)
+            click.echo(json.dumps(res, indent=2))
+        finally:
+            await gc.close()
+
+    asyncio.run(_run())
+
+
+@graph.command(name="repair")
+@click.option("--repo-id", help="Filter repair to a specific repository ID.")
+def graph_repair(repo_id: Optional[str]):
+    """Rebuild missing Directory nodes and ensure file imports strictly connect File to File."""
+    from src.graph.writer import repair_graph_hierarchy, repair_import_edges
+
+    async def _run():
+        gc = Neo4jClient()
+        await gc.connect()
+        try:
+            click.echo("Repairing graph hierarchy...")
+            res_hier = await repair_graph_hierarchy(gc, repo_id=repo_id)
+            click.echo(json.dumps(res_hier, indent=2))
+
+            click.echo("Repairing file import relationships (File -> File)...")
+            res_imp = await repair_import_edges(gc, repo_id=repo_id)
+            click.echo(json.dumps(res_imp, indent=2))
+
+            click.echo("Graph repair completed successfully.")
+        finally:
+            await gc.close()
+
+    asyncio.run(_run())
 
 
 @main.command()
