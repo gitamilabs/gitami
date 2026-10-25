@@ -52,10 +52,12 @@ def stream_and_parse_github_repo(
     token: Optional[str] = None,
     branch: str = "main",
     parser: Optional[CodeParser] = None,
+    root_directory: Optional[str] = None,
 ) -> List[ParseResult]:
     """
     Streams a repository tarball from GitHub directly into memory (0 local disk writes),
     decompresses files in-memory, and parses them with Tree-sitter AST parser.
+    If root_directory is provided, only files within that subdirectory are parsed.
     """
     url = f"https://api.github.com/repos/{full_name}/tarball/{branch}"
     headers = {
@@ -78,6 +80,7 @@ def stream_and_parse_github_repo(
         parser = CodeParser()
 
     parse_results: List[ParseResult] = []
+    clean_root = root_directory.strip("/") if root_directory else None
 
     with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:*") as tar:
         for member in tar.getmembers():
@@ -91,6 +94,11 @@ def stream_and_parse_github_repo(
 
             # Normalized relative path inside the repo
             rel_path = "/".join(parts[1:])
+
+            # Check root directory filter
+            if clean_root:
+                if not (rel_path == clean_root or rel_path.startswith(f"{clean_root}/")):
+                    continue
 
             # Skip ignored directories
             if any(part in IGNORED_DIRECTORIES for part in parts[1:]):

@@ -50,6 +50,7 @@ async def ingest_repository(req: IngestRequest):
                         full_name=target_full_name,
                         token=req.access_token,
                         branch=req.branch or "main",
+                        root_directory=req.root_directory,
                     )
                     result = await run_init_job(
                         repo_id=req.repo_id,
@@ -61,6 +62,7 @@ async def ingest_repository(req: IngestRequest):
                         stage_callback=queue_cb,
                         project_id=req.project_id or "default",
                         team_id=req.team_id,
+                        root_directory=req.root_directory,
                     )
                 elif req.repo_dir:
                     repo_path = Path(req.repo_dir)
@@ -78,6 +80,7 @@ async def ingest_repository(req: IngestRequest):
                         stage_callback=queue_cb,
                         project_id=req.project_id or "default",
                         team_id=req.team_id,
+                        root_directory=req.root_directory,
                     )
                 else:
                     await queue_cb("FAILED", "FAILED", {}, "Must provide either 'full_name' or 'repo_dir'")
@@ -160,6 +163,7 @@ async def ingest_from_github_url(req: IngestUrlRequest):
                 extraction_mode=req.extraction_mode or "fast",
                 project_id=req.project_id or "default",
                 team_id=req.team_id,
+                root_directory=req.root_directory,
             )
 
             return {
@@ -226,6 +230,7 @@ async def reindex_repository(req: ReindexRequest):
                             project_id=req.project_id or "default",
                             job_type=IndexJobType.FULL_REINDEX if req.force_full else IndexJobType.INITIAL,
                             stage_callback=queue_cb,
+                            root_directory=req.root_directory,
                         )
                 elif target_full_name:
                     # In-memory remote tarball stream
@@ -234,6 +239,7 @@ async def reindex_repository(req: ReindexRequest):
                         full_name=target_full_name,
                         token=req.access_token,
                         branch=req.branch or "main",
+                        root_directory=req.root_directory,
                     )
                     job, state, report = await indexer.run(
                         repo_id=req.repo_id,
@@ -243,6 +249,7 @@ async def reindex_repository(req: ReindexRequest):
                         job_type=IndexJobType.FULL_REINDEX if req.force_full else IndexJobType.INITIAL,
                         stage_callback=queue_cb,
                         parse_results=parse_results,
+                        root_directory=req.root_directory,
                     )
                 else:
                     await queue_cb("FAILED", "FAILED", {}, "Must provide either valid 'repo_dir' or 'full_name'")

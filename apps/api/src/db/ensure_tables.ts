@@ -55,7 +55,12 @@ export async function ensureDatabaseTablesExist() {
       );
     `);
 
-    console.log("✅ Database tables ensured successfully (pull_requests, pr_reviews, pr_issues).");
+    // Ensure root_directory column exists on connected_repositories
+    await db.execute(sql`
+      ALTER TABLE "connected_repositories" ADD COLUMN IF NOT EXISTS "root_directory" varchar(512);
+    `);
+
+    console.log("✅ Database tables ensured successfully (pull_requests, pr_reviews, pr_issues, connected_repositories.root_directory).");
   } catch (err) {
     console.error("⚠️ Ensure tables status:", err);
   }

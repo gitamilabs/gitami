@@ -46,6 +46,7 @@ async def run_init_job(
     stage_callback: Optional[Any] = None,
     project_id: str = "default",
     team_id: Optional[str] = None,
+    root_directory: Optional[str] = None,
 ) -> InitResult:
     """
     Canonical V1 Repository Initialization.
@@ -70,6 +71,7 @@ async def run_init_job(
             validate_only=(client is None),
             stage_callback=stage_callback,
             parse_results=parse_results,
+            root_directory=root_directory,
         )
 
         duration = round(time.time() - start_time, 3)

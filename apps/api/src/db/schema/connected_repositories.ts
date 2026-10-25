@@ -27,6 +27,7 @@ export const connectedRepositories = pgTable("connected_repositories", {
   defaultBranch: varchar("default_branch", { length: 255 })
     .notNull()
     .default("main"),
+  rootDirectory: varchar("root_directory", { length: 512 }),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

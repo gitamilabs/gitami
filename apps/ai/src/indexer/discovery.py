@@ -1,6 +1,6 @@
 import hashlib
 from pathlib import Path
-from typing import List, Set, Tuple
+from typing import List, Set, Tuple, Optional
 from src.indexer.contracts import DiscoveredFile
 from src.indexer.snapshot import RepositorySnapshot
 from src.parsing.parser import LanguageRegistry
@@ -63,10 +63,12 @@ class FileDiscovery:
         lang_tuple = LanguageRegistry.get_language_and_extractor(suffix)
         return lang_tuple[2] if lang_tuple else (suffix[1:] if suffix else "text")
 
-    def discover_files(self, snapshot: RepositorySnapshot) -> Tuple[List[DiscoveredFile], int]:
-
+    def discover_files(
+        self, snapshot: RepositorySnapshot, root_directory: Optional[str] = None
+    ) -> Tuple[List[DiscoveredFile], int]:
         """
         Scan snapshot files, filter noise, compute sha256 hashes.
+        If root_directory is provided, only files within that subdirectory are discovered.
         
         Returns:
             (discovered_files, skipped_count)
@@ -75,7 +77,15 @@ class FileDiscovery:
         discovered: List[DiscoveredFile] = []
         skipped = 0
 
+        clean_root = root_directory.strip("/") if root_directory else None
+
         for rel_path in all_files:
+            # Check root directory filter
+            if clean_root:
+                if not (rel_path == clean_root or rel_path.startswith(f"{clean_root}/")):
+                    skipped += 1
+                    continue
+
             parts = rel_path.split("/")
             # Check directory ignore rules
             if any(part in self.ignored_dirs for part in parts[:-1]):

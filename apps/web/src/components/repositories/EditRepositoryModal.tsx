@@ -24,6 +24,7 @@ export const EditRepositoryModal: React.FC<EditRepositoryModalProps> = ({
   const { updateRepo } = useRepoStore();
 
   const [defaultBranch, setDefaultBranch] = useState(repository.defaultBranch || "main");
+  const [rootDirectory, setRootDirectory] = useState(repository.rootDirectory || "");
   const [isActive, setIsActive] = useState(repository.isActive ?? true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +37,7 @@ export const EditRepositoryModal: React.FC<EditRepositoryModalProps> = ({
   useEffect(() => {
     if (repository) {
       setDefaultBranch(repository.defaultBranch || "main");
+      setRootDirectory(repository.rootDirectory || "");
       setIsActive(repository.isActive ?? true);
       setError(null);
     }
@@ -60,6 +62,7 @@ export const EditRepositoryModal: React.FC<EditRepositoryModalProps> = ({
     try {
       const updated = await updateRepo(token, repository.id, {
         defaultBranch: defaultBranch.trim(),
+        rootDirectory: rootDirectory.trim() || null,
         isActive,
       });
       setIsLoading(false);
@@ -119,6 +122,22 @@ export const EditRepositoryModal: React.FC<EditRepositoryModalProps> = ({
             />
             <p className="text-[11px] text-zinc-500 mt-1">
               Used for automated indexing, AST call-graph tracing, and default PR base comparisons.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+              Root Directory / Subdirectory (Optional)
+            </label>
+            <input
+              type="text"
+              value={rootDirectory}
+              onChange={(e) => setRootDirectory(e.target.value)}
+              placeholder="e.g. apps/api, backend, or packages/core (leave blank for whole repo)"
+              className="w-full px-3 py-2 bg-white/[0.03] border border-white/[0.08] rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white/20 focus:bg-white/[0.05] font-mono transition-colors"
+            />
+            <p className="text-[11px] text-zinc-500 mt-1">
+              Scoping directory for monorepos or polyrepos. Leave empty to index the whole repository.
             </p>
           </div>
 

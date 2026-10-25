@@ -828,6 +828,27 @@ class GraphIndexer:
         await self.client.execute_query(query, {"batch": test_edges})
         return len(test_edges)
 
+    async def clear_repository(
+        self,
+        repo_id: str,
+        branch: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> None:
+        """
+        Purge all File, Directory, Symbol, Test, Package, and Inferred nodes for a repository on an INITIAL full reindex.
+        Ensures stale entities from outside a newly selected root_directory or deleted files do not persist.
+        """
+        query = """
+        MATCH (n)
+        WHERE (n:File OR n:Directory OR n:Symbol OR n:Package OR n:Inferred OR n:Test)
+          AND (toLower(n.repo_id) = toLower($repo_id)
+               OR toLower(n.repo_id) ENDS WITH '/' + toLower($repo_id)
+               OR toLower($repo_id) ENDS WITH '/' + toLower(n.repo_id))
+          AND ($branch IS NULL OR n.branch = $branch OR n.branch IS NULL)
+        DETACH DELETE n
+        """
+        await self.client.execute_query(query, {"repo_id": repo_id, "branch": branch})
+
     async def delete_file_and_symbols(self, repo_id: str, file_path: str) -> None:
         """
         Delete a file node and all symbols canonically owned by it via :DEFINES.

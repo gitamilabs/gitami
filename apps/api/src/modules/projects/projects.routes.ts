@@ -85,6 +85,7 @@ projectsRouter.post("/:projectIdOrSlug/repositories", async (c) => {
   const projectIdOrSlug = c.req.param("projectIdOrSlug");
   const body = await c.req.json().catch(() => ({}));
   const repositoryId = body.repositoryId;
+  const rootDirectory = body.rootDirectory;
 
   if (!repositoryId) {
     return c.json({ error: "repositoryId is required" }, 400);
@@ -98,7 +99,8 @@ projectsRouter.post("/:projectIdOrSlug/repositories", async (c) => {
   const attached = await attachRepositoryToProject(
     result.project.id,
     repositoryId,
-    user.id
+    user.id,
+    rootDirectory
   );
 
   if (!attached) {
@@ -151,7 +153,8 @@ projectsRouter.get("/:projectIdOrSlug/builds", async (c) => {
   const builds = await db
     .select()
     .from(indexJobs)
-    .where(eq(indexJobs.projectId, result.project.id));
+    .where(eq(indexJobs.projectId, result.project.id))
+    .orderBy(desc(indexJobs.createdAt));
 
   return c.json({ builds: builds.map(formatBuildWithStages) });
 });
@@ -297,9 +300,11 @@ projectsRouter.get("/:projectIdOrSlug/graph", async (c) => {
 
   try {
     const effectiveProjectId = targetRepo.projectId || result.project.id;
-    const res = await fetch(
-      `${aiServiceUrl}/api/graph/${repoKey}?branch=${encodeURIComponent(branch)}&max_nodes=${maxNodes}&project_id=${encodeURIComponent(effectiveProjectId)}`
-    );
+    let graphQueryUrl = `${aiServiceUrl}/api/graph/${repoKey}?branch=${encodeURIComponent(branch)}&max_nodes=${maxNodes}&project_id=${encodeURIComponent(effectiveProjectId)}`;
+    if (targetRepo.rootDirectory && targetRepo.rootDirectory.trim()) {
+      graphQueryUrl += `&root_directory=${encodeURIComponent(targetRepo.rootDirectory.trim())}`;
+    }
+    const res = await fetch(graphQueryUrl);
 
     if (!res.ok) {
       // If AI service has not indexed or returned 404/500

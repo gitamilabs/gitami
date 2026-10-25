@@ -4,9 +4,12 @@ import {
   authMiddleware,
   type AuthContextVariables,
 } from "../../middlewares/auth.middleware";
+import fs from "fs";
+import path from "path";
 import {
   getAppInstallationUrl,
   getInstallationAccessToken,
+  getInstallationTokenForRepo,
   syncInstallationRepositories,
   syncUserInstallations,
   syncPullRequestsForRepo,
@@ -249,6 +252,137 @@ githubRouter.get("/repositories/:id", authMiddleware, async (c) => {
 });
 
 /**
+ * GET /repositories/:id/directories
+ * Fetches the directory hierarchy for a repository to allow users to select a root directory.
+ */
+githubRouter.get("/repositories/:id/directories", authMiddleware, async (c) => {
+  const user = c.get("user");
+  const repoId = c.req.param("id");
+  const branch = c.req.query("branch");
+
+  if (!repoId) {
+    return c.json({ error: "Missing repository id" }, 400);
+  }
+
+  const [repo] = await db
+    .select()
+    .from(connectedRepositories)
+    .where(
+      and(
+        eq(connectedRepositories.id, repoId),
+        eq(connectedRepositories.userId, user.id)
+      )
+    )
+    .limit(1);
+
+  if (!repo) {
+    return c.json({ error: "Repository not found or access denied" }, 404);
+  }
+
+  const targetBranch = branch || repo.defaultBranch || "main";
+
+  // If local repository, read directory tree from disk
+  if (repo.githubRepoId.startsWith("local:")) {
+    try {
+      const localDir = repo.fullName;
+      if (fs.existsSync(localDir)) {
+        const getDirs = (dir: string, baseDir: string, depth = 0): string[] => {
+          if (depth > 4) return [];
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          const dirs: string[] = [];
+          for (const entry of entries) {
+            if (!entry.isDirectory()) continue;
+            if (
+              entry.name.startsWith(".") ||
+              ["node_modules", "dist", "build", "venv", ".venv", "__pycache__"].includes(entry.name)
+            )
+              continue;
+            const fullPath = path.join(dir, entry.name);
+            const relPath = path.relative(baseDir, fullPath).replace(/\\/g, "/");
+            dirs.push(relPath);
+            dirs.push(...getDirs(fullPath, baseDir, depth + 1));
+          }
+          return dirs;
+        };
+        const directories = getDirs(localDir, localDir).sort();
+        return c.json({ directories });
+      }
+    } catch (err) {
+      console.warn("Could not read local directories:", err);
+    }
+    return c.json({ directories: [] });
+  }
+
+  // GitHub repository: query Git trees API
+  try {
+    const parts = repo.fullName.split("/");
+    const owner = parts[0];
+    const name = parts[1];
+    let token: string | undefined;
+
+    if (owner && name) {
+      token = (await getInstallationTokenForRepo(owner, name)) || undefined;
+    }
+
+    if (!token && repo.installationId) {
+      const [inst] = await db
+        .select()
+        .from(githubInstallations)
+        .where(eq(githubInstallations.id, repo.installationId))
+        .limit(1);
+      if (inst?.installationId) {
+        token = await getInstallationAccessToken(inst.installationId);
+      }
+    }
+
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "Sentinel-API",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const res = await fetch(
+      `https://api.github.com/repos/${repo.fullName}/git/trees/${encodeURIComponent(targetBranch)}?recursive=1`,
+      { headers }
+    );
+
+    if (res.ok) {
+      const data: any = await res.json();
+      const tree: Array<{ path: string; type: string }> = data.tree || [];
+      const ignoredDirs = new Set([
+        ".git",
+        ".github",
+        ".vscode",
+        ".idea",
+        "node_modules",
+        "dist",
+        "build",
+        "venv",
+        ".venv",
+        "__pycache__",
+      ]);
+
+      const directories = tree
+        .filter((item) => item.type === "tree")
+        .map((item) => item.path)
+        .filter((dirPath) => {
+          const segments = dirPath.split("/");
+          return !segments.some((seg) => ignoredDirs.has(seg) || seg.startsWith("."));
+        })
+        .slice(0, 100);
+
+      return c.json({ directories });
+    }
+  } catch (err) {
+    console.warn(`Failed to fetch directories for ${repo.fullName}:`, err);
+  }
+
+  return c.json({ directories: [] });
+});
+
+/**
  * PATCH /repositories/:id
  * Protected. Updates repository settings like defaultBranch or isActive status.
  */
@@ -286,6 +420,9 @@ githubRouter.patch("/repositories/:id", authMiddleware, async (c) => {
   }
   if (body.name && typeof body.name === "string") {
     setValues.name = body.name.trim();
+  }
+  if ("rootDirectory" in body) {
+    setValues.rootDirectory = typeof body.rootDirectory === "string" && body.rootDirectory.trim() ? body.rootDirectory.trim() : null;
   }
 
   if (Object.keys(setValues).length === 0) {
@@ -370,6 +507,7 @@ githubRouter.post("/repositories/:id/ingest", authMiddleware, async (c) => {
     branch,
     project_id: repo.projectId || "default",
     team_id: repo.userId,
+    root_directory: repo.rootDirectory?.trim() || undefined,
   };
 
   try {

@@ -25,6 +25,7 @@ async def get_graph_data(
     branch: str = "main",
     max_nodes: int = 500,
     project_id: Optional[str] = None,
+    root_directory: Optional[str] = None,
 ):
     """
     Returns actual Neo4j nodes and edges for the interactive knowledge graph.
@@ -37,6 +38,7 @@ async def get_graph_data(
             branch=branch,
             max_nodes=max_nodes,
             project_id=project_id,
+            root_directory=root_directory,
         )
         presentation = compute_graph_presentation(raw_data)
         return {

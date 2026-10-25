@@ -55,6 +55,7 @@ class IngestRequest(BaseModel):
     extraction_mode: Optional[str] = "fast"
     project_id: Optional[str] = "default"
     team_id: Optional[str] = None
+    root_directory: Optional[str] = None
 
 
 class IngestUrlRequest(BaseModel):
@@ -64,6 +65,7 @@ class IngestUrlRequest(BaseModel):
     extraction_mode: Optional[str] = "fast"
     project_id: Optional[str] = "default"
     team_id: Optional[str] = None
+    root_directory: Optional[str] = None
 
 
 class ReindexRequest(BaseModel):
@@ -77,6 +79,7 @@ class ReindexRequest(BaseModel):
     force_full: Optional[bool] = False
     project_id: Optional[str] = "default"
     team_id: Optional[str] = None
+    root_directory: Optional[str] = None
 
 
 class PromptUpdateRequest(BaseModel):

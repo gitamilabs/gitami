@@ -153,6 +153,24 @@ export const githubApi = {
     return res.json();
   },
 
+  getRepositoryDirectories: async (
+    token: string,
+    repoId: string,
+    branch?: string
+  ): Promise<{ directories: string[] }> => {
+    const query = branch ? `?branch=${encodeURIComponent(branch)}` : "";
+    const res = await fetch(`${API_BASE_URL}/github/repositories/${encodeURIComponent(repoId)}/directories${query}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+    });
+    if (!res.ok) {
+      return { directories: [] };
+    }
+    return res.json().catch(() => ({ directories: [] }));
+  },
+
   updateRepository: async (
     token: string,
     repoId: string,
@@ -1048,7 +1066,8 @@ export const projectsApi = {
   attachRepository: async (
     token: string,
     projectIdOrSlug: string,
-    repositoryId: string
+    repositoryId: string,
+    rootDirectory?: string
   ): Promise<{ success: boolean; repository: ConnectedRepository }> => {
     const res = await fetch(
       `${API_BASE_URL}/projects/${encodeURIComponent(projectIdOrSlug)}/repositories`,
@@ -1059,7 +1078,10 @@ export const projectsApi = {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({ repositoryId }),
+        body: JSON.stringify({
+          repositoryId,
+          rootDirectory: rootDirectory?.trim() || undefined,
+        }),
       }
     );
     if (!res.ok) {

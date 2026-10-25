@@ -31,6 +31,7 @@ export interface ConnectedRepository {
   isPrivate: boolean;
   htmlUrl: string;
   defaultBranch: string;
+  rootDirectory?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -339,6 +340,7 @@ export interface UpdateRepoInput {
   defaultBranch?: string;
   isActive?: boolean;
   name?: string;
+  rootDirectory?: string | null;
 }
 
 export interface CreatePRInput {

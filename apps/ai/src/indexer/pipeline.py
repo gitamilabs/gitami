@@ -74,6 +74,7 @@ class RepositoryIndexer:
         validate_only: bool = False,
         stage_callback: Optional[Any] = None,
         parse_results: Optional[List[ParseResult]] = None,
+        root_directory: Optional[str] = None,
     ) -> Tuple[IndexJob, RepositoryIndexState, ValidationReport]:
         """
         Execute the canonical full indexing pipeline against an explicit commit SHA.
@@ -95,6 +96,7 @@ class RepositoryIndexer:
                 validate_only=validate_only,
                 stage_callback=stage_callback,
                 parse_results=parse_results,
+                root_directory=root_directory,
             )
 
     async def _run(
@@ -109,6 +111,7 @@ class RepositoryIndexer:
         validate_only: bool = False,
         stage_callback: Optional[Any] = None,
         parse_results: Optional[List[ParseResult]] = None,
+        root_directory: Optional[str] = None,
     ) -> Tuple[IndexJob, RepositoryIndexState, ValidationReport]:
         start_time = time.time()
         job = IndexJob(
@@ -184,7 +187,9 @@ class RepositoryIndexer:
                     job.stage = "DISCOVERY"
                     job.progress = 25
                     await emit_stage("DISCOVERY", "RUNNING")
-                    discovered_files, skipped_count = self.discovery.discover_files(snapshot)
+                    discovered_files, skipped_count = self.discovery.discover_files(
+                        snapshot, root_directory=root_directory
+                    )
                     stats.files_discovered = len(discovered_files)
                     stats.files_skipped = skipped_count
                     await emit_stage("DISCOVERY", "RUNNING", {"files_discovered": len(discovered_files), "files_skipped": skipped_count})
@@ -218,6 +223,9 @@ class RepositoryIndexer:
                 graph_indexer = GraphIndexer(self.graph_client)
 
                 await graph_indexer.ensure_v1_schema()
+                if job_type == IndexJobType.INITIAL:
+                    await graph_indexer.clear_repository(repo_id=repo_id, branch=branch, project_id=project_id)
+
                 await graph_indexer.index_repository_node(
                     project_id=project_id,
                     repo_id=repo_id,
@@ -289,6 +297,12 @@ class RepositoryIndexer:
                 job.progress = 85
                 await emit_stage("SEMANTIC_INDEXING", "RUNNING")
                 try:
+                    if job_type == IndexJobType.INITIAL:
+                        try:
+                            self.vector_client.delete({"repo": repo_id})
+                        except Exception as vec_clean_err:
+                            logger.debug(f"Vector cleanup notice: {vec_clean_err}")
+
                     raw_symbols = []
                     for pr in parse_results:
                         raw_symbols.extend(pr.symbols)

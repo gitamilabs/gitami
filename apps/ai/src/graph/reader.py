@@ -80,12 +80,15 @@ async def get_entire_graph(
     branch: str = "main",
     max_nodes: int = 500,
     project_id: Optional[str] = None,
+    root_directory: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Fetch nodes (Files, Symbols, Packages, Inferred) and edges (DEFINES, CALLS, IMPORTS, DEPENDS_ON, DEPENDS_ON_FILE, EXTENDS, IMPLEMENTS, TESTS) for a repo."""
     nodes = []
     edges = []
     node_ids = set()
     id_alias_map = {}
+
+    clean_root = root_directory.replace("\\", "/").strip("./").strip("/") if root_directory else None
 
     # 1. Resolve canonical repository from Neo4j (case-insensitive and suffix-tolerant)
     repo_records = await client.execute_query(
@@ -129,11 +132,12 @@ async def get_entire_graph(
     MATCH (d:Directory)
     WHERE toLower(d.repo_id) = toLower($canonical_repo_id)
       AND ($project_id IS NULL OR d.project_id = $project_id OR d.project_id = 'default')
+      AND ($clean_root IS NULL OR d.path = $clean_root OR d.path STARTS WITH ($clean_root + '/') OR $clean_root STARTS WITH (d.path + '/'))
     RETURN d.uid AS uid, d.path AS path, COALESCE(d.name, split(d.path, '/')[-1]) AS label,
            COALESCE(d.depth, size(split(d.path, '/'))) AS depth, properties(d) AS props
     LIMIT 300
     """
-    dir_records = await client.execute_query(dir_query, {"canonical_repo_id": canonical_repo_id, "project_id": project_id})
+    dir_records = await client.execute_query(dir_query, {"canonical_repo_id": canonical_repo_id, "project_id": project_id, "clean_root": clean_root})
     for r in dir_records:
         did = r["path"]
         if did in node_ids:
@@ -160,6 +164,7 @@ async def get_entire_graph(
     WHERE toLower(f.repo_id) = toLower($canonical_repo_id)
       AND (f.branch IS NULL OR f.branch = $branch OR $branch = '' OR $branch = 'main')
       AND ($project_id IS NULL OR f.project_id = $project_id OR f.project_id = 'default')
+      AND ($clean_root IS NULL OR f.file_path = $clean_root OR f.file_path STARTS WITH ($clean_root + '/'))
     RETURN f.file_path AS id,
            split(f.file_path, '/')[-1] AS label,
            f.parent_dir AS parent_dir,
@@ -172,6 +177,7 @@ async def get_entire_graph(
             "canonical_repo_id": canonical_repo_id,
             "branch": branch,
             "project_id": project_id,
+            "clean_root": clean_root,
             "limit": max_nodes // 3 or 100
         }
     )
@@ -205,6 +211,7 @@ async def get_entire_graph(
       AND (s.branch IS NULL OR s.branch = $branch OR $branch = '' OR $branch = 'main')
       AND ($project_id IS NULL OR s.project_id = $project_id OR s.project_id = 'default')
       AND NOT (s.name STARTS WITH "{" OR s.name STARTS WITH "[" OR s.name CONTAINS ",")
+      AND ($clean_root IS NULL OR s.file_path IS NULL OR s.file_path = $clean_root OR s.file_path STARTS WITH ($clean_root + '/'))
     RETURN COALESCE(s.qualified_name, s.uid, s.name) AS id,
            COALESCE(s.name, s.qualified_name, s.uid) AS label,
            properties(s) AS props,
@@ -216,6 +223,7 @@ async def get_entire_graph(
             "canonical_repo_id": canonical_repo_id,
             "branch": branch,
             "project_id": project_id,
+            "clean_root": clean_root,
             "limit": max_nodes
         }
     )
@@ -477,12 +485,19 @@ async def get_entire_graph(
         ntype = n.get("type")
         if ntype == "Directory":
             parent = nid.rsplit("/", 1)[0] if "/" in nid else repo_uid
+            if parent not in node_ids and (parent == "" or (clean_root and (nid == clean_root or clean_root.startswith(nid + "/")))):
+                parent = repo_uid
             if (parent, nid) not in existing_edges and parent in node_ids:
                 edges.append({"source": parent, "target": nid, "relation": "CONTAINS"})
                 existing_edges.add((parent, nid))
         elif ntype == "File":
             fpath = n.get("path") or nid
             parent = fpath.rsplit("/", 1)[0] if "/" in fpath else repo_uid
+            if parent not in node_ids:
+                if clean_root and clean_root in node_ids:
+                    parent = clean_root
+                else:
+                    parent = repo_uid
             if (parent, nid) not in existing_edges and parent in node_ids:
                 edges.append({"source": parent, "target": nid, "relation": "CONTAINS"})
                 existing_edges.add((parent, nid))
@@ -496,6 +511,10 @@ async def get_entire_graph(
             if pclass and pclass in node_ids and (pclass, nid) not in existing_edges:
                 edges.append({"source": pclass, "target": nid, "relation": "HAS_METHOD"})
                 existing_edges.add((pclass, nid))
+
+    # Remove orphan Package nodes that have no edges connecting them to any files or symbols
+    edge_endpoints = {e["source"] for e in edges} | {e["target"] for e in edges}
+    nodes = [n for n in nodes if n["id"] == repo_uid or n.get("type") != "Package" or n["id"] in edge_endpoints]
 
     # Compute child counts and resolved parent IDs from structural edges
     child_counts: Dict[str, int] = {}

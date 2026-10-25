@@ -187,7 +187,8 @@ export async function deleteProject(
 export async function attachRepositoryToProject(
   projectId: string,
   repositoryId: string,
-  userId: string
+  userId: string,
+  rootDirectory?: string | null
 ): Promise<ConnectedRepository | null> {
   const [repo] = await db
     .select()
@@ -207,6 +208,7 @@ export async function attachRepositoryToProject(
     .set({
       projectId,
       isActive: true,
+      rootDirectory: rootDirectory?.trim() || null,
     })
     .where(eq(connectedRepositories.id, repositoryId))
     .returning();
@@ -398,6 +400,7 @@ async function executeBackgroundBuild(
     }
   }
 
+  const cleanRootDir = repo.rootDirectory?.trim() || undefined;
   const isLocal = repo.githubRepoId.startsWith("local:");
   const payload = isLocal
     ? {
@@ -406,6 +409,7 @@ async function executeBackgroundBuild(
         branch,
         project_id: repo.projectId || "default",
         team_id: repo.userId,
+        root_directory: cleanRootDir,
       }
     : {
         repo_id: repo.fullName,
@@ -414,6 +418,7 @@ async function executeBackgroundBuild(
         branch,
         project_id: repo.projectId || "default",
         team_id: repo.userId,
+        root_directory: cleanRootDir,
       };
 
   const controller = new AbortController();

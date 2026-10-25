@@ -27,7 +27,8 @@ interface ProjectState {
   attachRepository: (
     token: string,
     projectIdOrSlug: string,
-    repositoryId: string
+    repositoryId: string,
+    rootDirectory?: string
   ) => Promise<ConnectedRepository | null>;
   detachRepository: (
     token: string,
@@ -213,10 +214,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   attachRepository: async (
     token: string,
     projectIdOrSlug: string,
-    repositoryId: string
+    repositoryId: string,
+    rootDirectory?: string
   ) => {
     try {
-      const res = await projectsApi.attachRepository(token, projectIdOrSlug, repositoryId);
+      const res = await projectsApi.attachRepository(token, projectIdOrSlug, repositoryId, rootDirectory);
       if (res.repository) {
         // Force refresh project details so the new repo appears immediately
         await get().fetchProjectDetails(token, projectIdOrSlug, true);
