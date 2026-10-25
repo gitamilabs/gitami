@@ -75,11 +75,25 @@ function TeamOverviewContent() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const [hasCheckedTeams, setHasCheckedTeams] = useState(false);
+
   useEffect(() => {
-    if (token && teams.length === 0) {
-      fetchTeams(token);
+    if (token) {
+      fetchTeams(token)
+        .then(() => setHasCheckedTeams(true))
+        .catch(() => setHasCheckedTeams(true));
     }
-  }, [token, teams.length, fetchTeams]);
+  }, [token, fetchTeams]);
+
+  useEffect(() => {
+    if (token && hasCheckedTeams) {
+      if (teams.length === 0) {
+        router.replace("/onboarding");
+      } else if (!teams.some((t) => t.slug === teamSlug)) {
+        router.replace(`/${teams[0].slug}`);
+      }
+    }
+  }, [token, hasCheckedTeams, teams, teamSlug, router]);
 
   useEffect(() => {
     if (token && teamSlug) {
@@ -115,7 +129,7 @@ function TeamOverviewContent() {
   return (
     <div className="min-h-screen bg-[#0c0d12] text-zinc-200 flex flex-col">
       {/* Vercel-style Clean Top Header */}
-      <header className="h-14 border-b border-white/[0.06] bg-[#0c0d12]/85 backdrop-blur-md px-6 flex items-center justify-between shrink-0">
+      <header className="relative z-40 h-14 border-b border-white/[0.06] bg-[#0c0d12]/85 backdrop-blur-md px-6 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <GitamiLogo href={`/${teamSlug}`} size="sm" />
           <span className="text-zinc-700 font-light">/</span>

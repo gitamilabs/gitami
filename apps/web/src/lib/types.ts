@@ -415,7 +415,24 @@ export interface GraphCommunity {
 export interface GraphNode {
   id: string;
   label: string;
-  type: "File" | "Symbol" | "Package" | string;
+  type:
+    | "Repository"
+    | "Directory"
+    | "File"
+    | "Class"
+    | "Function"
+    | "Method"
+    | "Interface"
+    | "Type"
+    | "Test"
+    | "Schema"
+    | "Enum"
+    | "Router"
+    | "Relation"
+    | "Variable"
+    | "Package"
+    | "Inferred"
+    | string;
   communityId?: number;
   communityLabel?: string;
   communityColor?: string;
@@ -424,6 +441,13 @@ export interface GraphNode {
   inDegree?: number;
   outDegree?: number;
   importance?: number;
+  level?: number;
+  path?: string;
+  parentId?: string;
+  childCount?: number;
+  isFolder?: boolean;
+  isFile?: boolean;
+  isRoot?: boolean;
   props?: Record<string, any>;
   x?: number;
   y?: number;
@@ -435,7 +459,18 @@ export interface GraphEdge {
   id?: string;
   source: string;
   target: string;
-  relation: "DEFINES" | "CALLS" | "IMPORTS" | "DEPENDS_ON" | string;
+  relation:
+    | "CONTAINS"
+    | "DEFINES"
+    | "HAS_METHOD"
+    | "CALLS"
+    | "IMPORTS"
+    | "DEPENDS_ON"
+    | "DEPENDS_ON_FILE"
+    | "EXTENDS"
+    | "IMPLEMENTS"
+    | "TESTS"
+    | string;
   type?: string;
   props?: Record<string, any>;
 }
@@ -454,6 +489,9 @@ export interface GraphData {
     communityCount: number;
     extractedCount?: number;
     inferredCount?: number;
+    directoryCount?: number;
+    fileCount?: number;
+    symbolCount?: number;
     synthesizedCount?: number;
     observedCount?: number;
   };

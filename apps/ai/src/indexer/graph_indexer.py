@@ -138,6 +138,7 @@ class GraphIndexer:
         ]
         indexes = [
             "CREATE INDEX file_repo_idx IF NOT EXISTS FOR (f:File) ON (f.repo_id, f.commit_sha)",
+            "CREATE INDEX dir_repo_idx IF NOT EXISTS FOR (d:Directory) ON (d.repo_id, d.path)",
             "CREATE INDEX func_repo_idx IF NOT EXISTS FOR (fn:Function) ON (fn.repo_id, fn.name)",
             "CREATE INDEX sym_repo_name_idx IF NOT EXISTS FOR (s:Symbol) ON (s.repo_id, s.name)",
         ]
@@ -178,81 +179,166 @@ class GraphIndexer:
     async def index_directories_and_files(
         self, repo_id: str, commit_sha: str, branch: str, parse_results: List[ParseResult]
     ) -> Tuple[int, int]:
-        """Upsert :Directory and :File nodes and connect :Repository CONTAINS :File."""
+        """
+        Upsert hierarchical :Directory and :File nodes with strict recursive :CONTAINS containment:
+          (:Repository)-[:CONTAINS]->(:Directory) for root directories
+          (:Directory)-[:CONTAINS]->(:Directory) for subdirectories
+          (:Directory)-[:CONTAINS]->(:File) for nested files
+          (:Repository)-[:CONTAINS]->(:File) for root-level files
+        """
         repo_uid = f"repo:{repo_id}"
-        dirs_created: Set[str] = set()
-        file_count = 0
-
-        # Discover unique directories
-        dir_batches = []
-        file_batches = []
         now_str = datetime.now(timezone.utc).isoformat()
+
+        all_dirs: Dict[str, Dict[str, Any]] = {}
+        all_files: List[Dict[str, Any]] = []
 
         for pr in parse_results:
             norm_path = pr.file_path.replace("\\", "/").lstrip("/")
             file_uid = f"file:{repo_id}:{norm_path}"
-            parent_dir = str(Path(norm_path).parent).replace("\\", "/")
-            if parent_dir == ".":
-                parent_dir = ""
+            parts = norm_path.split("/")
 
-            file_batches.append({
-                "uid": file_uid,
-                "file_path": norm_path,
-                "language": pr.language,
-                "repo_id": repo_id,
-                "commit_sha": commit_sha,
-                "branch": branch,
-                "parent_dir": parent_dir,
-                "indexed_at": now_str,
-            })
-
-            if parent_dir and parent_dir not in dirs_created:
-                dirs_created.add(parent_dir)
-                dir_batches.append({
-                    "uid": f"dir:{repo_id}:{parent_dir}",
-                    "path": parent_dir,
+            if len(parts) == 1:
+                # File is at repository root
+                all_files.append({
+                    "uid": file_uid,
+                    "file_path": norm_path,
+                    "name": norm_path,
+                    "language": pr.language,
+                    "parent_dir": "",
                     "repo_id": repo_id,
                     "commit_sha": commit_sha,
+                    "branch": branch,
+                    "indexed_at": now_str,
+                })
+            else:
+                # File is within directories, e.g. src/controllers/admin.controller.ts
+                dir_parts = parts[:-1]
+                current_dir = ""
+                for part in dir_parts:
+                    prev_dir = current_dir
+                    current_dir = f"{prev_dir}/{part}" if prev_dir else part
+                    if current_dir not in all_dirs:
+                        all_dirs[current_dir] = {
+                            "uid": f"dir:{repo_id}:{current_dir}",
+                            "path": current_dir,
+                            "name": part,
+                            "depth": len(current_dir.split("/")),
+                            "parent_path": prev_dir if prev_dir else None,
+                            "parent_uid": f"dir:{repo_id}:{prev_dir}" if prev_dir else None,
+                            "repo_id": repo_id,
+                            "commit_sha": commit_sha,
+                            "branch": branch,
+                        }
+
+                parent_dir = current_dir
+                all_files.append({
+                    "uid": file_uid,
+                    "file_path": norm_path,
+                    "name": parts[-1],
+                    "language": pr.language,
+                    "parent_dir": parent_dir,
+                    "parent_dir_uid": f"dir:{repo_id}:{parent_dir}",
+                    "repo_id": repo_id,
+                    "commit_sha": commit_sha,
+                    "branch": branch,
+                    "indexed_at": now_str,
                 })
 
-        # Upsert Directory nodes and Repository -> Directory CONTAINS
-        if dir_batches:
+        # 1. Upsert all Directory nodes
+        if all_dirs:
             dir_query = """
             UNWIND $batch AS item
-            MATCH (r:Repository {uid: $repo_uid})
             MERGE (d:Directory {uid: item.uid})
             SET d.path = item.path,
+                d.name = item.name,
+                d.depth = item.depth,
                 d.repo_id = item.repo_id,
-                d.commit_sha = item.commit_sha
-            MERGE (r)-[:CONTAINS {provenance: 'DETERMINISTIC', confidence: 1.0}]->(d)
+                d.commit_sha = item.commit_sha,
+                d.branch = item.branch
             """
-            await self.client.execute_query(dir_query, {"repo_uid": repo_uid, "batch": dir_batches})
+            await self.client.execute_query(dir_query, {"batch": list(all_dirs.values())})
 
-        # Upsert File nodes and Repository -> File CONTAINS
-        if file_batches:
+            # 2. Wire Root Directories: Repository -> Directory
+            root_dirs = [d for d in all_dirs.values() if d["parent_path"] is None]
+            if root_dirs:
+                root_dir_query = """
+                UNWIND $batch AS item
+                MATCH (r:Repository {uid: $repo_uid})
+                MATCH (d:Directory {uid: item.uid})
+                MERGE (r)-[rel:CONTAINS]->(d)
+                SET rel.provenance = 'DETERMINISTIC',
+                    rel.confidence = 1.0,
+                    rel.commit_sha = item.commit_sha,
+                    rel.repo_id = item.repo_id
+                """
+                await self.client.execute_query(root_dir_query, {"repo_uid": repo_uid, "batch": root_dirs})
+
+            # 3. Wire Subdirectories: Directory -> Directory
+            sub_dirs = [d for d in all_dirs.values() if d["parent_path"] is not None]
+            if sub_dirs:
+                sub_dir_query = """
+                UNWIND $batch AS item
+                MATCH (p:Directory {uid: item.parent_uid})
+                MATCH (c:Directory {uid: item.uid})
+                MERGE (p)-[rel:CONTAINS]->(c)
+                SET rel.provenance = 'DETERMINISTIC',
+                    rel.confidence = 1.0,
+                    rel.commit_sha = item.commit_sha,
+                    rel.repo_id = item.repo_id
+                """
+                await self.client.execute_query(sub_dir_query, {"batch": sub_dirs})
+
+        # 4. Upsert all File nodes
+        if all_files:
             file_query = """
             UNWIND $batch AS item
-            MATCH (r:Repository {uid: $repo_uid})
             MERGE (f:File {uid: item.uid})
             SET f.file_path = item.file_path,
+                f.name = item.name,
                 f.language = item.language,
+                f.parent_dir = item.parent_dir,
                 f.repo_id = item.repo_id,
                 f.commit_sha = item.commit_sha,
                 f.branch = item.branch,
                 f.indexed_at = item.indexed_at,
                 f.schema_version = $schema_version
-            MERGE (r)-[rel:CONTAINS]->(f)
-            SET rel.provenance = 'DETERMINISTIC',
-                rel.confidence = 1.0,
-                rel.commit_sha = item.commit_sha
             """
             await self.client.execute_query(
                 file_query,
-                {"repo_uid": repo_uid, "schema_version": SCHEMA_VERSION, "batch": file_batches},
+                {"schema_version": SCHEMA_VERSION, "batch": all_files},
             )
-            file_count = len(file_batches)
 
-        return len(dirs_created), file_count
+            # 5. Wire Root Files: Repository -> File
+            root_files = [f for f in all_files if not f["parent_dir"]]
+            if root_files:
+                root_file_query = """
+                UNWIND $batch AS item
+                MATCH (r:Repository {uid: $repo_uid})
+                MATCH (f:File {uid: item.uid})
+                MERGE (r)-[rel:CONTAINS]->(f)
+                SET rel.provenance = 'DETERMINISTIC',
+                    rel.confidence = 1.0,
+                    rel.commit_sha = item.commit_sha,
+                    rel.repo_id = item.repo_id
+                """
+                await self.client.execute_query(root_file_query, {"repo_uid": repo_uid, "batch": root_files})
+
+            # 6. Wire Nested Files: Directory -> File
+            nested_files = [f for f in all_files if f["parent_dir"]]
+            if nested_files:
+                nested_file_query = """
+                UNWIND $batch AS item
+                MATCH (d:Directory {uid: item.parent_dir_uid})
+                MATCH (f:File {uid: item.uid})
+                MERGE (d)-[rel:CONTAINS]->(f)
+                SET rel.provenance = 'DETERMINISTIC',
+                    rel.confidence = 1.0,
+                    rel.commit_sha = item.commit_sha,
+                    rel.repo_id = item.repo_id
+                """
+                await self.client.execute_query(nested_file_query, {"batch": nested_files})
+
+        return len(all_dirs), len(all_files)
 
     async def index_symbols_and_entities(
         self, repo_id: str, commit_sha: str, branch: str, parse_results: List[ParseResult]

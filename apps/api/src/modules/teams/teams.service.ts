@@ -25,8 +25,8 @@ export function generateSlug(name: string): string {
 }
 
 /**
- * Ensures the user has at least one personal team.
- * If none exists, creates one and associates any existing legacy projects.
+ * Returns all organizations/teams accessible to the user.
+ * Returns an empty array if the user has not created or joined any team yet.
  */
 export async function getUserTeams(user: User): Promise<Organization[]> {
   const members = await db
@@ -37,49 +37,7 @@ export async function getUserTeams(user: User): Promise<Organization[]> {
     .innerJoin(organizations, eq(organizationMembers.organizationId, organizations.id))
     .where(eq(organizationMembers.userId, user.id));
 
-  if (members.length > 0) {
-    return members.map((m) => m.org);
-  }
-
-  // Create personal team for user
-  const baseSlug = generateSlug(user.username);
-  let slug = baseSlug;
-
-  const [existingOrg] = await db
-    .select()
-    .from(organizations)
-    .where(eq(organizations.slug, slug))
-    .limit(1);
-
-  if (existingOrg) {
-    slug = `${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
-  }
-
-  const [newOrg] = await db
-    .insert(organizations)
-    .values({
-      name: `${user.username}`,
-      slug,
-    })
-    .returning();
-
-  if (!newOrg) {
-    throw new Error("Failed to create personal organization");
-  }
-
-  await db.insert(organizationMembers).values({
-    organizationId: newOrg.id,
-    userId: user.id,
-    role: "OWNER",
-  });
-
-  // Migrate any legacy "default_org" projects to this user's initial team
-  await db
-    .update(projects)
-    .set({ organizationId: newOrg.id })
-    .where(eq(projects.organizationId, "default_org"));
-
-  return [newOrg];
+  return members.map((m) => m.org);
 }
 
 /**
@@ -349,9 +307,6 @@ export async function deleteTeam(user: User, teamSlug: string): Promise<boolean>
 
   // Delete organization
   await db.delete(organizations).where(eq(organizations.id, orgId));
-
-  // If this was the user's only team, ensure personal team exists
-  await getUserTeams(user);
 
   return true;
 }

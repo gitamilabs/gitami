@@ -19,11 +19,17 @@ export default function DashboardPage() {
     if (activeTeam) {
       router.replace(`/${activeTeam.slug}`);
     } else {
-      fetchTeams(token).then((teams) => {
-        if (teams.length > 0) {
-          router.replace(`/${teams[0].slug}`);
-        }
-      });
+      fetchTeams(token)
+        .then((teams) => {
+          if (teams.length > 0) {
+            router.replace(`/${teams[0].slug}`);
+          } else {
+            router.replace("/onboarding");
+          }
+        })
+        .catch(() => {
+          router.replace("/onboarding");
+        });
     }
   }, [token, isInitialized, activeTeam, router, fetchTeams]);
 

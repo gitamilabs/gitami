@@ -32,14 +32,20 @@ function AuthCallbackContent() {
           try {
             const { teamsApi } = await import("../../../lib/api");
             const data = await teamsApi.getTeams(token);
-            const teamSlug = data.teams?.[0]?.slug || "workspace";
-            setTimeout(() => {
-              router.push(`/${teamSlug}`);
-            }, 800);
+            if (data.teams && data.teams.length > 0) {
+              const teamSlug = data.teams[0].slug;
+              setTimeout(() => {
+                router.push(`/${teamSlug}`);
+              }, 600);
+            } else {
+              setTimeout(() => {
+                router.push("/onboarding");
+              }, 600);
+            }
           } catch {
             setTimeout(() => {
-              router.push("/");
-            }, 800);
+              router.push("/onboarding");
+            }, 600);
           }
         })
         .catch((err) => {

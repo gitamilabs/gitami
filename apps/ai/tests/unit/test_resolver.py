@@ -23,3 +23,12 @@ def test_resolve_python_path():
 
     res = resolve_python_path(importer, "user_model", known)
     assert res == "tests/fixtures/python_sample/user_model.py"
+
+
+def test_resolve_relative_path_parent_dir():
+    known = {"src/modules/auth/auth.types.ts", "src/modules/auth/v1/auth.controller.ts"}
+    importer = "src/modules/auth/v1/auth.controller.ts"
+
+    res = resolve_relative_path(importer, "../auth.types", known)
+    assert res == "src/modules/auth/auth.types.ts"
+

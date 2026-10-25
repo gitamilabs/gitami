@@ -103,7 +103,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenSearch, onOpenAddProject }
 
   return (
     <>
-      <header className="h-14 border-b border-white/[0.06] bg-[#0c0d12]/85 backdrop-blur-md px-5 flex items-center justify-between shrink-0 select-none z-20">
+      <header className="relative z-40 h-14 border-b border-white/[0.06] bg-[#0c0d12]/85 backdrop-blur-md px-5 flex items-center justify-between shrink-0 select-none">
         {/* Left: Context Breadcrumbs: [ Team ] / [ Project ] / Current Section */}
         <div className="flex items-center gap-1.5 text-xs">
           {/* 1. Team Switcher */}
@@ -119,7 +119,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenSearch, onOpenAddProject }
             </button>
 
             {isTeamMenuOpen && (
-              <div className="absolute left-0 top-full mt-1.5 w-56 bg-[#13151f] border border-white/[0.08] rounded-lg shadow-2xl py-1 z-40 animate-fade-in">
+              <div className="absolute left-0 top-full mt-1.5 w-56 bg-[#13151f] border border-white/[0.08] rounded-lg shadow-2xl py-1 z-50 animate-fade-in">
                 <div className="px-3 py-1.5 text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
                   Teams & Workspaces
                 </div>
@@ -178,7 +178,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenSearch, onOpenAddProject }
                 </button>
 
                 {isProjectMenuOpen && (
-                  <div className="absolute left-0 top-full mt-1.5 w-56 bg-[#13151f] border border-white/[0.08] rounded-lg shadow-2xl py-1 z-40 animate-fade-in">
+                  <div className="absolute left-0 top-full mt-1.5 w-56 bg-[#13151f] border border-white/[0.08] rounded-lg shadow-2xl py-1 z-50 animate-fade-in">
                     <div className="px-3 py-1.5 text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
                       Projects
                     </div>

@@ -488,7 +488,7 @@ export const ProjectSettings: React.FC = () => {
 
       {/* Delete Project Confirmation Modal */}
       {showDeleteModal && currentProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in">
           <div className="bg-[#11131a] border border-rose-500/30 rounded-xl w-full max-w-md p-6 space-y-4 shadow-2xl">
             <div className="flex items-center gap-3 text-rose-400">
               <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20">

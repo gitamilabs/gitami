@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { ConnectedRepository } from "../../lib/types";
 import { Button } from "../ui/Button";
 import { useAuthStore } from "../../store/authStore";
@@ -35,6 +36,11 @@ export const IngestModal: React.FC<IngestModalProps> = ({
   const { getActiveProject } = useProjectStore();
 
   const [branch, setBranch] = useState<string>("main");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (repo) {
@@ -42,7 +48,7 @@ export const IngestModal: React.FC<IngestModalProps> = ({
     }
   }, [repo, isOpen]);
 
-  if (!isOpen || !repo) return null;
+  if (!isOpen || !repo || !mounted) return null;
 
   const handleStartIngestion = () => {
     if (!token) return;
@@ -62,9 +68,9 @@ export const IngestModal: React.FC<IngestModalProps> = ({
     if (onSuccess) onSuccess();
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in"
       onClick={onClose}
     >
       <div
@@ -143,6 +149,7 @@ export const IngestModal: React.FC<IngestModalProps> = ({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

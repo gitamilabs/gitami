@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "../../store/authStore";
 import { Button } from "../ui/Button";
 import { PageLoader } from "../ui/PageLoader";
@@ -11,6 +12,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  const router = useRouter();
   const { token, isInitialized, isLoading, login, initialize } = useAuthStore();
 
   useEffect(() => {
@@ -19,36 +21,19 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     }
   }, [isInitialized, initialize]);
 
-  if (!isInitialized || isLoading) {
+  useEffect(() => {
+    if (isInitialized && !isLoading && !token) {
+      router.replace("/");
+    }
+  }, [isInitialized, isLoading, token, router]);
+
+  if (!isInitialized || isLoading || !token) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center">
         <PageLoader
           label="Authenticating GitAmi Session..."
           sublabel="Verifying cryptographically signed session & permissions"
         />
-      </div>
-    );
-  }
-
-  if (!token) {
-    return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center max-w-md mx-auto">
-        <div className="w-16 h-16 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center mb-4">
-          <ShieldAlert className="w-8 h-8 text-indigo-400" />
-        </div>
-        <h2 className="text-xl font-bold text-slate-100 mb-2">Authentication Required</h2>
-        <p className="text-sm text-slate-400 mb-6 leading-relaxed">
-          Please sign in with your GitHub account to access connected repositories, codebase analysis, and Agentic RAG chat.
-        </p>
-        <Button
-          variant="glow"
-          size="lg"
-          leftIcon={<Github className="w-5 h-5" />}
-          onClick={() => login()}
-          className="w-full"
-        >
-          Sign in with GitHub
-        </Button>
       </div>
     );
   }

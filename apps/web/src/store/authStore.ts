@@ -57,6 +57,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     initPromise = (async () => {
       const savedToken = localStorage.getItem("gitami_token") || localStorage.getItem("sentinel_token");
       if (!savedToken) {
+        document.cookie = "gitami_token=; path=/; max-age=0; SameSite=Lax";
+        document.cookie = "gitami_team=; path=/; max-age=0; SameSite=Lax";
         set({ isInitialized: true, token: null, user: null });
         return;
       }
@@ -82,26 +84,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const { user } = await authApi.getMe(savedToken);
         set({ user, isLoading: false, isInitialized: true, error: null });
       } catch (err: any) {
-        console.warn("Failed to restore session token:", err);
-        // Only remove if unauthorized 401/403
-        if (err.message && (err.message.includes("401") || err.message.includes("403") || err.message.includes("Unauthorized"))) {
-          localStorage.removeItem("gitami_token");
-          localStorage.removeItem("sentinel_token");
-          set({ token: null, user: null, isLoading: false, isInitialized: true, error: err.message });
-        } else {
-          // Fallback placeholder profile for offline/dev resilience
-          const fallbackUser: User = {
-            id: "usr_session",
-            username: "developer",
-            name: "Developer",
-            email: null,
-            avatarUrl: "",
-            githubId: "0000",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          set({ token: savedToken, user: fallbackUser, isLoading: false, isInitialized: true, error: null });
-        }
+        console.warn("Session token invalid or expired. Resetting session:", err);
+        localStorage.removeItem("gitami_token");
+        localStorage.removeItem("sentinel_token");
+        document.cookie = "gitami_token=; path=/; max-age=0; SameSite=Lax";
+        document.cookie = "gitami_team=; path=/; max-age=0; SameSite=Lax";
+        set({ token: null, user: null, isLoading: false, isInitialized: true, error: null });
       } finally {
         initPromise = null;
       }

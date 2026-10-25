@@ -247,8 +247,13 @@ def compute_graph_presentation(graph_data: Dict[str, Any]) -> Dict[str, Any]:
 
     # Format nodes
     formatted_nodes = []
+    seen_node_ids = set()
     for node in graph_data.get("nodes", []):
         n_id = node["id"]
+        if n_id in seen_node_ids:
+            continue
+        seen_node_ids.add(n_id)
+
         c_id = node_to_comm_id.get(n_id, 0)
         c_label = node_to_comm_label.get(n_id, "Core System")
         in_deg = G.in_degree(n_id) if n_id in G else 0
@@ -270,6 +275,13 @@ def compute_graph_presentation(graph_data: Dict[str, Any]) -> Dict[str, Any]:
             "inDegree": in_deg,
             "outDegree": out_deg,
             "importance": round(imp * 1000, 2),
+            "level": node.get("level", 3),
+            "path": node.get("path", ""),
+            "parentId": node.get("parentId"),
+            "childCount": node.get("childCount", 0),
+            "isFolder": node.get("isFolder", False),
+            "isFile": node.get("isFile", False),
+            "isRoot": node.get("isRoot", False),
             "props": node.get("props", {}),
         })
 
@@ -291,12 +303,15 @@ def compute_graph_presentation(graph_data: Dict[str, Any]) -> Dict[str, Any]:
     raw_stats = graph_data.get("stats", {})
     extracted_cnt = raw_stats.get(
         "extractedCount",
-        sum(1 for n in formatted_nodes if n.get("props", {}).get("provenance") != "INFERRED" and n.get("type") != "Inferred")
+        sum(1 for n in formatted_nodes if n.get("props", {}).get("provenance") != "INFERRED" and n.get("type") not in ("Directory", "Repository", "Inferred"))
     )
     inferred_cnt = raw_stats.get(
         "inferredCount",
         sum(1 for n in formatted_nodes if n.get("props", {}).get("provenance") == "INFERRED" or n.get("type") == "Inferred")
     )
+    dir_cnt = raw_stats.get("directoryCount", sum(1 for n in formatted_nodes if n.get("type") == "Directory"))
+    file_cnt = raw_stats.get("fileCount", sum(1 for n in formatted_nodes if n.get("type") == "File"))
+    sym_cnt = raw_stats.get("symbolCount", sum(1 for n in formatted_nodes if n.get("type") not in ("Directory", "File", "Repository", "Package", "Inferred")))
 
     return {
         "nodes": formatted_nodes,
@@ -308,6 +323,9 @@ def compute_graph_presentation(graph_data: Dict[str, Any]) -> Dict[str, Any]:
             "communityCount": len(community_summaries),
             "extractedCount": extracted_cnt,
             "inferredCount": inferred_cnt,
+            "directoryCount": dir_cnt,
+            "fileCount": file_cnt,
+            "symbolCount": sym_cnt,
             "synthesizedCount": raw_stats.get("synthesizedCount", 0),
             "observedCount": raw_stats.get("observedCount", 0),
         },

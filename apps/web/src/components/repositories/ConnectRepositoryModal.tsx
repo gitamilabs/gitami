@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   X,
@@ -49,6 +50,11 @@ export const ConnectRepositoryModal: React.FC<ConnectRepositoryModalProps> = ({
   const [isFetchingUrl, setIsFetchingUrl] = useState(false);
   const [connectingRepoId, setConnectingRepoId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (isOpen && token) {
@@ -64,7 +70,7 @@ export const ConnectRepositoryModal: React.FC<ConnectRepositoryModalProps> = ({
     }
   }, [isOpen, token, teamSlug, projectSlug, fetchConnectedRepos]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   // Extract distinct owners/organizations
   const owners = Array.from(
@@ -113,9 +119,9 @@ export const ConnectRepositoryModal: React.FC<ConnectRepositoryModalProps> = ({
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in"
       onClick={onClose}
     >
       <div
@@ -276,6 +282,7 @@ export const ConnectRepositoryModal: React.FC<ConnectRepositoryModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -222,7 +222,20 @@ class MernExtractor(BaseExtractor):
                     if not name_node:
                         continue
 
+                    # Ignore destructuring patterns ({ email, password }, [a, b])
+                    if name_node.type in ("object_pattern", "array_pattern"):
+                        if value_node:
+                            for child in value_node.children:
+                                self._traverse_node(child, code_bytes, file_path, result, parent_scope)
+                        continue
+
                     symbol_name = self._get_text(name_node, code_bytes).strip()
+                    if symbol_name.startswith(("{", "[")) or "," in symbol_name or not symbol_name.isidentifier():
+                        if value_node:
+                            for child in value_node.children:
+                                self._traverse_node(child, code_bytes, file_path, result, parent_scope)
+                        continue
+
                     scope_path = ".".join(parent_scope + [symbol_name]) if parent_scope else symbol_name
                     qualified_name = f"{file_path}::{scope_path}"
                     code_body = self._get_text(declarator, code_bytes)
@@ -274,18 +287,20 @@ class MernExtractor(BaseExtractor):
                         else:
                             kind = "variable"
 
-                        symbol = SymbolNode(
-                            name=symbol_name,
-                            kind=kind,
-                            file_path=file_path,
-                            language=self.language,
-                            start_line=declarator.start_point[0] + 1,
-                            end_line=declarator.end_point[0] + 1,
-                            signature=f"const {symbol_name} = {fn_text}(...)",
-                            code_body=code_body.strip(),
-                            qualified_name=qualified_name,
-                        )
-                        result.symbols.append(symbol)
+                        # Only extract top-level call results or schema/router/enum/relation entities
+                        if not parent_scope or kind in ("schema", "enum", "router", "relation"):
+                            symbol = SymbolNode(
+                                name=symbol_name,
+                                kind=kind,
+                                file_path=file_path,
+                                language=self.language,
+                                start_line=declarator.start_point[0] + 1,
+                                end_line=declarator.end_point[0] + 1,
+                                signature=f"const {symbol_name} = {fn_text}(...)",
+                                code_body=code_body.strip(),
+                                qualified_name=qualified_name,
+                            )
+                            result.symbols.append(symbol)
 
                         new_scope = parent_scope + [symbol_name]
                         for child in value_node.children:
@@ -293,18 +308,19 @@ class MernExtractor(BaseExtractor):
 
                     elif value_node and value_node.type == "object":
                         kind = "router" if "router" in symbol_name.lower() else ("constant" if is_const else "variable")
-                        symbol = SymbolNode(
-                            name=symbol_name,
-                            kind=kind,
-                            file_path=file_path,
-                            language=self.language,
-                            start_line=declarator.start_point[0] + 1,
-                            end_line=declarator.end_point[0] + 1,
-                            signature=f"const {symbol_name} = {{...}}",
-                            code_body=code_body.strip(),
-                            qualified_name=qualified_name,
-                        )
-                        result.symbols.append(symbol)
+                        if not parent_scope or kind == "router":
+                            symbol = SymbolNode(
+                                name=symbol_name,
+                                kind=kind,
+                                file_path=file_path,
+                                language=self.language,
+                                start_line=declarator.start_point[0] + 1,
+                                end_line=declarator.end_point[0] + 1,
+                                signature=f"const {symbol_name} = {{...}}",
+                                code_body=code_body.strip(),
+                                qualified_name=qualified_name,
+                            )
+                            result.symbols.append(symbol)
 
                         # Walk object properties
                         new_scope = parent_scope + [symbol_name]

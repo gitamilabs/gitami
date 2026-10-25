@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, GitBranch, Loader2, Check } from "lucide-react";
 import { useRepoStore } from "../../store/repoStore";
 import { useAuthStore } from "../../store/authStore";
@@ -26,6 +27,11 @@ export const EditRepositoryModal: React.FC<EditRepositoryModalProps> = ({
   const [isActive, setIsActive] = useState(repository.isActive ?? true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (repository) {
@@ -35,7 +41,7 @@ export const EditRepositoryModal: React.FC<EditRepositoryModalProps> = ({
     }
   }, [repository, isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,9 +73,9 @@ export const EditRepositoryModal: React.FC<EditRepositoryModalProps> = ({
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-fade-in"
       onClick={onClose}
     >
       <div
@@ -167,6 +173,7 @@ export const EditRepositoryModal: React.FC<EditRepositoryModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

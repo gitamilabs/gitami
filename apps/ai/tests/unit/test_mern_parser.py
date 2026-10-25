@@ -37,3 +37,24 @@ def test_mern_jsx_component_parsing():
     symbols = {s.name: s.kind for s in result.symbols}
     assert "Header" in symbols
     assert symbols["Header"] == "component"
+
+
+def test_destructuring_not_extracted_as_symbol(tmp_path):
+    parser = CodeParser()
+    code = """
+    export const loginUser = async (req, res) => {
+        const { email, password } = req.body;
+        const [token, user] = await authenticate(email, password);
+        return res.json({ token, user });
+    };
+    """
+    test_file = tmp_path / "authController.ts"
+    test_file.write_text(code, encoding="utf-8")
+
+    result = parser.parse_file(test_file)
+    assert result is not None
+    symbol_names = [s.name for s in result.symbols]
+    assert "loginUser" in symbol_names
+    assert "{ email, password }" not in symbol_names
+    assert "[token, user]" not in symbol_names
+    assert not any("{" in name or "[" in name for name in symbol_names)

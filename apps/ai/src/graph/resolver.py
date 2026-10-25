@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import List, Dict, Optional, Set
 from src.graph.client import Neo4jClient
@@ -30,9 +31,9 @@ def resolve_relative_path(importer_file: str, module_path: str, known_files: Set
     # Clean leading ./ or ../ for Path join
     raw_target = (importer_dir / module_path).as_posix()
     
-    # Normalize path strings (strip double slashes, handle relative dot components)
+    # Normalize path strings (strip double slashes, collapse ../ and . components)
     try:
-        norm_target = Path(raw_target).as_posix()
+        norm_target = os.path.normpath(raw_target).replace("\\", "/")
     except Exception:
         norm_target = raw_target
 

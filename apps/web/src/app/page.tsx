@@ -49,24 +49,19 @@ export default function LandingPage() {
           .then((teams) => {
             if (teams && teams.length > 0) {
               router.replace(`/${teams[0].slug}`);
-            } else if (user?.username) {
-              router.replace(`/${user.username}`);
+            } else {
+              router.replace("/onboarding");
             }
           })
           .catch(() => {
-            if (user?.username) {
-              router.replace(`/${user.username}`);
-            }
+            router.replace("/onboarding");
           });
       }
     }
-  }, [token, isInitialized, activeTeam, user, router, fetchTeams]);
+  }, [token, isInitialized, activeTeam, router, fetchTeams]);
 
-  const hasSavedToken =
-    typeof window !== "undefined" &&
-    !!(localStorage.getItem("gitami_token") || localStorage.getItem("sentinel_token"));
-
-  if (token || (hasSavedToken && !isInitialized)) {
+  // If authenticated and redirecting, show spinner. Otherwise show landing page.
+  if (isInitialized && token) {
     return (
       <div className="min-h-screen bg-[#0c0d12] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">

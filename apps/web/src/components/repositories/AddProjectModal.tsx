@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   FolderGit2,
@@ -27,6 +28,11 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
   const [installUrl, setInstallUrl] = useState<string | null>(null);
   const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (isOpen && token) {
@@ -38,7 +44,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
     }
   }, [isOpen, token, getInstallUrl]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleGitHubConnect = () => {
     if (installUrl) {
@@ -46,9 +52,9 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in"
       onClick={onClose}
     >
       <div
@@ -123,6 +129,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
