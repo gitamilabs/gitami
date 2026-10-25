@@ -39,6 +39,7 @@ async def run_agentic_pr_review(
     symbols: list,
     vector_client: Optional[VectorKBClient] = None,
     llm_client: Optional[DualLLMClient] = None,
+    root_directory: Optional[str] = None,
 ) -> AgentReviewResult:
     """Execute autonomous agentic PR review using FastMCP knowledge base tools + Gemini/Groq dual LLMs."""
     if llm_client is None:
@@ -49,6 +50,26 @@ async def run_agentic_pr_review(
 
     # 1. Parse raw diff text into hunks & extract changed symbols
     hunks = parse_git_diff(raw_diff_text)
+    if root_directory:
+        clean_root = root_directory.replace("\\", "/").strip("./").strip("/")
+        hunks = [
+            h for h in hunks
+            if h.file_path and (h.file_path == clean_root or h.file_path.startswith(clean_root + "/"))
+        ]
+        if not hunks:
+            return AgentReviewResult(
+                decision=DecisionResult(
+                    verdict=Verdict.ACCEPT,
+                    risk_score=0.0,
+                    summary=f"No changed files found within the scoped root directory '{clean_root}'. Review skipped.",
+                    suggestions=[],
+                ),
+                agent_rationale=f"PR diff does not touch any files inside '{clean_root}'. All changes are external to this project scope.",
+                diff_hunks_count=0,
+                llm_orchestrator_used=False,
+                issues=[],
+            )
+
     changed_files = list({h.file_path for h in hunks if h.file_path})
 
     if not changed_symbols:

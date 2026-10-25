@@ -51,6 +51,7 @@ async def agent_chat_stream(req: ChatRequest):
             graph_client=graph_client,
             vector_client=vector_client,
             history=history_payload,
+            root_directory=req.root_directory,
         ):
             yield event
 

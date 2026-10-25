@@ -7,8 +7,6 @@ import {
   ChevronRight,
   ChevronDown,
   Plus,
-  Bell,
-  Search,
   Hammer,
   Check,
   FolderGit2,
@@ -239,26 +237,6 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenSearch, onOpenAddProject }
               </span>
             </Link>
           )}
-
-          {/* Quick Search */}
-          <button
-            onClick={onOpenSearch}
-            className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-md text-xs text-zinc-400 transition-colors cursor-pointer"
-          >
-            <Search className="w-3.5 h-3.5 text-zinc-500" />
-            <span className="text-zinc-500">Search</span>
-            <kbd className="px-1.5 py-0.2 text-[9px] font-mono bg-white/[0.04] text-zinc-500 rounded border border-white/[0.06]">
-              ⌘K
-            </kbd>
-          </button>
-
-          {/* Notifications */}
-          <button
-            className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-white/[0.05] transition-colors cursor-pointer"
-            title="Notifications"
-          >
-            <Bell className="w-4 h-4" />
-          </button>
 
           {/* User Menu */}
           <div className="relative" ref={userMenuRef}>

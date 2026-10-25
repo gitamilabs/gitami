@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
     history: Optional[List[ChatMessage]] = []
     project_id: Optional[str] = "default"
     team_id: Optional[str] = None
+    root_directory: Optional[str] = None
 
 
 class Citation(BaseModel):
@@ -110,6 +111,7 @@ class PRReviewRequest(BaseModel):
     diff_text: Optional[str] = None
     project_id: Optional[str] = "default"
     team_id: Optional[str] = None
+    root_directory: Optional[str] = None
 
 
 class PRFixRequest(BaseModel):

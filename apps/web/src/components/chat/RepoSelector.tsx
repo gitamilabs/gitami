@@ -1,72 +1,114 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useRepoStore } from "../../store/repoStore";
 import { useChatStore } from "../../store/chatStore";
+import { useProjectStore } from "../../store/projectStore";
 import { useAuthStore } from "../../store/authStore";
-import { GitBranch, FolderGit2, ChevronDown } from "lucide-react";
+import { FolderGit2, ChevronDown, Folder } from "lucide-react";
 
 export const RepoSelector: React.FC = () => {
   const { token } = useAuthStore();
   const { indexedRepos, fetchIndexedRepos } = useRepoStore();
-  const { selectedRepo, selectedBranch, setSelectedRepo, setSelectedBranch } = useChatStore();
+  const { getActiveProject } = useProjectStore();
+  const activeProject = getActiveProject();
+
+  const {
+    selectedRepo,
+    selectedBranch,
+    rootDirectory,
+    setSelectedRepo,
+    setSelectedBranch,
+    setRootDirectory,
+  } = useChatStore();
 
   useEffect(() => {
     if (token) fetchIndexedRepos(token);
   }, [token, fetchIndexedRepos]);
 
-  // Auto-select the first available indexed repo once the list loads, if
-  // nothing (or a stale/no-longer-indexed repo) is currently selected.
+  const projectRepos = useMemo(() => {
+    return activeProject?.repositories || [];
+  }, [activeProject]);
+
+  // Auto-bind to the active project's repositories if available
   useEffect(() => {
-    if (indexedRepos.length === 0) return;
-    if (!selectedRepo || !indexedRepos.includes(selectedRepo)) {
+    if (projectRepos.length > 0) {
+      const match = projectRepos.find(
+        (r) => r.fullName === selectedRepo || r.name === selectedRepo || r.id === selectedRepo
+      );
+      if (!match) {
+        const first = projectRepos[0];
+        const repoName = first.fullName || first.name;
+        setSelectedRepo(repoName);
+        setSelectedBranch(first.defaultBranch || "main");
+        setRootDirectory(first.rootDirectory || null);
+      } else if (match.rootDirectory !== rootDirectory) {
+        setRootDirectory(match.rootDirectory || null);
+      }
+    } else if (indexedRepos.length > 0 && !selectedRepo) {
       setSelectedRepo(indexedRepos[0]);
     }
-  }, [indexedRepos, selectedRepo, setSelectedRepo]);
+  }, [projectRepos, indexedRepos, selectedRepo, rootDirectory, setSelectedRepo, setSelectedBranch, setRootDirectory]);
 
-  if (indexedRepos.length === 0) {
+  const handleRepoChange = (val: string) => {
+    setSelectedRepo(val);
+    const match = projectRepos.find((r) => r.fullName === val || r.name === val || r.id === val);
+    if (match) {
+      setSelectedBranch(match.defaultBranch || "main");
+      setRootDirectory(match.rootDirectory || null);
+    }
+  };
+
+  const hasRepos = projectRepos.length > 0 || indexedRepos.length > 0;
+
+  if (!hasRepos) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-zinc-500">
+      <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06] text-xs text-zinc-500">
         <FolderGit2 className="w-3.5 h-3.5 shrink-0" />
-        <span>No repositories indexed yet — ingest one from Projects</span>
+        <span>No repositories connected</span>
       </div>
     );
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] focus-within:border-white/20">
-        <FolderGit2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-        <span className="text-zinc-500 font-medium font-mono text-[11px]">KB Space:</span>
+      {/* Repository Selector */}
+      <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:border-white/10 transition-colors">
+        <FolderGit2 className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
         <div className="relative flex items-center">
           <select
             value={selectedRepo}
-            onChange={(e) => setSelectedRepo(e.target.value)}
-            aria-label="Target Repo"
-            className="bg-transparent text-zinc-100 font-mono font-semibold focus:outline-none cursor-pointer pr-4 appearance-none text-xs"
+            onChange={(e) => handleRepoChange(e.target.value)}
+            aria-label="Target Repository"
+            className="bg-transparent text-zinc-200 font-medium focus:outline-none cursor-pointer pr-4 appearance-none text-xs"
           >
-            {indexedRepos.map((repo) => (
-              <option key={repo} value={repo} className="bg-[#11131a] text-zinc-200">
-                {repo}
-              </option>
-            ))}
+            {projectRepos.length > 0
+              ? projectRepos.map((repo) => {
+                  const key = repo.fullName || repo.name;
+                  return (
+                    <option key={repo.id} value={key} className="bg-[#12131a] text-zinc-200">
+                      {repo.name || repo.fullName}
+                      {repo.rootDirectory ? ` (${repo.rootDirectory})` : ""}
+                    </option>
+                  );
+                })
+              : indexedRepos.map((repo) => (
+                  <option key={repo} value={repo} className="bg-[#12131a] text-zinc-200">
+                    {repo}
+                  </option>
+                ))}
           </select>
           <ChevronDown className="w-3 h-3 text-zinc-500 absolute right-0 pointer-events-none" />
         </div>
       </div>
 
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.08] focus-within:border-white/20">
-        <GitBranch className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-        <span className="text-zinc-500 font-medium font-mono text-[11px]">Branch:</span>
-        <input
-          type="text"
-          value={selectedBranch}
-          onChange={(e) => setSelectedBranch(e.target.value)}
-          placeholder="main"
-          aria-label="Branch"
-          className="w-20 bg-transparent text-zinc-100 font-mono font-semibold focus:outline-none text-xs placeholder-zinc-600"
-        />
-      </div>
+      {/* Scoped Subfolder Badge (if configured) */}
+      {rootDirectory && (
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/[0.03] border border-white/[0.06] text-zinc-400 text-[11px] font-mono">
+          <Folder className="w-3 h-3 text-zinc-500 shrink-0" />
+          <span>{rootDirectory}</span>
+        </div>
+      )}
     </div>
   );
 };

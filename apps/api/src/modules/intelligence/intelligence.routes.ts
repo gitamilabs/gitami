@@ -18,7 +18,11 @@ async function enrichPayloadWithTenancy(body: any, user?: any): Promise<any> {
   if (!enriched.project_id && enriched.repo_id) {
     try {
       const [repo] = await db
-        .select({ projectId: connectedRepositories.projectId, userId: connectedRepositories.userId })
+        .select({
+          projectId: connectedRepositories.projectId,
+          userId: connectedRepositories.userId,
+          rootDirectory: connectedRepositories.rootDirectory,
+        })
         .from(connectedRepositories)
         .where(eq(connectedRepositories.fullName, enriched.repo_id))
         .limit(1);
@@ -26,6 +30,9 @@ async function enrichPayloadWithTenancy(body: any, user?: any): Promise<any> {
         enriched.project_id = repo.projectId || "default";
         if (!enriched.team_id && repo.userId) {
           enriched.team_id = repo.userId;
+        }
+        if (!enriched.root_directory && repo.rootDirectory) {
+          enriched.root_directory = repo.rootDirectory;
         }
       }
     } catch {

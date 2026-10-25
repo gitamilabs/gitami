@@ -49,6 +49,7 @@ async def review_pull_request(req: PRReviewRequest):
         symbols=[],
         vector_client=vector_client,
         llm_client=llm_client,
+        root_directory=req.root_directory,
     )
 
     return {

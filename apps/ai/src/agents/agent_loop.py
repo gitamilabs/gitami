@@ -40,6 +40,7 @@ class AutonomousAgentLoop:
         vector_client: Any,
         history: Optional[List[Dict[str, str]]] = None,
         max_steps: int = 5,
+        root_directory: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Runs the ReAct loop and yields Server-Sent Events (SSE) formatted strings.
@@ -114,8 +115,10 @@ class AutonomousAgentLoop:
                         f"- Retrieved Payload / Code Content:\n{obs['raw'][:max_chars]}\n\n"
                     )
 
+            scope_str = f"Scoped Subdirectory: '{root_directory}' (focus all search & answers strictly on this directory)\n" if root_directory else ""
             prompt = (
                 f"Repository: '{repo_id}' (branch: '{branch}')\n"
+                f"{scope_str}"
                 f"User Question: '{user_query}'\n"
                 f"{history_context}"
                 f"{initial_context_str}"

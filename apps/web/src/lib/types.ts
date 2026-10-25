@@ -149,6 +149,7 @@ export interface ChatRequest {
   project_id?: string;
   team_id?: string;
   history?: ChatMessage[];
+  root_directory?: string | null;
 }
 
 export interface Citation {

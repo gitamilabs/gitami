@@ -339,6 +339,15 @@ export async function evaluatePRWithAIService(prId: string) {
   // Fetch GitHub patch diff via authenticated Octokit/REST API
   const diffText = await fetchAuthenticatedPRDiff(pr.repoFullName, pr.prNumber);
 
+  // Look up repo's root directory scope if configured
+  const [repoRow] = await db
+    .select({ rootDirectory: connectedRepositories.rootDirectory })
+    .from(connectedRepositories)
+    .where(eq(connectedRepositories.fullName, pr.repoFullName))
+    .limit(1);
+
+  const rootDirectory = repoRow?.rootDirectory?.trim() || undefined;
+
   // Call AI Service PR review endpoint
   const response = await fetch(`${AI_SERVICE_URL}/api/pr/review`, {
     method: "POST",
@@ -351,6 +360,7 @@ export async function evaluatePRWithAIService(prId: string) {
       title: pr.title,
       body: pr.body || "",
       diff_text: diffText,
+      root_directory: rootDirectory,
     }),
   });
 
