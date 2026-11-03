@@ -59,7 +59,7 @@ async def run_agentic_pr_review(
         if not hunks:
             return AgentReviewResult(
                 decision=DecisionResult(
-                    verdict=Verdict.ACCEPT,
+                    verdict="ACCEPT",
                     risk_score=0.0,
                     summary=f"No changed files found within the scoped root directory '{clean_root}'. Review skipped.",
                     suggestions=[],
@@ -210,6 +210,10 @@ async def run_agentic_pr_review(
         f"Agentic Review Verdict: {verdict}. Composite Risk Score: {composite_risk_score}/10.0. "
         f"Detected {len(structured_issues)} item(s) across {len(changed_files)} changed file(s)."
     )
+    if orchestrator_response and len(orchestrator_response.strip()) > 30:
+        first_para = orchestrator_response.strip().split("\n\n")[0].strip()
+        if len(first_para) > 20 and not first_para.startswith("#"):
+            summary_text = f"{summary_text}\n\n{first_para}"
 
     decision = DecisionResult(
         verdict=verdict,
@@ -222,7 +226,7 @@ async def run_agentic_pr_review(
         decision=decision,
         agent_rationale=orchestrator_response,
         diff_hunks_count=len(hunks),
-        llm_orchestrator_used=llm_client.has_gemini,
+        llm_orchestrator_used=bool(llm_client.has_gemini or getattr(llm_client, "has_local", False) or llm_client.has_groq),
         issues=structured_issues,
     )
 

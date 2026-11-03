@@ -117,135 +117,139 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             ) : null}
 
             {/* Synthesized Answer Body with Markdown & Interactive Code Blocks */}
-            {message.content ? (
-              <div className="prose-custom text-xs sm:text-sm leading-relaxed text-zinc-200">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    code({ node, className, children, ...props }: any) {
-                      const match = /language-(\w+)/.exec(className || "");
-                      const codeString = String(children).replace(/\n$/, "");
-                      const isMulti = codeString.includes("\n") || Boolean(match);
+            {(message.content || message.isStreaming) ? (
+              <div className="bg-white/[0.04] text-zinc-200 rounded-2xl rounded-tl-sm border border-white/[0.08] p-4 shadow-sm space-y-3">
+                {message.content ? (
+                  <div className="prose-custom text-xs sm:text-sm leading-relaxed text-zinc-200">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code({ node, className, children, ...props }: any) {
+                          const match = /language-(\w+)/.exec(className || "");
+                          const codeString = String(children).replace(/\n$/, "");
+                          const isMulti = codeString.includes("\n") || Boolean(match);
 
-                      if (isMulti) {
-                        return <CodeBlock language={match ? match[1] : ""} code={codeString} />;
-                      }
-                      return (
-                        <code
-                          className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] font-mono text-[11px] text-zinc-200"
-                          {...props}
-                        >
-                          {children}
-                        </code>
-                      );
-                    },
-                    p({ children }: any) {
-                      return <p className="mb-2.5 last:mb-0 leading-relaxed">{children}</p>;
-                    },
-                    ul({ children }: any) {
-                      return <ul className="list-disc pl-5 mb-2.5 space-y-1">{children}</ul>;
-                    },
-                    ol({ children }: any) {
-                      return <ol className="list-decimal pl-5 mb-2.5 space-y-1">{children}</ol>;
-                    },
-                    li({ children }: any) {
-                      return <li className="leading-relaxed">{children}</li>;
-                    },
-                    h1({ children }: any) {
-                      return <h1 className="text-base font-semibold text-white mt-4 mb-2">{children}</h1>;
-                    },
-                    h2({ children }: any) {
-                      return <h2 className="text-sm font-semibold text-white mt-3 mb-1.5">{children}</h2>;
-                    },
-                    h3({ children }: any) {
-                      return <h3 className="text-xs font-semibold text-zinc-200 mt-2.5 mb-1">{children}</h3>;
-                    },
-                    blockquote({ children }: any) {
-                      return (
-                        <blockquote className="border-l-2 border-white/20 pl-3 my-2 text-zinc-400 italic">
-                          {children}
-                        </blockquote>
-                      );
-                    },
-                  }}
-                >
-                  {message.content}
-                </ReactMarkdown>
-              </div>
-            ) : message.isStreaming ? (
-              <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono py-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                <span>Generating response...</span>
-              </div>
-            ) : null}
+                          if (isMulti) {
+                            return <CodeBlock language={match ? match[1] : ""} code={codeString} />;
+                          }
+                          return (
+                            <code
+                              className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] font-mono text-[11px] text-zinc-200"
+                              {...props}
+                            >
+                              {children}
+                            </code>
+                          );
+                        },
+                        p({ children }: any) {
+                          return <p className="mb-2.5 last:mb-0 leading-relaxed">{children}</p>;
+                        },
+                        ul({ children }: any) {
+                          return <ul className="list-disc pl-5 mb-2.5 space-y-1">{children}</ul>;
+                        },
+                        ol({ children }: any) {
+                          return <ol className="list-decimal pl-5 mb-2.5 space-y-1">{children}</ol>;
+                        },
+                        li({ children }: any) {
+                          return <li className="leading-relaxed">{children}</li>;
+                        },
+                        h1({ children }: any) {
+                          return <h1 className="text-base font-semibold text-white mt-4 mb-2">{children}</h1>;
+                        },
+                        h2({ children }: any) {
+                          return <h2 className="text-sm font-semibold text-white mt-3 mb-1.5">{children}</h2>;
+                        },
+                        h3({ children }: any) {
+                          return <h3 className="text-xs font-semibold text-zinc-200 mt-2.5 mb-1">{children}</h3>;
+                        },
+                        blockquote({ children }: any) {
+                          return (
+                            <blockquote className="border-l-2 border-white/20 pl-3 my-2 text-zinc-400 italic">
+                              {children}
+                            </blockquote>
+                          );
+                        },
+                      }}
+                    >
+                      {message.content}
+                    </ReactMarkdown>
+                  </div>
+                ) : message.isStreaming ? (
+                  <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono py-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                    <span>Generating response...</span>
+                  </div>
+                ) : null}
 
-            {/* Proof & Evidence Citations (APPEAR ONLY ON CLICK) */}
-            {message.citations && message.citations.length > 0 && (
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => setCitationsOpen(!citationsOpen)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.03] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 border border-white/[0.06] transition-colors cursor-pointer select-none"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-zinc-400" />
-                  <span>{message.citations.length} sources & proof</span>
-                  {citationsOpen ? (
-                    <ChevronUp className="w-3 h-3 text-zinc-500" />
-                  ) : (
-                    <ChevronDown className="w-3 h-3 text-zinc-500" />
-                  )}
-                </button>
+                {/* Proof & Evidence Citations (APPEAR ONLY ON CLICK) */}
+                {message.citations && message.citations.length > 0 && (
+                  <div className="pt-2 border-t border-white/[0.06]">
+                    <button
+                      type="button"
+                      onClick={() => setCitationsOpen(!citationsOpen)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/[0.03] hover:bg-white/[0.06] text-zinc-400 hover:text-zinc-200 border border-white/[0.06] transition-colors cursor-pointer select-none"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>{message.citations.length} sources & proof</span>
+                      {citationsOpen ? (
+                        <ChevronUp className="w-3 h-3 text-zinc-500" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3 text-zinc-500" />
+                      )}
+                    </button>
 
-                {citationsOpen && (
-                  <div className="grid grid-cols-1 gap-2 pt-3 animate-fade-in">
-                    {message.citations.map((citation) => (
-                      <CitationCard
-                        key={citation.id}
-                        citation={citation}
-                        teamSlug={teamSlug}
-                        projectSlug={projectSlug}
-                        repoId={repoId}
-                      />
-                    ))}
+                    {citationsOpen && (
+                      <div className="grid grid-cols-1 gap-2 pt-3 animate-fade-in">
+                        {message.citations.map((citation) => (
+                          <CitationCard
+                            key={citation.id}
+                            citation={citation}
+                            teamSlug={teamSlug}
+                            projectSlug={projectSlug}
+                            repoId={repoId}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Message Action Footer */}
+                {!message.isStreaming && message.content && (
+                  <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1 font-mono border-t border-white/[0.04]">
+                    <div className="flex items-center gap-2">
+                      {message.latencyMs && message.latencyMs > 0 ? (
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatLatency(message.latencyMs)}</span>
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyAnswer}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition-colors cursor-pointer"
+                        title="Copy response"
+                      >
+                        {copiedAnswer ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
-            )}
-
-            {/* Message Action Footer */}
-            {!message.isStreaming && message.content && (
-              <div className="flex items-center justify-between text-[11px] text-zinc-500 pt-1 font-mono">
-                <div className="flex items-center gap-2">
-                  {message.latencyMs && message.latencyMs > 0 ? (
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      <span>{formatLatency(message.latencyMs)}</span>
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleCopyAnswer}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition-colors cursor-pointer"
-                    title="Copy response"
-                  >
-                    {copiedAnswer ? (
-                      <>
-                        <Check className="w-3 h-3 text-emerald-400" />
-                        <span className="text-emerald-400">Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3" />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
+            ) : null}
           </div>
         )}
       </div>

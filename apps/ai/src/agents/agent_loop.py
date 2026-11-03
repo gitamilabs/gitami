@@ -39,7 +39,7 @@ class AutonomousAgentLoop:
         graph_client: Any,
         vector_client: Any,
         history: Optional[List[Dict[str, str]]] = None,
-        max_steps: int = 5,
+        max_steps: int = 3,
         root_directory: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
@@ -60,6 +60,9 @@ class AutonomousAgentLoop:
         def format_sse(data: Dict[str, Any]) -> str:
             return f"data: {json.dumps(data)}\n\n"
 
+        # Keep connection alive while starting up
+        yield ": ping\n\n"
+
         history_context = _format_conversation_history(history)
 
         # Pre-fetch high-confidence governed context via ContextEngine
@@ -77,13 +80,13 @@ class AutonomousAgentLoop:
                 query=user_query,
                 repository_ids=[repo_id],
                 branch=branch,
-                max_items=4,
-                max_tokens=2000,
+                max_items=3,
+                max_tokens=800,
             ))
             if ctx_res and ctx_res.items:
                 ctx_parts = []
                 for item in ctx_res.items:
-                    snippet = item.content[:400]
+                    snippet = item.content[:300]
                     ctx_parts.append(f"- [{item.type.value}] {item.title}: {snippet}")
                     if item.file_path:
                         citations.append({
@@ -100,19 +103,20 @@ class AutonomousAgentLoop:
             logger.debug(f"ContextEngine pre-fetch notice: {e}")
 
         for step_idx in range(1, max_steps + 1):
+            # Keep connection warm while LLM generates
+            yield ": ping\n\n"
+
             # Formulate conversation prompt history for LLM
             history_str = ""
             if observations:
-                history_str = "\n\n### PREVIOUS TOOL OBSERVATIONS & RETRIEVED CODE PASSAGES IN THIS REASONING LOOP:\n"
+                history_str = "\n\n### PREVIOUS TOOL OBSERVATIONS IN THIS REASONING LOOP:\n"
                 for obs in observations:
-                    age = step_idx - obs["step"]
-                    max_chars = max(800, 2500 // (age + 1))
                     history_str += (
                         f"Step {obs['step']}:\n"
                         f"- Thought: {obs['thought']}\n"
                         f"- Tool Called: {obs['tool_name']}({json.dumps(obs['args'])})\n"
                         f"- Summary: {obs['output_summary']}\n"
-                        f"- Retrieved Payload / Code Content:\n{obs['raw'][:max_chars]}\n\n"
+                        f"- Retrieved Payload Snippet:\n{obs['raw'][:500]}\n\n"
                     )
 
             scope_str = f"Scoped Subdirectory: '{root_directory}' (focus all search & answers strictly on this directory)\n" if root_directory else ""
@@ -126,13 +130,22 @@ class AutonomousAgentLoop:
                 f"Current Reasoning Step #{step_idx}. Decide your next action (call_tool or final_answer) in valid JSON."
             )
 
-            # Call LLM for reasoning turn
+            # Call LLM for reasoning turn with keepalive pings
             llm_response_text = ""
             try:
-                llm_response_text = await self._call_llm_json(
-                    prompt=prompt,
-                    system_prompt=get_prompt("react_agent"),
+                llm_task = asyncio.create_task(
+                    self._call_llm_json(
+                        prompt=prompt,
+                        system_prompt=get_prompt("react_agent"),
+                    )
                 )
+                while not llm_task.done():
+                    try:
+                        await asyncio.wait_for(asyncio.shield(llm_task), timeout=2.5)
+                    except asyncio.TimeoutError:
+                        if not llm_task.done():
+                            yield ": ping\n\n"
+                llm_response_text = await llm_task
             except Exception as e:
                 logger.warning(f"LLM reasoning turn error: {e}")
                 yield format_sse({
@@ -239,18 +252,32 @@ class AutonomousAgentLoop:
             await asyncio.sleep(0.05)
 
         # Fallback if max_steps reached: synthesize answer with collected context
+        synth_obs = [
+            {"step": o["step"], "tool": o["tool_name"], "summary": o["output_summary"], "snippet": o["raw"][:350]}
+            for o in observations
+        ]
         synth_prompt = (
             f"Repository: '{repo_id}' (branch: '{branch}')\n"
             f"User Query: '{user_query}'\n\n"
             f"{history_context}"
             f"--- REASONING TOOL OBSERVATIONS ---\n"
-            f"{json.dumps([o['raw'] for o in observations], indent=2)[:3000]}\n\n"
+            f"{json.dumps(synth_obs, indent=2)}\n\n"
             f"Synthesize a final cited answer to the user query."
         )
-        final_answer = await self.llm_client.run_orchestrator(
-            prompt=synth_prompt,
-            system_prompt=get_prompt("chat_synthesis", "Synthesize an accurate codebase answer using bracketed citations [1], [2]."),
+        synth_task = asyncio.create_task(
+            self.llm_client.run_orchestrator(
+                prompt=synth_prompt,
+                system_prompt=get_prompt("chat_synthesis", "Synthesize an accurate codebase answer using bracketed citations [1], [2]."),
+                max_tokens=600,
+            )
         )
+        while not synth_task.done():
+            try:
+                await asyncio.wait_for(asyncio.shield(synth_task), timeout=2.5)
+            except asyncio.TimeoutError:
+                if not synth_task.done():
+                    yield ": ping\n\n"
+        final_answer = await synth_task
         yield format_sse({"type": "answer_delta", "delta": final_answer})
         yield format_sse({"type": "citations", "citations": citations})
 
@@ -258,18 +285,8 @@ class AutonomousAgentLoop:
         yield format_sse({"type": "done", "total_latency_ms": total_latency})
 
     async def _call_llm_json(self, prompt: str, system_prompt: str) -> str:
-        """Helper to invoke LLM with JSON format expectation."""
-        if self.llm_client.has_gemini:
-            res = await self.llm_client._call_gemini(prompt, system_prompt)
-            if res:
-                return res
-
-        if self.llm_client.has_groq:
-            res = await self.llm_client._call_groq(prompt, system_prompt, temperature=0.1, json_mode=True)
-            if res:
-                return res
-
-        return ""
+        """Helper to invoke Orchestrator LLM with JSON format expectation."""
+        return await self.llm_client.call_orchestrator_json(prompt, system_prompt)
 
     def _parse_llm_json(self, text: str) -> Dict[str, Any]:
         if not text:
@@ -299,7 +316,7 @@ class AutonomousAgentLoop:
             "vector_search": "ChromaDB Semantic Vector Search",
             "get_symbol_details": "Neo4j Symbol & Call Graph Analysis",
             "get_file_dependencies": "Neo4j File Dependency Graph Traversal",
-            "get_file_content": "Read Repository File Content from Disk",
+            "get_file_content": "Fetch Repository File Content",
             "get_blast_radius": "Neo4j Blast Radius Ripple Analysis",
             "get_repo_structure": "Neo4j Repository File Hierarchy",
             "search_symbols": "Neo4j Fuzzy Symbol Search",
@@ -332,16 +349,19 @@ class AutonomousAgentLoop:
             f_path = parsed_raw.get("file_path", "file")
             content = parsed_raw.get("content", "")
             lines_cnt = parsed_raw.get("lines_count", 0)
-            if content:
+            source = parsed_raw.get("source", "repository")
+            if content and lines_cnt > 0:
                 citations.append({
                     "id": c_id,
                     "file_path": f_path,
                     "symbol": None,
                     "lines": f"1-{lines_cnt}",
                     "snippet": content[:350] + ("..." if len(content) > 350 else ""),
-                    "source_type": "disk",
+                    "source_type": "repository",
                 })
-            return f"Read {lines_cnt} line(s) of '{f_path}' directly from repository disk.", citations
+                return f"Fetched {lines_cnt} line(s) of '{f_path}' from repository ({source}).", citations
+            else:
+                return f"File '{f_path}' could not be retrieved from repository.", citations
 
         elif tool_name == "hybrid_search":
             vec_hits = parsed_raw.get("vector_hits", [])
@@ -376,8 +396,23 @@ class AutonomousAgentLoop:
             return f"Calculated ripple effect risk score: {risk}. Total downstream affected symbols: {aff}.", citations
 
         elif tool_name == "get_repo_structure":
-            files = len(parsed_raw.get("files", []))
-            return f"Retrieved hierarchy for {files} file(s) in repository.", citations
+            files_list = parsed_raw.get("files", [])
+            key_files = [
+                f for f in files_list
+                if any(k in f.get("file_path", "").lower() for k in ["readme", "package.json", "app.", "index.", "main."])
+            ]
+            for kf in (key_files[:4] if key_files else files_list[:3]):
+                syms_summary = ", ".join([s.get("name", "") for s in kf.get("symbols", []) if s.get("name")][:5])
+                citations.append({
+                    "id": c_id,
+                    "file_path": kf.get("file_path", "structure"),
+                    "symbol": None,
+                    "lines": None,
+                    "snippet": f"Repository File: {kf.get('file_path')} ({kf.get('language') or 'text'})" + (f" - Symbols: {syms_summary}" if syms_summary else ""),
+                    "source_type": "graph",
+                })
+                c_id += 1
+            return f"Retrieved hierarchy for {len(files_list)} file(s) in repository.", citations
 
         else:
             return f"Executed {tool_name} tool call successfully.", citations

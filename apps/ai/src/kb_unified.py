@@ -77,8 +77,9 @@ class UnifiedKB:
 
         # Query Cypher for symbols matching any token
         graph_query = """
-        MATCH (s:Symbol {repo_id: $repo_id})
-        WHERE ($project_id IS NULL OR s.project_id = $project_id OR s.project_id = 'default')
+        MATCH (s:Symbol)
+        WHERE (s.repo_id = $repo_id OR toLower(s.repo_id) = toLower($repo_id))
+          AND ($project_id IS NULL OR s.project_id = $project_id OR s.project_id = 'default')
           AND ANY(t IN $tokens WHERE toLower(s.name) CONTAINS t OR toLower(s.qualified_name) CONTAINS t)
         RETURN properties(s) AS symbol
         LIMIT $limit
@@ -94,8 +95,9 @@ class UnifiedKB:
             # If symbol hits are fewer than limit, search File nodes
             if len(graph_hits) < n_results:
                 file_query = """
-                MATCH (f:File {repo_id: $repo_id})
-                WHERE ($project_id IS NULL OR f.project_id = $project_id OR f.project_id = 'default')
+                MATCH (f:File)
+                WHERE (f.repo_id = $repo_id OR toLower(f.repo_id) = toLower($repo_id))
+                  AND ($project_id IS NULL OR f.project_id = $project_id OR f.project_id = 'default')
                   AND ANY(t IN $tokens WHERE toLower(f.file_path) CONTAINS t)
                 RETURN {name: f.file_path, qualified_name: f.file_path, kind: "file", file_path: f.file_path, language: f.language} AS symbol
                 LIMIT $limit
@@ -106,7 +108,23 @@ class UnifiedKB:
                 )
                 file_hits = [r["symbol"] for r in file_recs if "symbol" in r]
                 graph_hits.extend(file_hits)
-        except Exception as e:
+
+            # If still no graph hits (e.g. general query like "What is this project about?"), retrieve key entrypoint files
+            if not graph_hits:
+                entry_query = """
+                MATCH (f:File)
+                WHERE (f.repo_id = $repo_id OR toLower(f.repo_id) = toLower($repo_id))
+                  AND ($project_id IS NULL OR f.project_id = $project_id OR f.project_id = 'default')
+                  AND ANY(k IN ['readme', 'package.json', 'app', 'index', 'main', 'config'] WHERE toLower(f.file_path) CONTAINS k)
+                RETURN {name: f.file_path, qualified_name: f.file_path, kind: "file", file_path: f.file_path, language: f.language} AS symbol
+                LIMIT $limit
+                """
+                entry_recs = await self.graph.execute_query(
+                    entry_query,
+                    {"repo_id": repo_id, "project_id": project_id, "limit": n_results},
+                )
+                graph_hits = [r["symbol"] for r in entry_recs if "symbol" in r]
+        except Exception:
             pass
 
         # Deduplicate graph hits by unique symbol identifier

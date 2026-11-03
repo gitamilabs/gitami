@@ -107,13 +107,30 @@ class VectorKBClient:
         self._store.upsert(ids=[doc_id], documents=[sanitized_doc], metadatas=[metadata])
 
     def _normalize_where(self, where: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-        """Normalise a flat metadata dict into ChromaDB-style $and filter."""
+        """Normalise a flat metadata dict into ChromaDB-style $and filter with key and casing normalization."""
         if not where:
             return None
+        norm_dict = dict(where)
+        # Normalize repo_id to repo
+        if "repo_id" in norm_dict and "repo" not in norm_dict:
+            norm_dict["repo"] = norm_dict.pop("repo_id")
+
+        # Resolve repository casing if repo is present
+        if "repo" in norm_dict and isinstance(norm_dict["repo"], str):
+            target_repo = norm_dict["repo"]
+            try:
+                distinct_repos = self.get_distinct_repos()
+                for dr in distinct_repos:
+                    if dr.lower() == target_repo.lower():
+                        norm_dict["repo"] = dr
+                        break
+            except Exception:
+                pass
+
         for key in ("$and", "$or"):
-            if key in where:
-                return where
-        clean_items = [{k: v} for k, v in where.items() if v is not None and v != ""]
+            if key in norm_dict:
+                return norm_dict
+        clean_items = [{k: v} for k, v in norm_dict.items() if v is not None and v != ""]
         if not clean_items:
             return None
         if len(clean_items) == 1:
@@ -157,6 +174,7 @@ class VectorKBClient:
             "project_id": project_id,
             "team_id": team_id or "",
             "repo": repo,
+            "repo_id": repo,
             "branch": branch,
             "file_path": file_path,
             "symbol": symbol,
@@ -200,6 +218,7 @@ class VectorKBClient:
                 "project_id": project_id,
                 "team_id": team_id,
                 "repo": item["repo"],
+                "repo_id": item["repo"],
                 "branch": item["branch"],
                 "file_path": item["file_path"],
                 "symbol": item["symbol"],
@@ -281,6 +300,7 @@ class VectorKBClient:
                 "project_id": rec_proj,
                 "team_id": rec_team,
                 "repo": repo,
+                "repo_id": repo,
                 "file_path": file_path,
                 "kind": rec.get("kind", "documentation"),
                 "name": raw_name,
@@ -328,6 +348,7 @@ class VectorKBClient:
                 "project_id": project_id,
                 "team_id": team_id or "",
                 "repo": repo,
+                "repo_id": repo,
                 "branch": branch,
                 "pr_id": pr_id,
                 "content_type": ContentType.PR.value,
@@ -359,6 +380,7 @@ class VectorKBClient:
                 "project_id": project_id,
                 "team_id": team_id or "",
                 "repo": repo,
+                "repo_id": repo,
                 "branch": branch,
                 "content_type": ContentType.COMMIT.value,
                 "commit_hash": commit_hash,
@@ -388,6 +410,7 @@ class VectorKBClient:
                 "project_id": project_id,
                 "team_id": team_id or "",
                 "repo": repo,
+                "repo_id": repo,
                 "issue_id": issue_id,
                 "content_type": ContentType.ISSUE.value,
                 "chunk_index": idx,
@@ -461,8 +484,12 @@ class VectorKBClient:
     ) -> Dict[str, Any]:
         """
         Semantic similarity search with automatic $and formatting and scoped fallback.
+        Guarantees no cross-repository data leakage when a repository or project filter is specified.
         """
         norm_where = dict(where) if where else {}
+        if "repo_id" in norm_where and "repo" not in norm_where:
+            norm_where["repo"] = norm_where.pop("repo_id")
+
         if project_id and project_id != "default":
             if "$and" in norm_where:
                 norm_where["$and"].append({"project_id": project_id})
@@ -470,18 +497,30 @@ class VectorKBClient:
                 norm_where["project_id"] = project_id
 
         parsed_where = self._normalize_where(norm_where) if norm_where else None
+        has_scope = bool(project_id and project_id != "default") or ("repo" in norm_where)
+
         try:
             res = self._store.query(
                 query_texts=query_texts,
                 n_results=n_results,
                 where=parsed_where,
             )
-        except Exception:
-            res = self._store.query(query_texts=query_texts, n_results=n_results)
+        except Exception as e:
+            logger.warning(f"Vector store query error with where={parsed_where}: {e}")
+            # If query failed with a combined filter, attempt querying with only the repo filter
+            if "repo" in norm_where:
+                try:
+                    repo_clause = self._normalize_where({"repo": norm_where["repo"]})
+                    res = self._store.query(query_texts=query_texts, n_results=n_results, where=repo_clause)
+                except Exception:
+                    res = {"documents": [[]], "metadatas": [[]], "distances": [[]]}
+            else:
+                res = {"documents": [[]], "metadatas": [[]], "distances": [[]]}
 
-        # Fallback: only relax query if no project or repo constraint was specified
+        # If scoped to a specific repo or project, NEVER relax the query to unrestricted global search.
+        # Global fallback is only permissible when no repository or project constraint was provided.
         if parsed_where and res and res.get("documents") and res["documents"][0] == []:
-            if not project_id and "repo" not in norm_where:
+            if not has_scope:
                 res = self._store.query(query_texts=query_texts, n_results=n_results)
 
         return res

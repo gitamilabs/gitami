@@ -21,8 +21,28 @@ app.use("*", logger());
 app.use(
   "*",
   cors({
-    origin: [env.FRONTEND_URL, "http://localhost:3000"],
-    allowHeaders: ["Content-Type", "Authorization", "X-GitHub-Event", "X-Hub-Signature-256"],
+    origin: (origin) => {
+      if (!origin) return env.FRONTEND_URL || "http://localhost:3000";
+      if (
+        origin === env.FRONTEND_URL ||
+        origin === "http://localhost:3000" ||
+        origin === "http://127.0.0.1:3000" ||
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("http://127.0.0.1:")
+      ) {
+        return origin;
+      }
+      return env.FRONTEND_URL || "http://localhost:3000";
+    },
+    allowHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-GitHub-Event",
+      "X-Hub-Signature-256",
+      "Accept",
+      "Cache-Control",
+      "X-Requested-With",
+    ],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
   }),
@@ -80,9 +100,8 @@ app.notFound((c) => {
 // // Server Export
 // // ---------------------------------------------------------------------------
 
-export default env.PORT !== undefined
-  ? {
-    port: Number(env.PORT) || 5000,
-    fetch: app.fetch,
-  }
-  : app;
+export default {
+  port: Number(env.PORT) || 5000,
+  idleTimeout: 255,
+  fetch: app.fetch,
+};

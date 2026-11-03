@@ -11,6 +11,7 @@ from src.mcp.tools import (
     tool_search_symbols,
     tool_vector_search,
     tool_hybrid_search,
+    tool_get_file_content,
 )
 
 
@@ -101,6 +102,12 @@ async def hybrid_search(repo_id: str, query: str, branch: str = "main", n_result
         return await tool_hybrid_search(graph_client, vector_client, repo_id=repo_id, query_text=query, branch=branch, n_results=n_results)
     finally:
         await graph_client.close()
+
+
+@mcp_server.tool()
+async def get_file_content(repo_id: str, file_path: str, branch: str = "main") -> str:
+    """Fetch raw source code, documentation, or configuration file contents from repository."""
+    return await tool_get_file_content(repo_id=repo_id, file_path=file_path, branch=branch)
 
 
 def run_mcp_server():

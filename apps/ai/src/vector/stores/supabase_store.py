@@ -72,7 +72,7 @@ class SupabaseStore:
             {
                 "id": doc_id,
                 "content": doc,
-                "embedding": emb,
+                "embedding": emb.tolist() if hasattr(emb, "tolist") else emb,
                 "metadata": meta,
             }
             for doc_id, doc, meta, emb in zip(ids, documents, metadatas, embeddings)
@@ -95,10 +95,11 @@ class SupabaseStore:
 
         all_ids, all_docs, all_metas, all_dists = [], [], [], []
         for q_emb in q_embs:
+            q_vec = q_emb.tolist() if hasattr(q_emb, "tolist") else q_emb
             result = self._client.rpc(
                 "match_documents",
                 {
-                    "query_embedding": q_emb,
+                    "query_embedding": q_vec,
                     "match_count": n_results,
                     "filter": filter_json,
                     "table_name": self._table,
@@ -166,8 +167,6 @@ class SupabaseStore:
     ) -> Dict[str, Any]:
         filter_json = self._build_filter(where)
         params: Dict[str, Any] = {"filter": filter_json, "table_name": self._table}
-        if limit is not None:
-            params["limit_val"] = limit
         result = self._client.rpc(
             "get_documents",
             params,

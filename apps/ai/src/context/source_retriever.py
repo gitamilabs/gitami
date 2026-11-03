@@ -27,15 +27,17 @@ class SourceRetriever:
         self._default_repo_root = Path(default_repo_root).resolve() if default_repo_root else None
 
     def _resolve_repo_path(self, repo_id: str, scope: AuthorizedScope) -> Optional[Path]:
-        """Resolves local filesystem directory for repo_id."""
+        """Resolves local filesystem directory for repo_id if strictly available."""
         if repo_id in scope.repo_paths and scope.repo_paths[repo_id] is not None:
             p = scope.repo_paths[repo_id]
             if p.exists():
                 return p
 
-        # Fallback to default_repo_root
+        # Fallback to default_repo_root ONLY if it matches the target repo name
         if self._default_repo_root and self._default_repo_root.exists():
-            return self._default_repo_root
+            repo_name = repo_id.split("/")[-1]
+            if self._default_repo_root.name == repo_name or (self._default_repo_root / repo_name).exists():
+                return self._default_repo_root
 
         return None
 
@@ -52,35 +54,60 @@ class SourceRetriever:
     ) -> Optional[ContextItem]:
         """
         Retrieves a focused code snippet at an explicit commit revision.
-        Never falls back silently to a different commit.
+        Supports both local on-disk repos and remote GitHub repos.
         """
+        import os
+
         if repo_id not in scope.allowed_repo_ids:
             logger.warning(f"SourceRetriever rejected access to unauthorized repo '{repo_id}'")
             return None
 
+        lines: List[str] = []
+        resolved_sha = commit_sha or "HEAD"
+
         repo_path = self._resolve_repo_path(repo_id, scope)
-        if not repo_path:
-            logger.debug(f"SourceRetriever could not resolve local directory for repo '{repo_id}'")
-            return None
+        if repo_path and repo_path.exists():
+            target_sha = commit_sha or "HEAD"
+            snapshot: Optional[RepositorySnapshot] = None
+            try:
+                snapshot = RepositorySnapshot(repo_path, target_sha)
+                raw_bytes = snapshot.read_bytes(file_path)
+                full_text = raw_bytes.decode("utf-8", errors="replace")
+                lines = full_text.splitlines()
+                resolved_sha = snapshot.resolved_commit_sha
+            except Exception as e:
+                logger.warning(
+                    f"SourceRetriever could not read '{file_path}' from local repo '{repo_id}': {e}"
+                )
+            finally:
+                if snapshot:
+                    snapshot.close()
 
-        target_sha = commit_sha or "HEAD"
-        snapshot: Optional[RepositorySnapshot] = None
-        try:
-            snapshot = RepositorySnapshot(repo_path, target_sha)
-            raw_bytes = snapshot.read_bytes(file_path)
-            full_text = raw_bytes.decode("utf-8", errors="replace")
-            lines = full_text.splitlines()
-        except Exception as e:
-            logger.warning(
-                f"SourceRetriever could not read '{file_path}' at commit '{target_sha}' in repo '{repo_id}': {e}"
-            )
-            # Commit consistency invariant: Never return wrong revision source
-            return None
-        finally:
-            if snapshot:
-                snapshot.close()
+        # If not retrieved from local disk, fallback to remote GitHub
+        if not lines and "/" in repo_id and not repo_id.startswith("local:"):
+            try:
+                import urllib.request
+                from src.config import settings
 
-        resolved_sha = snapshot.resolved_commit_sha
+                token = getattr(settings, "github_token", None) or os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+                headers = {"User-Agent": "GitAmi-Agent"}
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
+
+                clean_path = file_path.strip().lstrip("/").lstrip("\\")
+                ref = commit_sha or scope.default_branch or "main"
+                url = f"https://raw.githubusercontent.com/{repo_id}/{ref}/{clean_path}"
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=6) as response:
+                    if response.status == 200:
+                        full_text = response.read().decode("utf-8", errors="replace")
+                        lines = full_text.splitlines()
+                        resolved_sha = ref
+            except Exception as e:
+                logger.debug(f"SourceRetriever remote fetch note for '{file_path}': {e}")
+
+        if not lines:
+            return None
 
         # Slice focused snippet if lines provided
         if start_line is not None and end_line is not None and 1 <= start_line <= len(lines):

@@ -100,7 +100,7 @@ class RepositorySnapshot:
         # Non-git directory fallback
         target = self.repo_path / norm_path
         if not target.is_file():
-            raise FileNotFoundError(f"File '{norm_path}' not found on disk at {target}")
+            raise FileNotFoundError(f"File '{norm_path}' not found at path {target}")
         return target.read_bytes()
 
     def close(self) -> None:

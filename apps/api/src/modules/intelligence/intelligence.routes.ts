@@ -11,7 +11,7 @@ import {
 
 const intelligenceRouter = new Hono<{ Variables: AuthContextVariables }>();
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://localhost:8000";
+const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://127.0.0.1:8000").replace("localhost", "127.0.0.1");
 
 async function enrichPayloadWithTenancy(body: any, user?: any): Promise<any> {
   const enriched = { ...body };
@@ -205,21 +205,11 @@ intelligenceRouter.post("/chat/stream", async (c) => {
       return c.json({ error: `AI service returned ${res.status}` }, res.status as any);
     }
 
-    c.header("Content-Type", "text/event-stream");
-    c.header("Cache-Control", "no-cache");
-    c.header("Connection", "keep-alive");
-
-    return stream(c, async (s) => {
-      const reader = res.body!.getReader();
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          await s.write(value);
-        }
-      } finally {
-        reader.releaseLock();
-      }
+    return c.body(res.body, 200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
     });
   } catch (err: any) {
     return c.json({ error: err.message }, 502);

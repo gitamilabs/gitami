@@ -10,9 +10,17 @@ from src.parsing.parser import CodeParser
 async def tool_get_repo_structure(client: Neo4jClient, repo_id: str, branch: str = "main") -> str:
     """Retrieve full file and symbol hierarchy for a repository."""
     query = """
-    MATCH (f:File {repo_id: $repo_id, branch: $branch})
+    MATCH (f:File)
+    WHERE (f.repo_id = $repo_id OR toLower(f.repo_id) = toLower($repo_id))
+      AND ($branch IS NULL OR $branch = '' OR f.branch = $branch OR f.branch IS NULL)
+    WITH f.file_path AS file_path, head(collect(f)) AS f
     OPTIONAL MATCH (f)-[:DEFINES]->(s:Symbol)
-    RETURN f.file_path AS file_path, f.language AS language, collect({name: s.name, kind: s.kind, qname: s.qualified_name}) AS symbols
+    WITH file_path, f, collect(CASE WHEN s IS NOT NULL AND s.name IS NOT NULL THEN {
+        name: s.name,
+        kind: coalesce(s.kind, split(coalesce(s.uid, ''), ':')[0], 'symbol'),
+        qname: coalesce(s.qualified_name, s.name)
+    } END) AS raw_symbols
+    RETURN file_path, f.language AS language, [sym IN raw_symbols WHERE sym IS NOT NULL] AS symbols
     ORDER BY file_path
     """
     records = await client.execute_query(query, {"repo_id": repo_id, "branch": branch})
@@ -29,16 +37,18 @@ async def tool_get_symbol_details(client: Neo4jClient, repo_id: str, qualified_n
     # 2. If no direct symbol match, check if qualified_name matches a File node
     if not sym:
         file_sym_query = """
-        MATCH (f:File {repo_id: $repo_id, branch: $branch})
-        WHERE f.file_path = $qname 
-           OR toLower(f.file_path) ENDS WITH toLower('/' + $qname)
-           OR toLower(f.file_path) CONTAINS toLower($qname)
+        MATCH (f:File)
+        WHERE (f.repo_id = $repo_id OR toLower(f.repo_id) = toLower($repo_id))
+          AND ($branch IS NULL OR $branch = '' OR f.branch = $branch OR f.branch IS NULL)
+          AND (f.file_path = $qname 
+               OR toLower(f.file_path) ENDS WITH toLower('/' + $qname)
+               OR toLower(f.file_path) CONTAINS toLower($qname))
         MATCH (f)-[:DEFINES]->(s:Symbol)
         OPTIONAL MATCH (caller:Symbol)-[:CALLS]->(s)
         OPTIONAL MATCH (s)-[:CALLS]->(callee:Symbol)
         RETURN f.file_path AS file_path,
                s.name AS symbol,
-               s.kind AS kind,
+               coalesce(s.kind, split(coalesce(s.uid, ''), ':')[0], 'symbol') AS kind,
                s.signature AS signature,
                collect(DISTINCT caller.name) AS callers,
                collect(DISTINCT callee.name) AS callees
@@ -93,18 +103,25 @@ async def tool_get_file_dependencies(client: Neo4jClient, repo_id: str, file_pat
     """Get internal and external dependencies for a file, plus other files that depend on it."""
     fp_clean = file_path.strip()
     query = """
-    MATCH (f:File {repo_id: $repo_id, branch: $branch})
-    WHERE f.file_path = $fp 
-       OR toLower(f.file_path) ENDS WITH toLower('/' + $fp)
-       OR toLower(f.file_path) CONTAINS toLower($fp)
+    MATCH (f:File)
+    WHERE (f.repo_id = $repo_id OR toLower(f.repo_id) = toLower($repo_id))
+      AND ($branch IS NULL OR $branch = '' OR f.branch = $branch OR f.branch IS NULL)
+    AND (f.file_path = $fp 
+           OR toLower(f.file_path) ENDS WITH toLower('/' + $fp)
+           OR toLower(f.file_path) CONTAINS toLower($fp))
     
-    OPTIONAL MATCH (other:File {repo_id: $repo_id, branch: $branch})-[:DEPENDS_ON_FILE]->(f)
-    OPTIONAL MATCH (other2:File {repo_id: $repo_id, branch: $branch})-[:IMPORTS]->(:Symbol)<-[:DEFINES]-(f)
+    OPTIONAL MATCH (other:File)-[:DEPENDS_ON_FILE]->(f)
+    WHERE (other.repo_id = $repo_id OR toLower(other.repo_id) = toLower($repo_id))
+    OPTIONAL MATCH (other2:File)-[:IMPORTS]->(:Symbol)<-[:DEFINES]-(f)
+    WHERE (other2.repo_id = $repo_id OR toLower(other2.repo_id) = toLower($repo_id))
     
-    OPTIONAL MATCH (f)-[:DEPENDS_ON_FILE]->(target:File {repo_id: $repo_id, branch: $branch})
-    OPTIONAL MATCH (f)-[:IMPORTS]->(:Symbol)<-[:DEFINES]-(target2:File {repo_id: $repo_id, branch: $branch})
+    OPTIONAL MATCH (f)-[:DEPENDS_ON_FILE]->(target:File)
+    WHERE (target.repo_id = $repo_id OR toLower(target.repo_id) = toLower($repo_id))
+    OPTIONAL MATCH (f)-[:IMPORTS]->(:Symbol)<-[:DEFINES]-(target2:File)
+    WHERE (target2.repo_id = $repo_id OR toLower(target2.repo_id) = toLower($repo_id))
     
-    OPTIONAL MATCH (f)-[:DEPENDS_ON]->(pkg:Package {repo_id: $repo_id, branch: $branch})
+    OPTIONAL MATCH (f)-[:DEPENDS_ON]->(pkg:Package)
+    WHERE (pkg.repo_id = $repo_id OR toLower(pkg.repo_id) = toLower($repo_id))
     
     RETURN f.file_path AS file_path,
            collect(DISTINCT coalesce(other.file_path, other2.file_path)) AS imported_by_files,
@@ -135,10 +152,12 @@ async def tool_search_symbols(client: Neo4jClient, repo_id: str, query_str: str,
     """Fuzzy search symbol names matching query string."""
     q_clean = query_str.strip()
     query = """
-    MATCH (s:Symbol {repo_id: $repo_id, branch: $branch})
-    WHERE toLower(s.name) CONTAINS toLower($query_str) 
-       OR toLower(s.qualified_name) CONTAINS toLower($query_str)
-       OR toLower(s.file_path) CONTAINS toLower($query_str)
+    MATCH (s:Symbol)
+    WHERE (s.repo_id = $repo_id OR toLower(s.repo_id) = toLower($repo_id))
+      AND ($branch IS NULL OR $branch = '' OR s.branch = $branch OR s.branch IS NULL)
+      AND (toLower(s.name) CONTAINS toLower($query_str) 
+           OR toLower(s.qualified_name) CONTAINS toLower($query_str)
+           OR toLower(s.file_path) CONTAINS toLower($query_str))
     RETURN properties(s) AS symbol
     LIMIT 20
     """
@@ -189,6 +208,24 @@ async def tool_vector_search(
         for doc, meta in zip(docs, metas):
             hits.append({"metadata": meta, "text": doc})
 
+    # If scoped search with a specific content_type returned 0 results, retry without content_type restriction on the same repo
+    if not hits and content_type and repo_id:
+        scoped_where = {"repo": repo_id}
+        if project_id and project_id != "default":
+            scoped_where["project_id"] = project_id
+        res_retry = await asyncio.to_thread(
+            vector_client.query,
+            query_texts=[query_text],
+            n_results=n_results,
+            where=scoped_where,
+            project_id=project_id,
+        )
+        if res_retry and res_retry.get("documents") and len(res_retry["documents"]) > 0 and res_retry["documents"][0]:
+            docs = res_retry["documents"][0]
+            metas = res_retry.get("metadatas", [[]])[0] if res_retry.get("metadatas") else [{}] * len(docs)
+            for doc, meta in zip(docs, metas):
+                hits.append({"metadata": meta, "text": doc})
+
     return json.dumps({"query": query_text, "results": hits}, indent=2)
 
 
@@ -214,57 +251,86 @@ async def tool_hybrid_search(
     return json.dumps(res, indent=2)
 
 
-async def tool_get_file_content(repo_id: str, file_path: str) -> str:
-    """Read actual raw source code, documentation, or configuration file contents from repository disk."""
+async def tool_get_file_content(repo_id: str, file_path: str, branch: str = "main") -> str:
+    """Fetch raw source code, documentation, or configuration file contents from repository (GitHub remote or in-memory)."""
+    import os
+    import urllib.request
     from pathlib import Path
     from src.config import settings
 
     clean_path = file_path.strip().lstrip("/").lstrip("\\")
-    repo_slug = repo_id.replace("/", "_")
-    repos_base = Path(settings.chroma_persist_dir) / "repos"
+    token = getattr(settings, "github_token", None) or os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
 
-    candidates = [
-        repos_base / repo_slug / clean_path,
-        repos_base / repo_id / clean_path,
-        Path("./chroma_db/repos") / repo_slug / clean_path,
-        Path("./chroma_db/repos") / repo_id / clean_path,
-        Path(".") / clean_path,
-    ]
+    headers = {"User-Agent": "GitAmi-Agent"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
 
+    # Priority 1: GitHub Remote Fetch (Cloud-native / Diskless)
+    if "/" in repo_id and not repo_id.startswith("local:"):
+        candidate_branches = [b for b in [branch, "main", "master", "HEAD"] if b]
+        # Deduplicate while preserving order
+        candidate_branches = list(dict.fromkeys(candidate_branches))
+
+        # Build path variations to guard against case mismatches (e.g. Readme.md vs README.md)
+        p_obj = Path(clean_path)
+        path_variations = [clean_path]
+        if p_obj.name.lower() in ("readme.md", "package.json", "license", "dockerfile", "tsconfig.json"):
+            for v in (p_obj.name.upper(), p_obj.name.lower(), p_obj.name.capitalize()):
+                cand_rel = (p_obj.parent / v).as_posix() if p_obj.parent != Path(".") else v
+                if cand_rel not in path_variations:
+                    path_variations.append(cand_rel)
+
+        for br in candidate_branches:
+            for p_cand in path_variations:
+                url = f"https://raw.githubusercontent.com/{repo_id}/{br}/{p_cand}"
+                try:
+                    req = urllib.request.Request(url, headers=headers)
+                    with urllib.request.urlopen(req, timeout=8) as response:
+                        if response.status == 200:
+                            text = response.read().decode("utf-8", errors="ignore")
+                            lines = text.splitlines()
+                            return json.dumps({
+                                "file_path": p_cand,
+                                "lines_count": len(lines),
+                                "content": text[:5000],
+                                "truncated": len(text) > 5000,
+                                "source": "github_remote",
+                            }, indent=2)
+                except Exception:
+                    continue
+
+    # Priority 2: Dedicated local repo directory ONLY if explicitly configured (local development)
+    repos_dir = os.environ.get("REPOS_DIR")
     target_file = None
-    for cand in candidates:
-        if cand.exists() and cand.is_file():
-            target_file = cand
-            break
-
-    if not target_file:
-        for possible_dir in [repos_base / repo_slug, Path("./chroma_db/repos") / repo_slug]:
-            if possible_dir.exists():
-                for p in possible_dir.rglob(Path(clean_path).name):
-                    if p.is_file():
-                        target_file = p
-                        break
-            if target_file:
+    if repos_dir:
+        repo_name = repo_id.split("/")[-1]
+        repo_slug = repo_id.replace("/", "_")
+        cand_dirs = [Path(repos_dir) / repo_name, Path(repos_dir) / repo_slug]
+        for cd in cand_dirs:
+            p = cd / clean_path
+            if p.exists() and p.is_file():
+                target_file = p
                 break
 
-    if not target_file or not target_file.exists():
-        return json.dumps({
-            "error": f"File '{file_path}' not found on disk for repo '{repo_id}'",
-            "file_path": file_path,
-            "content": "",
-        }, indent=2)
+    if target_file and target_file.exists():
+        try:
+            text = target_file.read_text(encoding="utf-8", errors="ignore")
+            lines = text.splitlines()
+            return json.dumps({
+                "file_path": file_path,
+                "lines_count": len(lines),
+                "content": text[:5000],
+                "truncated": len(text) > 5000,
+                "source": "local_repository",
+            }, indent=2)
+        except Exception as e:
+            return json.dumps({"error": f"Failed to read file '{file_path}': {str(e)}"})
 
-    try:
-        text = target_file.read_text(encoding="utf-8", errors="ignore")
-        lines = text.splitlines()
-        return json.dumps({
-            "file_path": file_path,
-            "lines_count": len(lines),
-            "content": text[:5000],
-            "truncated": len(text) > 5000,
-        }, indent=2)
-    except Exception as e:
-        return json.dumps({"error": f"Failed to read file '{file_path}': {str(e)}"})
+    return json.dumps({
+        "error": f"File '{file_path}' not found in repository '{repo_id}'",
+        "file_path": file_path,
+        "content": "",
+    }, indent=2)
 
 
 async def tool_retrieve_context(
@@ -347,7 +413,7 @@ async def execute_tool_by_name(
             )
         elif tool_name == "get_file_content":
             fpath = tool_args.get("file_path") or tool_args.get("file") or tool_args.get("path") or "README.md"
-            return await tool_get_file_content(repo_id=repo_id, file_path=fpath)
+            return await tool_get_file_content(repo_id=repo_id, file_path=fpath, branch=branch)
         elif tool_name == "get_blast_radius":
             syms = (
                 tool_args.get("changed_symbols")

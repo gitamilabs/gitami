@@ -5,11 +5,13 @@ from src.graph.client import Neo4jClient
 async def get_symbol(client: Neo4jClient, repo_id: str, branch: str, qualified_name: str) -> Optional[Dict[str, Any]]:
     """Fetch a single symbol node by name or qualified_name within repo_id."""
     query = """
-    MATCH (s:Symbol {repo_id: $repo_id, branch: $branch})
-    WHERE s.qualified_name = $qualified_name 
-       OR s.name = $qualified_name 
-       OR toLower(s.name) = toLower($qualified_name)
-       OR toLower(s.qualified_name) CONTAINS toLower($qualified_name)
+    MATCH (s:Symbol)
+    WHERE (s.repo_id = $repo_id OR toLower(s.repo_id) = toLower($repo_id))
+      AND ($branch IS NULL OR $branch = '' OR s.branch = $branch OR s.branch IS NULL)
+      AND (s.qualified_name = $qualified_name 
+           OR s.name = $qualified_name 
+           OR toLower(s.name) = toLower($qualified_name)
+           OR toLower(s.qualified_name) CONTAINS toLower($qualified_name))
     RETURN properties(s) AS symbol
     LIMIT 1
     """
@@ -24,12 +26,15 @@ async def get_dependents(
 ) -> List[Dict[str, Any]]:
     """Traverse the reverse call graph: find all callers depending on callee_name up to max_depth."""
     query = f"""
-    MATCH (callee:Symbol {{repo_id: $repo_id, branch: $branch}})
-    WHERE callee.name = $callee_name 
-       OR callee.qualified_name = $callee_name 
-       OR toLower(callee.name) = toLower($callee_name)
-       OR toLower(callee.qualified_name) CONTAINS toLower($callee_name)
-    MATCH path = (caller:Symbol {{repo_id: $repo_id, branch: $branch}})-[:CALLS*1..{max_depth}]->(callee)
+    MATCH (callee:Symbol)
+    WHERE (callee.repo_id = $repo_id OR toLower(callee.repo_id) = toLower($repo_id))
+      AND ($branch IS NULL OR $branch = '' OR callee.branch = $branch OR callee.branch IS NULL)
+      AND (callee.name = $callee_name 
+           OR callee.qualified_name = $callee_name 
+           OR toLower(callee.name) = toLower($callee_name)
+           OR toLower(callee.qualified_name) CONTAINS toLower($callee_name))
+    MATCH path = (caller:Symbol)-[:CALLS*1..{max_depth}]->(callee)
+    WHERE (caller.repo_id = $repo_id OR toLower(caller.repo_id) = toLower($repo_id))
     RETURN DISTINCT caller.qualified_name AS qualified_name,
                     caller.name AS name,
                     caller.file_path AS file_path,
@@ -46,12 +51,15 @@ async def get_dependencies(
 ) -> List[Dict[str, Any]]:
     """Traverse outgoing call graph: find all functions invoked by caller_qualified_name."""
     query = f"""
-    MATCH (caller:Symbol {{repo_id: $repo_id, branch: $branch}})
-    WHERE caller.qualified_name = $caller_qualified_name 
-       OR caller.name = $caller_qualified_name 
-       OR toLower(caller.name) = toLower($caller_qualified_name)
-       OR toLower(caller.qualified_name) CONTAINS toLower($caller_qualified_name)
-    MATCH path = (caller)-[:CALLS*1..{max_depth}]->(callee:Symbol {{repo_id: $repo_id, branch: $branch}})
+    MATCH (caller:Symbol)
+    WHERE (caller.repo_id = $repo_id OR toLower(caller.repo_id) = toLower($repo_id))
+      AND ($branch IS NULL OR $branch = '' OR caller.branch = $branch OR caller.branch IS NULL)
+      AND (caller.qualified_name = $caller_qualified_name 
+           OR caller.name = $caller_qualified_name 
+           OR toLower(caller.name) = toLower($caller_qualified_name)
+           OR toLower(caller.qualified_name) CONTAINS toLower($caller_qualified_name))
+    MATCH path = (caller)-[:CALLS*1..{max_depth}]->(callee:Symbol)
+    WHERE (callee.repo_id = $repo_id OR toLower(callee.repo_id) = toLower($repo_id))
     RETURN DISTINCT callee.qualified_name AS qualified_name,
                     callee.name AS name,
                     callee.file_path AS file_path,
@@ -67,7 +75,9 @@ async def get_dependencies(
 async def get_all_symbols(client: Neo4jClient, repo_id: str, branch: str) -> List[Dict[str, Any]]:
     """Fetch all symbols belonging to a repo_id and branch."""
     query = """
-    MATCH (s:Symbol {repo_id: $repo_id, branch: $branch})
+    MATCH (s:Symbol)
+    WHERE (s.repo_id = $repo_id OR toLower(s.repo_id) = toLower($repo_id))
+      AND ($branch IS NULL OR $branch = '' OR s.branch = $branch OR s.branch IS NULL)
     RETURN properties(s) AS symbol
     """
     records = await client.execute_query(query, {"repo_id": repo_id, "branch": branch})

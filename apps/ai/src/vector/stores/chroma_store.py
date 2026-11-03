@@ -22,7 +22,14 @@ class ChromaStore:
         self._embedder = embedder
 
         # ── Choose client ─────────────────────────────────────────────────────
-        if settings.chroma_api_key and settings.chroma_tenant and settings.chroma_database:
+        vector_db_mode = getattr(settings, "vector_db", "").lower().strip()
+        is_cloud = (
+            vector_db_mode == "chroma_cloud"
+            and settings.chroma_api_key
+            and settings.chroma_tenant
+            and settings.chroma_database
+        )
+        if is_cloud:
             logger.info("ChromaStore: using CloudClient (tenant=%s)", settings.chroma_tenant)
             self._client = chromadb.CloudClient(
                 tenant=settings.chroma_tenant,
@@ -47,12 +54,11 @@ class ChromaStore:
                 embedding_function=self._embedder,
             )
             # Dimension validation: probe with a tiny dummy doc
-            self._validate_dimension(col)
-            return col
-        except ValueError:
+            return self._validate_dimension(col)
+        except Exception as e:
             # Conflicting embedding function on disk — recreate
             logger.warning(
-                "ChromaStore: collection embedding mismatch detected. Recreating collection."
+                f"ChromaStore: collection error ({e}). Recreating collection."
             )
             return self._recreate_collection()
 
@@ -72,9 +78,10 @@ class ChromaStore:
                     len(stored_embeddings[0]),
                     self._embedder.dimension,
                 )
-                self._collection = self._recreate_collection()
-        except Exception:
-            pass  # Collection may be empty; skip validation
+                return self._recreate_collection()
+        except Exception as e:
+            logger.debug(f"Chroma dimension probe: {e}")
+        return col
 
     def _recreate_collection(self):
         try:
@@ -147,7 +154,7 @@ class ChromaStore:
         try:
             repos = set()
             offset = 0
-            page_size = 500
+            page_size = 200
             max_scan = 10000
 
             while offset < max_scan:

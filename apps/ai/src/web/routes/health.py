@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from src.agents.llm_client import GEMINI_MODELS, GROQ_MODELS
+from src.agents.llm_client import GEMINI_MODELS, GROQ_MODELS, LOCAL_MODELS
 from src.config import settings
 
 router = APIRouter(tags=["health"])
@@ -16,14 +16,36 @@ async def health_check():
 @router.get("/api/config")
 async def get_system_config():
     """Get active system configuration including Vector DB, Embedder, and Model lists."""
+    orch_model = (
+        f"local/{settings.local_orchestrator_model}"
+        if settings.orchestrator_provider == "local"
+        else (GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-3.6-flash")
+    )
+    worker_model = (
+        f"local/{settings.local_worker_model}"
+        if settings.worker_provider == "local"
+        else (GROQ_MODELS[0] if GROQ_MODELS else "openai/gpt-oss-120b")
+    )
+
     return {
         "vector_db": settings.vector_db,
         "embedder": settings.embedder,
         "models": {
             "gemini_models": GEMINI_MODELS,
             "groq_models": GROQ_MODELS,
-            "primary_orchestrator": GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-3.6-flash",
-            "worker_model": GROQ_MODELS[0] if GROQ_MODELS else "openai/gpt-oss-120b",
+            "local_models": LOCAL_MODELS,
+            "primary_orchestrator": orch_model,
+            "worker_model": worker_model,
+            "orchestrator_provider": settings.orchestrator_provider,
+            "worker_provider": settings.worker_provider,
+        },
+        "local_llm": {
+            "url": settings.local_llm_url,
+            "orchestrator_model": settings.local_orchestrator_model,
+            "worker_model": settings.local_worker_model,
+            "orchestrator_provider": settings.orchestrator_provider,
+            "worker_provider": settings.worker_provider,
+            "has_local_llm": bool(settings.local_llm_url),
         },
         "storage": {
             "qdrant_collection": settings.qdrant_collection,
@@ -41,4 +63,5 @@ async def get_system_config():
         "neo4j_database": settings.neo4j_database,
         "has_gemini_api_key": bool(settings.gemini_api_key),
         "has_groq_api_key": bool(settings.groq_api_key),
+        "has_local_llm": bool(settings.local_llm_url),
     }

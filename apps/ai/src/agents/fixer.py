@@ -67,7 +67,33 @@ async def run_autonomous_pr_fixer(
     if existing_file_contents:
         file_contents_map.update(existing_file_contents)
 
-    # Priority 2: Read from local disk if repo_dir exists
+    # Priority 2: Remote fetch from GitHub if repo_id is provided
+    if "/" in repo_id and not repo_id.startswith("local:"):
+        import os
+        import urllib.request
+        from src.config import settings
+
+        token = getattr(settings, "github_token", None) or os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        headers = {"User-Agent": "GitAmi-Agent"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        ref = base_branch or "main"
+        for fp in target_files:
+            if fp not in file_contents_map:
+                clean_fp = fp.strip().lstrip("/").lstrip("\\")
+                for branch_cand in [ref, "main", "master"]:
+                    url = f"https://raw.githubusercontent.com/{repo_id}/{branch_cand}/{clean_fp}"
+                    try:
+                        req = urllib.request.Request(url, headers=headers)
+                        with urllib.request.urlopen(req, timeout=6) as response:
+                            if response.status == 200:
+                                file_contents_map[fp] = response.read().decode("utf-8", errors="ignore")
+                                break
+                    except Exception:
+                        continue
+
+    # Priority 3: Read from local directory if repo_dir exists (local development)
     if repo_dir and repo_dir.exists():
         for fp in target_files:
             if fp not in file_contents_map:
@@ -76,12 +102,12 @@ async def run_autonomous_pr_fixer(
                     try:
                         file_contents_map[fp] = abs_p.read_text(encoding="utf-8", errors="ignore")
                     except Exception as e:
-                        logger.warning(f"Failed to read {abs_p} from disk: {e}")
+                        logger.warning(f"Failed to read {abs_p}: {e}")
 
     # Log any target files that were unavailable
     for fp in target_files:
         if fp not in file_contents_map:
-            logger.info(f"Target file '{fp}' content not provided in request or local disk.")
+            logger.info(f"Target file '{fp}' content not available from request or repository.")
 
     # Build existing files context string
     existing_files_text = ""
@@ -95,7 +121,7 @@ async def run_autonomous_pr_fixer(
     if not existing_files_text:
         return AgentFixResult(
             success=False,
-            plan_rationale="Could not retrieve existing file contents from GitHub or local disk.",
+            plan_rationale="Could not retrieve existing file contents from GitHub or repository.",
             file_fixes=[],
             error="No file content available. Cannot generate surgical patches.",
         )
@@ -160,7 +186,7 @@ REMEMBER: Output the COMPLETE file with ONLY the specific bug-fix lines changed.
 Every other line must be IDENTICAL to the original. Do NOT rewrite, refactor, or simplify the file.
 Wrap your output in <<<FILE: {fp}>>> ... <<<ENDFILE>>> blocks."""
 
-        worker_output = await llm_client.run_worker(worker_prompt, worker_system)
+        worker_output = await llm_client.run_worker(worker_prompt, worker_system, json_mode=False)
 
         # Parse worker output
         file_block_pattern = re.compile(
@@ -175,11 +201,13 @@ Wrap your output in <<<FILE: {fp}>>> ... <<<ENDFILE>>> blocks."""
                 # Validate that the fix didn't drastically change the file
                 original_line_count = len(original_content.strip().split("\n"))
                 fixed_line_count = len(clean_content.strip().split("\n"))
-                diff_ratio = abs(fixed_line_count - original_line_count) / max(original_line_count, 1)
+                diff_delta = abs(fixed_line_count - original_line_count)
+                diff_ratio = diff_delta / max(original_line_count, 1)
 
-                if diff_ratio > 0.4:
+                # Only reject if both relative change exceeds 50% AND absolute change exceeds 10 lines
+                if diff_ratio > 0.5 and diff_delta > 10:
                     # Worker rewrote too much — fall back to original with simple text replacement
-                    print(f"⚠️ Fixer output for {fp} changed {int(diff_ratio*100)}% of lines — applying simple replacement fallback")
+                    print(f"⚠️ Fixer output for {fp} changed {int(diff_ratio*100)}% ({diff_delta} lines) — applying simple replacement fallback")
                     patched = _apply_simple_fix(original_content, file_issues)
                     file_fixes.append(FixFileResult(file_path=fp, content=patched))
                 else:

@@ -631,7 +631,10 @@ export async function fixSelectedPRIssues(prId: string, issueIds: string[]) {
             `🤖 **AI Automated PR Fix**\n\nThis PR was automatically raised by the Sentinel AI Agent to resolve the following selected issues from PR #${pr.prNumber}:\n\n` +
             selectedIssues
               .map((i) => `- **${i.title}** (\`${i.filePath}:${i.line}\`)`)
-              .join("\n"),
+              .join("\n") +
+            (fixResult.plan_rationale
+              ? `\n\n### 📋 Fix Rationale\n${fixResult.plan_rationale}\n`
+              : ""),
         }),
       },
     );

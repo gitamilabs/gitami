@@ -108,8 +108,19 @@ export interface AIServiceConfig {
   models: {
     gemini_models: string[];
     groq_models: string[];
+    local_models?: string[];
     primary_orchestrator: string;
     worker_model: string;
+    orchestrator_provider?: string;
+    worker_provider?: string;
+  };
+  local_llm?: {
+    url?: string;
+    orchestrator_model?: string;
+    worker_model?: string;
+    orchestrator_provider?: string;
+    worker_provider?: string;
+    has_local_llm?: boolean;
   };
   storage: {
     qdrant_collection?: string;

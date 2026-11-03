@@ -55,7 +55,15 @@ async def agent_chat_stream(req: ChatRequest):
         ):
             yield event
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 async def _execute_single_tool(
@@ -198,8 +206,25 @@ async def _execute_single_tool(
             t_title = "Neo4j Repository File Hierarchy"
             raw_str = await tool_get_repo_structure(graph_client, repo_id=req.repo_id, branch=req.branch or "main")
             t_raw = json.loads(raw_str)
-            files_cnt = len(t_raw.get("files", []))
+            files_list = t_raw.get("files", [])
+            files_cnt = len(files_list)
             t_summary = f"Retrieved structure for {files_cnt} indexed files in Neo4j."
+
+            key_files = [
+                f for f in files_list
+                if any(k in f.get("file_path", "").lower() for k in ["readme", "package.json", "app.", "index.", "main."])
+            ]
+            for kf in (key_files[:4] if key_files else files_list[:3]):
+                syms_summary = ", ".join([s.get("name", "") for s in kf.get("symbols", []) if s.get("name")][:5])
+                local_cits_data.append({
+                    "file_path": kf.get("file_path", "repository"),
+                    "symbol": None,
+                    "lines": None,
+                    "snippet": f"Indexed file: {kf.get('file_path')} ({kf.get('language') or 'file'})\nSymbols: {syms_summary or 'None'}",
+                    "source_type": "graph",
+                    "distance": None,
+                    "full_text": f"Indexed file in repository: {kf.get('file_path')} ({kf.get('language') or 'file'})\nSymbols: {syms_summary or 'None'}",
+                })
 
         elif t_name in ("retrieve_context", "get_governed_context", "context_engine"):
             t_title = "Governed Context Engine"

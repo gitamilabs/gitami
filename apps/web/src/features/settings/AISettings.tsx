@@ -87,7 +87,7 @@ export const AISettings: React.FC = () => {
                   <span>Primary LLM Orchestrator</span>
                 </div>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                  Google GenAI
+                  {aiConfig.models.orchestrator_provider === "local" ? "Local LLM" : "Google GenAI"}
                 </span>
               </div>
               <p className="text-base font-mono font-bold text-white truncate">
@@ -96,7 +96,7 @@ export const AISettings: React.FC = () => {
               <div className="text-[11px] text-zinc-400 space-y-1">
                 <p className="text-zinc-500">Candidate Models:</p>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {aiConfig.models.gemini_models.slice(0, 4).map((m) => (
+                  {(aiConfig.models.local_models || aiConfig.models.gemini_models).slice(0, 4).map((m) => (
                     <span key={m} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.04] text-zinc-300 border border-white/[0.06]">
                       {m}
                     </span>
@@ -106,27 +106,59 @@ export const AISettings: React.FC = () => {
             </div>
 
             {/* Worker Node Card */}
-            <div className="p-4 rounded-xl bg-[#0c0d12] border border-white/[0.06] space-y-2 md:col-span-2">
+            <div className="p-4 rounded-xl bg-[#0c0d12] border border-white/[0.06] space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs font-bold text-cyan-400">
                   <Server className="w-4 h-4" />
-                  <span>High-Throughput Sub-task Worker</span>
+                  <span>Sub-task Worker Node</span>
                 </div>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
-                  Fast Inference
+                  {aiConfig.models.worker_provider === "local" ? "Local Worker" : "Groq Fast Inference"}
                 </span>
               </div>
-              <p className="text-base font-mono font-bold text-white">
+              <p className="text-base font-mono font-bold text-white truncate">
                 {aiConfig.models.worker_model}
               </p>
-              <div className="flex flex-wrap gap-1 pt-1">
-                {aiConfig.models.groq_models.map((m) => (
-                  <span key={m} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.04] text-zinc-300 border border-white/[0.06]">
-                    {m}
-                  </span>
-                ))}
+              <div className="text-[11px] text-zinc-400 space-y-1">
+                <p className="text-zinc-500">Candidate Models:</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {(aiConfig.models.local_models || aiConfig.models.groq_models).slice(0, 4).map((m) => (
+                    <span key={m} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.04] text-zinc-300 border border-white/[0.06]">
+                      {m}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
+
+            {/* Local LLM Endpoint Status Card */}
+            {aiConfig.local_llm && (
+              <div className="p-4 rounded-xl bg-[#0c0d12] border border-white/[0.06] space-y-2 md:col-span-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Local LLM Runtime (Ollama / vLLM / LM Studio)</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    OpenAI Compatible
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
+                  <div className="p-2 rounded bg-white/[0.02] border border-white/[0.04]">
+                    <span className="text-zinc-500 block text-[10px]">ENDPOINT</span>
+                    <span className="text-zinc-200 truncate block">{aiConfig.local_llm.url || "http://localhost:11434/v1"}</span>
+                  </div>
+                  <div className="p-2 rounded bg-white/[0.02] border border-white/[0.04]">
+                    <span className="text-zinc-500 block text-[10px]">LOCAL ORCHESTRATOR</span>
+                    <span className="text-zinc-200 truncate block">{aiConfig.local_llm.orchestrator_model || "qwen2.5-coder:7b"}</span>
+                  </div>
+                  <div className="p-2 rounded bg-white/[0.02] border border-white/[0.04]">
+                    <span className="text-zinc-500 block text-[10px]">LOCAL WORKER</span>
+                    <span className="text-zinc-200 truncate block">{aiConfig.local_llm.worker_model || "qwen2.5-coder:7b"}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="p-8 text-center text-xs text-zinc-500 bg-[#0c0d12] rounded-xl border border-white/[0.06]">
