@@ -13,7 +13,7 @@ services:
       - neo4j_logs:/logs
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: gitami-postgres
     ports:
       - "5432:5432"
