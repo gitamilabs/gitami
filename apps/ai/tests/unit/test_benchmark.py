@@ -242,8 +242,7 @@ async def test_kb_context_cleanup():
 async def test_runner_orchestration(tmp_path: Path, monkeypatch):
     from unittest.mock import patch
     from src.benchmark.runner import BenchmarkRunner
-    from src.agents.reviewer import AgentReviewResult
-    from src.analysis.decision import DecisionResult
+    from src.agents.review_agent import ReviewResult, ChecklistItem
 
     # Setup isolated config
     cfg = BenchmarkConfig(
@@ -257,7 +256,7 @@ async def test_runner_orchestration(tmp_path: Path, monkeypatch):
     # Mock Neo4jClient and VectorKBClient so test doesn't require live databases running
     with patch("src.benchmark.runner.Neo4jClient") as mock_neo_cls, \
          patch("src.benchmark.runner.VectorKBClient") as mock_vec_cls, \
-         patch("src.benchmark.runner.run_agentic_pr_review") as mock_review, \
+         patch("src.benchmark.runner.ReviewAgent") as mock_agent_cls, \
          patch("src.benchmark.runner.get_dataset") as mock_get_ds:
 
         mock_neo = MagicMock()
@@ -268,23 +267,32 @@ async def test_runner_orchestration(tmp_path: Path, monkeypatch):
         mock_vec = MagicMock()
         mock_vec_cls.return_value = mock_vec
 
-        # Mock review result
-        mock_review.return_value = AgentReviewResult(
-            decision=DecisionResult(verdict="SUGGEST", risk_score=7.0, summary="High risk"),
-            agent_rationale="Found vulnerability",
-            diff_hunks_count=1,
-            llm_orchestrator_used=True,
-            issues=[
-                {
-                    "title": "SQL Injection vulnerability",
-                    "description": "Unsanitized user input in query",
-                    "category": "security",
-                    "severity": "error",
-                    "file_path": "server/api.py",
-                    "line": 42,
-                }
+        mock_agent = MagicMock()
+        mock_agent.run = AsyncMock(return_value=ReviewResult(
+            repo_id="test_repo",
+            pr_number=1,
+            risk_score=70,
+            verdict="SUGGEST",
+            summary="High risk",
+            checklist=[
+                ChecklistItem(
+                    id="chk-1",
+                    title="SQL Injection vulnerability",
+                    description="Unsanitized user input in query",
+                    category="security",
+                    severity="error",
+                    file_path="server/api.py",
+                    line=42,
+                    suggested_fix="Use parameterized query",
+                )
             ],
-        )
+            blast_radius={"risk_level": "HIGH"},
+            changed_files=["server/api.py"],
+            changed_symbols=[],
+            claude_code_export="",
+            latency_ms=100,
+        ))
+        mock_agent_cls.return_value = mock_agent
 
         # Mock dataset adapter
         mock_ds = MagicMock()

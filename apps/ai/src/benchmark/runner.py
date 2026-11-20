@@ -19,7 +19,7 @@ from src.benchmark.scorer import AggregateScore, BenchmarkScorer, TestCaseScore
 from src.graph.client import Neo4jClient
 from src.vector.client import VectorKBClient
 from src.agents.llm_client import DualLLMClient
-from src.agents.reviewer import run_agentic_pr_review
+from src.agents.review_agent import ReviewAgent
 from src.agents.diff_parser import parse_git_diff, extract_changed_symbols
 
 logger = logging.getLogger(__name__)
@@ -151,21 +151,39 @@ class BenchmarkRunner:
                     hunks = parse_git_diff(case.diff_text)
                     changed_symbols = extract_changed_symbols(hunks, case.diff_text)
 
-                    # Execute Agentic PR Review
-                    review_result = await run_agentic_pr_review(
-                        client=kb_ctx.graph_client,
-                        repo_id=repo_id,
-                        branch=self.config.branch,
-                        changed_symbols=changed_symbols,
-                        raw_diff_text=case.diff_text,
-                        symbols=[],
-                        vector_client=kb_ctx.vector_client,
+                    # Execute Curated ReviewAgent
+                    agent = ReviewAgent(
                         llm_client=llm_client,
+                        graph_client=kb_ctx.graph_client,
+                        vector_client=kb_ctx.vector_client,
+                    )
+                    review_result = await agent.run(
+                        repo_id=repo_id,
+                        pr_number=1,
+                        base_branch="main",
+                        head_branch=self.config.branch,
+                        title=f"Benchmark Case {case.case_id}",
+                        body=getattr(case, "description", "") or "",
+                        diff_text=case.diff_text,
+                        symbols=[],
+                        changed_symbols=changed_symbols,
                     )
 
-                    predicted_issues = review_result.issues
+                    predicted_issues = [
+                        {
+                            "id": item.id,
+                            "title": item.title,
+                            "description": item.description,
+                            "category": item.category,
+                            "severity": item.severity,
+                            "file_path": item.file_path,
+                            "line": item.line,
+                            "suggested_fix": item.suggested_fix,
+                        }
+                        for item in review_result.checklist
+                    ]
                     logger.info(
-                        f"Review complete for '{case.case_id}': verdict={review_result.decision.verdict}, "
+                        f"Review complete for '{case.case_id}': verdict={review_result.verdict}, "
                         f"predicted_issues={len(predicted_issues)}"
                     )
 

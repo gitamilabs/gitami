@@ -88,17 +88,21 @@ async def run_pr_eval_job(
             raw_diff_text = f"Diff between {base_ref} and {head_ref}"
 
         if use_agent:
-            from src.agents.reviewer import run_agentic_pr_review
-            agent_res = await run_agentic_pr_review(
-                client=client,
+            from src.agents.review_agent import ReviewAgent
+            from src.analysis.decision import DecisionResult
+            agent = ReviewAgent(graph_client=client, vector_client=vector_client)
+            agent_res = await agent.run(
                 repo_id=repo_id,
-                branch=branch,
-                changed_symbols=changed_symbols,
-                raw_diff_text=raw_diff_text,
+                pr_number=pr_number,
+                base_branch=base_ref,
+                head_branch=head_ref,
+                title=f"PR #{pr_number}",
+                body="",
+                diff_text=raw_diff_text,
                 symbols=all_symbols,
-                vector_client=vector_client,
+                changed_symbols=changed_symbols,
             )
-            decision = agent_res.decision
+            decision = DecisionResult(verdict=agent_res.verdict, risk_score=agent_res.risk_score, summary=agent_res.summary)
         else:
             # 1. Blast radius calculation
             blast_radius = await compute_blast_radius(

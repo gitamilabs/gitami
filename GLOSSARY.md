@@ -22,6 +22,8 @@ The ubiquitous language of **Gitami**. Use these exact terms when discussing dom
 
 ### Curated Autonomous Agents
 
+The unified, production-grade agent implementations under `src/agents/` that supersede earlier standalone prototypes. Curated agents leverage the `ContextEngine` for governed retrieval, support structured JSON lifecycle handling, and provide deterministic analysis exports.
+
 - **Investigation Agent:** Multi-step hypothesis-testing agent that navigates the Knowledge Base to diagnose incidents and answer codebase architecture queries with confidence scores and reasoning traces.
 - **Issue Agent:** Webhook-triggered triage agent that scores criticality, detects open/closed duplicates, tags domains, and flags suspicious AI-generated code.
 - **Review Agent:** PR evaluation agent that measures risk scores (0–100), detects security anti-patterns, checks convention linting, measures test gaps, and exports actionable checklists for human maintainers or Claude Code.

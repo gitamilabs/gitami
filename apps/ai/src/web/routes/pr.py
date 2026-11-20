@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from src.agents.fixer import run_autonomous_pr_fixer
+from src.agents import CodeAgent, ReviewAgent
 from src.agents.llm_client import DualLLMClient
-from src.agents.reviewer import run_agentic_pr_review
+from src.graph.client import Neo4jClient
+from src.vector.client import VectorKBClient
 from src.web.deps import get_shared_graph_client, get_shared_vector_client
 from src.web.schemas import PRFixRequest, PRReviewRequest
 
@@ -10,12 +11,17 @@ router = APIRouter(tags=["pr"])
 
 
 @router.post("/api/pr/review")
-async def review_pull_request(req: PRReviewRequest):
+async def review_pull_request(
+    req: PRReviewRequest,
+    graph_client: Neo4jClient = Depends(get_shared_graph_client),
+    vector_client: VectorKBClient = Depends(get_shared_vector_client),
+):
     """
-    Execute autonomous agentic PR review:
-    Orchestrator (Gemini) uses Knowledge Base tools + Workers (Groq Llama 3.3 70B) analyze diff hunks.
+    Execute Curated Agent PR review:
+    Evaluates blast radius (Neo4j), AST conventions, security anti-patterns,
+    test coverage gaps, and generates actionable Claude Code checklists.
     """
-    # Guardrail: Skip AI fix branches
+    # Guardrail: Skip AI fix branches to prevent recursive review loops
     if req.head_branch.startswith("ai-fix/") or req.title.lower().startswith("[ai fix]"):
         return {
             "verdict": "ACCEPT",
@@ -26,8 +32,6 @@ async def review_pull_request(req: PRReviewRequest):
             "status": "skipped_ai_fix",
         }
 
-    graph_client = await get_shared_graph_client()
-    vector_client = get_shared_vector_client()
     llm_client = DualLLMClient()
 
     raw_diff = req.diff_text or ""
@@ -40,52 +44,101 @@ async def review_pull_request(req: PRReviewRequest):
             f"/// PR Diff changes in {req.repo_id} for head branch {req.head_branch} ///\n"
         )
 
-    result = await run_agentic_pr_review(
-        client=graph_client,
-        repo_id=req.repo_id,
-        branch=req.head_branch,
-        changed_symbols=[],
-        raw_diff_text=raw_diff,
-        symbols=[],
-        vector_client=vector_client,
+    agent = ReviewAgent(
         llm_client=llm_client,
-        root_directory=req.root_directory,
+        graph_client=graph_client,
+        vector_client=vector_client,
     )
 
+    result = await agent.run(
+        repo_id=req.repo_id,
+        pr_number=req.pr_number,
+        base_branch=req.base_branch,
+        head_branch=req.head_branch,
+        title=req.title,
+        body=req.body or "",
+        diff_text=raw_diff,
+        symbols=[],
+        changed_symbols=[],
+    )
+
+    # Standard backward-compatible issue format for control plane
+    issues = [
+        {
+            "id": item.id,
+            "rule": item.category,
+            "title": item.title,
+            "file": item.file_path,
+            "file_path": item.file_path,
+            "line": item.line,
+            "description": item.description,
+            "suggestion": item.suggested_fix,
+            "suggested_fix": item.suggested_fix,
+            "category": item.category,
+            "severity": item.severity,
+        }
+        for item in result.checklist
+    ]
+
     return {
-        "verdict": result.decision.verdict,
-        "risk_score": result.decision.risk_score,
-        "summary": result.decision.summary,
-        "agent_rationale": result.agent_rationale,
-        "issues": result.issues,
-        "diff_hunks_count": result.diff_hunks_count,
-        "llm_orchestrator_used": result.llm_orchestrator_used,
+        # Control plane backward-compatible contract fields
+        "verdict": result.verdict,
+        "risk_score": result.risk_score,
+        "summary": result.summary,
+        "agent_rationale": f"Analyzed {len(result.changed_files)} files, blast radius risk: {result.blast_radius.get('risk_level', 'LOW')}",
+        "issues": issues,
+        "diff_hunks_count": len(result.changed_files),
+        "llm_orchestrator_used": "Gemini + Curated ReviewAgent",
+        # Enriched analysis fields
+        "checklist": [
+            {
+                "id": item.id,
+                "title": item.title,
+                "description": item.description,
+                "category": item.category,
+                "severity": item.severity,
+                "file_path": item.file_path,
+                "line": item.line,
+                "suggested_fix": item.suggested_fix,
+            }
+            for item in result.checklist
+        ],
+        "blast_radius": result.blast_radius,
+        "changed_files": result.changed_files,
+        "changed_symbols": result.changed_symbols,
+        "claude_code_export": result.claude_code_export,
     }
 
 
 @router.post("/api/pr/fix")
-async def fix_pull_request_issues(req: PRFixRequest):
+async def fix_pull_request_issues(
+    req: PRFixRequest,
+    graph_client: Neo4jClient = Depends(get_shared_graph_client),
+    vector_client: VectorKBClient = Depends(get_shared_vector_client),
+):
     """
-    Autonomous PR Fix Agent (Surgical Patch Mode):
-    Fetches real file content, applies minimal line-level fixes, validates output.
+    Curated Code Agent (Surgical Remediation Mode):
+    Uses two-stage fix planning and line-level patching to produce verified file fixes.
     """
     llm_client = DualLLMClient()
-    fix_res = await run_autonomous_pr_fixer(
-        repo_id=req.repo_id,
-        pr_number=req.pr_number,
-        base_branch=req.base_branch,
-        issues=req.issues,
+
+    agent = CodeAgent(
         llm_client=llm_client,
-        diff_text=req.diff_text,
-        existing_file_contents=req.existing_file_contents,
+        graph_client=graph_client,
+        vector_client=vector_client,
+    )
+
+    fix_res = await agent.generate_file_fixes(
+        repo_id=req.repo_id,
+        issues=req.issues,
+        existing_file_contents=req.existing_file_contents or {},
+        base_branch=req.base_branch,
+        pr_number=req.pr_number,
     )
 
     return {
-        "success": fix_res.success,
-        "plan_rationale": fix_res.plan_rationale,
-        "file_fixes": [
-            {"file_path": f.file_path, "content": f.content}
-            for f in fix_res.file_fixes
-        ],
-        "error": fix_res.error,
+        "success": fix_res["success"],
+        "plan_rationale": fix_res["plan_rationale"],
+        "file_fixes": fix_res["file_fixes"],
+        "error": fix_res["error"],
     }

@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -209,3 +210,126 @@ class CodeAgent(BaseAgent):
             touched_files=plan.files_to_touch,
             latency_ms=elapsed_ms,
         )
+
+    async def generate_file_fixes(
+        self,
+        repo_id: str,
+        issues: List[Dict[str, Any]],
+        existing_file_contents: Dict[str, str],
+        base_branch: str = "main",
+        pr_number: int = 1,
+    ) -> Dict[str, Any]:
+        """
+        Generates surgical line-level file fixes for reported PR issues.
+        Returns a dict matching the control plane contract:
+        {"success": bool, "plan_rationale": str, "file_fixes": [{"file_path": str, "content": str}], "error": Optional[str]}
+        """
+        if not issues:
+            return {
+                "success": False,
+                "plan_rationale": "No issues provided to fix.",
+                "file_fixes": [],
+                "error": "No issues provided",
+            }
+
+        target_files = list({i.get("file_path") for i in issues if i.get("file_path")})
+        issues_summary = "\n".join(
+            f"- [{i.get('category', 'issue')}] {i.get('file_path')}:{i.get('line')}: {i.get('title', '')} - {i.get('description', '')}"
+            for i in issues
+        )
+
+        plan = await self.generate_fix_plan(
+            repo_id=repo_id,
+            issue_title=f"Fix {len(issues)} issue(s) in PR #{pr_number}",
+            issue_description=issues_summary,
+            trigger_source="review",
+            affected_files=target_files,
+            branch=base_branch,
+        )
+
+        from src.prompts import get_prompt
+        worker_system = get_prompt("fixer_worker")
+
+        file_fixes: List[Dict[str, str]] = []
+        file_block_pattern = re.compile(
+            r"<<<FILE:\s*([^\n>]+)>>>\n?(.*?)\n?<<<ENDFILE>>>", re.DOTALL
+        )
+
+        for fp in target_files:
+            original_content = existing_file_contents.get(fp, "")
+            if not original_content:
+                continue
+
+            file_issues = [i for i in issues if i.get("file_path") == fp]
+            if not file_issues:
+                continue
+
+            file_issues_text = "\n".join(
+                f"Fix #{idx}:\n- Line {item.get('line', '?')}: {item.get('title', '')}\n"
+                f"- Problem: {item.get('description', '')}\n- Suggested Fix: {item.get('suggested_fix', 'N/A')}\n"
+                for idx, item in enumerate(file_issues, start=1)
+            )
+
+            worker_prompt = f"""Apply MINIMAL surgical fixes to this file.
+
+<fix_plan>
+{plan.summary}
+{plan.approach}
+</fix_plan>
+
+<specific_fixes_for_this_file>
+{file_issues_text}
+</specific_fixes_for_this_file>
+
+<original_file path="{fp}">
+{original_content}
+</original_file>
+
+REMEMBER: Output the COMPLETE file with ONLY the specific bug-fix lines changed.
+Every other line must be IDENTICAL to the original. Do NOT rewrite, refactor, or simplify the file.
+Wrap your output in <<<FILE: {fp}>>> ... <<<ENDFILE>>> blocks."""
+
+            worker_output = await self.llm_client.run_worker(worker_prompt, worker_system, json_mode=False)
+
+            matches = file_block_pattern.findall(worker_output)
+            clean_fixed_content = None
+            for matched_path, content in matches:
+                c_path = matched_path.strip()
+                c_content = content.strip()
+                if c_path and c_content:
+                    clean_fixed_content = c_content
+                    break
+
+            if clean_fixed_content:
+                file_fixes.append({"file_path": fp, "content": clean_fixed_content})
+            else:
+                patched = _apply_simple_fix(original_content, file_issues)
+                if patched != original_content:
+                    file_fixes.append({"file_path": fp, "content": patched})
+
+        return {
+            "success": len(file_fixes) > 0,
+            "plan_rationale": plan.summary,
+            "file_fixes": file_fixes,
+            "error": None if file_fixes else "No surgical fixes generated",
+        }
+
+
+def _apply_simple_fix(original_content: str, issues: List[Dict[str, Any]]) -> str:
+    """Simple text-replacement fallback when LLM output does not match block format."""
+    content = original_content
+    for issue in issues:
+        suggested_fix = issue.get("suggested_fix", "").strip()
+        if not suggested_fix:
+            continue
+        if "replace" in suggested_fix.lower() and "with" in suggested_fix.lower():
+            try:
+                parts = suggested_fix.split("with", 1)
+                old_str = parts[0].replace("Replace", "").replace("replace", "").strip().strip("`'\"")
+                new_str = parts[1].strip().strip("`'\"")
+                if old_str and old_str in content:
+                    content = content.replace(old_str, new_str, 1)
+            except Exception:
+                pass
+    return content
+
