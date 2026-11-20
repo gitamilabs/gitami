@@ -5,10 +5,15 @@ import {
   githubInstallations,
   connectedRepositories,
   pullRequests,
+  indexJobs,
 } from "../../db/schema";
 import { getUserByGithubId } from "../auth/auth.service";
 import { evaluatePRWithAIService } from "../pr/pr.service";
-import { getIngestedRepoNames, isRepoIngested } from "./github-app.service";
+import {
+  getIngestedRepoNames,
+  isRepoIngested,
+  getInstallationTokenForRepo,
+} from "./github-app.service";
 
 
 export async function verifySignature(
@@ -325,20 +330,51 @@ async function handlePullRequestEvent(
       );
 
     if (isMerged && isRepoIngested(repo.full_name, ingestedNames)) {
-      console.log(`🔄 PR #${pr.number} merged into ${repo.full_name}. Triggering incremental reindexing...`);
-      const aiServiceUrl = process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://localhost:8000";
-      fetch(`${aiServiceUrl}/api/reindex`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          repo_id: repo.full_name,
-          base_commit_sha: baseSha,
-          target_commit_sha: headSha,
+      console.log(`🔄 PR #${pr.number} merged into ${repo.full_name}. Triggering tracked incremental reindexing...`);
+      const parts = repo.full_name.split("/");
+      const owner = parts[0] || "";
+      const repoName = parts[1] || "";
+
+      // Lookup connected repository for projectId and rootDirectory
+      const [connRepo] = await db
+        .select()
+        .from(connectedRepositories)
+        .where(eq(connectedRepositories.fullName, repo.full_name))
+        .limit(1);
+
+      const projectId = connRepo?.projectId || "default";
+      const rootDirectory = connRepo?.rootDirectory || undefined;
+      const accessToken = (owner && repoName ? await getInstallationTokenForRepo(owner, repoName) : undefined) || undefined;
+
+      // Tracked task persistence (type: INCREMENTAL, status: QUEUED)
+      const [jobRecord] = await db
+        .insert(indexJobs)
+        .values({
+          projectId,
+          repositoryId: repo.full_name,
+          type: "INCREMENTAL",
+          baseCommitSha: baseSha,
+          targetCommitSha: headSha,
           branch: pr.base?.ref || "main",
-        }),
-      }).catch((err) => {
-        console.error(`Failed to trigger incremental reindex for ${repo.full_name}:`, err);
-      });
+          status: "QUEUED",
+          stage: "PENDING",
+        })
+        .returning();
+
+      if (jobRecord) {
+        triggerTrackedIncrementalReindex({
+          jobId: jobRecord.id,
+          repoId: repo.full_name,
+          baseSha,
+          headSha,
+          branch: pr.base?.ref || "main",
+          projectId,
+          accessToken,
+          rootDirectory,
+        }).catch((err) => {
+          console.error(`Error in tracked incremental reindex for ${repo.full_name}:`, err);
+        });
+      }
     }
 
     return { handled: true, action: isMerged ? "pr_closed_merged" : "pr_closed" };
@@ -436,5 +472,142 @@ async function handlePullRequestEvent(
   }
 
   return { handled: true, action: `pr_${action}_evaluating` };
+}
+
+export async function triggerTrackedIncrementalReindex(params: {
+  jobId: string;
+  repoId: string;
+  baseSha: string;
+  headSha: string;
+  branch: string;
+  projectId: string;
+  accessToken?: string;
+  rootDirectory?: string;
+}): Promise<void> {
+  const { jobId, repoId, baseSha, headSha, branch, projectId, accessToken, rootDirectory } = params;
+  const aiServiceUrl = process.env.AI_SERVICE_URL || env.AI_SERVICE_URL || "http://localhost:8000";
+
+  await db
+    .update(indexJobs)
+    .set({
+      status: "RUNNING",
+      startedAt: new Date(),
+      stage: "DIFF",
+    })
+    .where(eq(indexJobs.id, jobId));
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000); // 10m timeout
+
+  try {
+    const res = await fetch(`${aiServiceUrl}/api/reindex`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        repo_id: repoId,
+        full_name: repoId,
+        base_commit_sha: baseSha,
+        target_commit_sha: headSha,
+        branch,
+        project_id: projectId,
+        access_token: accessToken,
+        root_directory: rootDirectory,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      const errData = (await res.json().catch(() => ({}))) as any;
+      const errorMsg = errData.detail || errData.error || `AI service returned status ${res.status}`;
+      await db
+        .update(indexJobs)
+        .set({
+          status: "FAILED",
+          error: errorMsg,
+          completedAt: new Date(),
+        })
+        .where(eq(indexJobs.id, jobId));
+      return;
+    }
+
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("ndjson") && res.body) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let lastStatus = "RUNNING";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            if (event.status) {
+              lastStatus = event.status;
+            }
+            if (event.stage) {
+              const isTerminal = event.status === "COMPLETED" || event.status === "FAILED";
+              await db
+                .update(indexJobs)
+                .set({
+                  stage: event.stage,
+                  stats: event.stats || {},
+                  error: event.error || null,
+                  status: event.status || "RUNNING",
+                  completedAt: isTerminal ? new Date() : undefined,
+                })
+                .where(eq(indexJobs.id, jobId));
+            }
+          } catch {
+            // ignore malformed line
+          }
+        }
+      }
+
+      if (lastStatus !== "COMPLETED" && lastStatus !== "FAILED") {
+        console.warn(`Incremental reindex stream ended unexpectedly for job ${jobId}`);
+        await db
+          .update(indexJobs)
+          .set({
+            status: "FAILED",
+            error: "Reindex stream disconnected unexpectedly before completion",
+            completedAt: new Date(),
+          })
+          .where(eq(indexJobs.id, jobId));
+      }
+    } else {
+      await db
+        .update(indexJobs)
+        .set({
+          status: "COMPLETED",
+          stage: "COMPLETED",
+          completedAt: new Date(),
+        })
+        .where(eq(indexJobs.id, jobId));
+    }
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    console.error(`Incremental reindex execution error for job ${jobId}:`, err);
+    const errorMsg =
+      err.name === "AbortError"
+        ? "Incremental reindexing timed out after 10 minutes"
+        : err.message || "Failed to complete incremental reindexing";
+    await db
+      .update(indexJobs)
+      .set({
+        status: "FAILED",
+        error: errorMsg,
+        completedAt: new Date(),
+      })
+      .where(eq(indexJobs.id, jobId));
+  }
 }
 

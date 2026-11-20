@@ -7,7 +7,7 @@ const envSchema = z.object({
     .default("development"),
 
   // Database
-  DB_URL: z.string().min(1, "DB_URL is required"),
+  DB_URL: z.string().default("postgres://postgres:postgres@localhost:5432/gitami"),
 
   // GitHub OAuth App (User Auth)
   GITHUB_CLIENT_ID: z.string().default("mock_client_id"),

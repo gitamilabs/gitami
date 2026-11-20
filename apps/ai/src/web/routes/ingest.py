@@ -220,6 +220,9 @@ async def reindex_repository(req: ReindexRequest):
                             base_commit_sha=req.base_commit_sha,
                             branch=req.branch or "main",
                             project_id=req.project_id or "default",
+                            team_id=req.team_id,
+                            stage_callback=queue_cb,
+                            root_directory=req.root_directory,
                         )
                     else:
                         job, state, report = await indexer.run(
@@ -228,29 +231,46 @@ async def reindex_repository(req: ReindexRequest):
                             target_commit_sha=req.target_commit_sha or "HEAD",
                             branch=req.branch or "main",
                             project_id=req.project_id or "default",
+                            team_id=req.team_id,
                             job_type=IndexJobType.FULL_REINDEX if req.force_full else IndexJobType.INITIAL,
                             stage_callback=queue_cb,
                             root_directory=req.root_directory,
                         )
                 elif target_full_name:
-                    # In-memory remote tarball stream
-                    await queue_cb("SNAPSHOT", "RUNNING", {})
-                    parse_results = stream_and_parse_github_repo(
-                        full_name=target_full_name,
-                        token=req.access_token,
-                        branch=req.branch or "main",
-                        root_directory=req.root_directory,
-                    )
-                    job, state, report = await indexer.run(
-                        repo_id=req.repo_id,
-                        target_commit_sha=req.target_commit_sha or req.branch or "HEAD",
-                        branch=req.branch or "main",
-                        project_id=req.project_id or "default",
-                        job_type=IndexJobType.FULL_REINDEX if req.force_full else IndexJobType.INITIAL,
-                        stage_callback=queue_cb,
-                        parse_results=parse_results,
-                        root_directory=req.root_directory,
-                    )
+                    if not req.force_full and req.base_commit_sha:
+                        # Zero-disk remote incremental indexing
+                        job, state, report = await indexer.run_incremental(
+                            repo_id=req.repo_id,
+                            target_commit_sha=req.target_commit_sha or "HEAD",
+                            base_commit_sha=req.base_commit_sha,
+                            branch=req.branch or "main",
+                            project_id=req.project_id or "default",
+                            team_id=req.team_id,
+                            full_name=target_full_name,
+                            access_token=req.access_token,
+                            stage_callback=queue_cb,
+                            root_directory=req.root_directory,
+                        )
+                    else:
+                        # In-memory remote tarball stream (Full rebuild)
+                        await queue_cb("SNAPSHOT", "RUNNING", {})
+                        parse_results = stream_and_parse_github_repo(
+                            full_name=target_full_name,
+                            token=req.access_token,
+                            branch=req.branch or "main",
+                            root_directory=req.root_directory,
+                        )
+                        job, state, report = await indexer.run(
+                            repo_id=req.repo_id,
+                            target_commit_sha=req.target_commit_sha or req.branch or "HEAD",
+                            branch=req.branch or "main",
+                            project_id=req.project_id or "default",
+                            team_id=req.team_id,
+                            job_type=IndexJobType.FULL_REINDEX if req.force_full else IndexJobType.INITIAL,
+                            stage_callback=queue_cb,
+                            parse_results=parse_results,
+                            root_directory=req.root_directory,
+                        )
                 else:
                     await queue_cb("FAILED", "FAILED", {}, "Must provide either valid 'repo_dir' or 'full_name'")
                     return
@@ -260,19 +280,30 @@ async def reindex_repository(req: ReindexRequest):
                     await queue_cb("FAILED", "FAILED", {}, err_msg)
                 else:
                     final_stats = job.stats.model_dump() if hasattr(job.stats, "model_dump") else {}
-                    await queue_cb("COMPLETED", "COMPLETED", final_stats)
+                    if hasattr(state, "status") and state.status == "DEGRADED_VECTOR":
+                        await queue_cb("DEGRADED_VECTOR", "COMPLETED", final_stats, state.indexing_error)
+                    else:
+                        await queue_cb("COMPLETED", "COMPLETED", final_stats)
             except Exception as e:
                 logger.error(f"Reindexing worker error: {e}", exc_info=True)
                 await queue_cb("FAILED", "FAILED", {}, str(e))
             finally:
                 await queue.put(None)
 
-        asyncio.create_task(worker())
+        worker_task = asyncio.create_task(worker())
 
-        while True:
-            item = await queue.get()
-            if item is None:
-                break
-            yield json.dumps(item) + "\n"
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:
+                    break
+                yield json.dumps(item) + "\n"
+        except (asyncio.CancelledError, GeneratorExit):
+            if not worker_task.done():
+                worker_task.cancel()
+            raise
+        finally:
+            if not worker_task.done():
+                worker_task.cancel()
 
     return StreamingResponse(stream_progress(), media_type="application/x-ndjson")

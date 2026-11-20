@@ -70,16 +70,23 @@ async def upsert_symbols(client: Neo4jClient, repo_id: str, branch: str, symbols
 
 async def upsert_call_edges(client: Neo4jClient, repo_id: str, branch: str, calls: List[CallEdge]) -> int:
     """Create CALLS relationships only between existing Symbol nodes within the same repo_id.
-    Calls to unknown/external symbols are skipped (no orphan stub nodes)."""
+    Callees are scoped strictly to local definitions within the same file or imported module symbols
+    to eliminate false cross-file edges. Calls to unknown/external symbols are skipped (no orphan stub nodes)."""
     if not calls:
         return 0
 
-    # Use MATCH (not MERGE) for callee — only connect to known symbols
+    # Scope callee matching to local definitions or imported symbols
     query = """
     UNWIND $batch AS item
     MATCH (caller:Symbol {repo_id: $repo_id, branch: $branch, qualified_name: item.caller_symbol})
-    MATCH (callee:Symbol {repo_id: $repo_id, branch: $branch})
-    WHERE callee.name = item.callee_name
+    MATCH (callee:Symbol {repo_id: $repo_id, branch: $branch, name: item.callee_name})
+    WHERE callee:Inferred
+       OR callee.file_path = caller.file_path
+       OR EXISTS {
+           MATCH (f:File {repo_id: $repo_id, branch: $branch, file_path: caller.file_path})
+           WHERE (f)-[:IMPORTS]->(callee)
+              OR (f)-[:DEPENDS_ON_FILE]->(:File {repo_id: $repo_id, branch: $branch, file_path: callee.file_path})
+       }
     MERGE (caller)-[r:CALLS]->(callee)
     SET r.file_path = item.file_path, r.line = item.line
     """

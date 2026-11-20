@@ -76,6 +76,7 @@ class ContextRequest:
     include_source: bool = True
     include_github: bool = True
     hops: int = 1
+    repo_status: Optional[str] = None
 
 
 @dataclass

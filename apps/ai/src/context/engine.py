@@ -119,6 +119,7 @@ class ContextEngine:
                     query=request.query,
                     scope=scope,
                     limit=request.max_items,
+                    repo_status=request.repo_status,
                 )
             )
             task_names.append("semantic")

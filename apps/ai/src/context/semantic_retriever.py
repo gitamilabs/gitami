@@ -29,6 +29,7 @@ class SemanticRetriever:
         query: str,
         scope: AuthorizedScope,
         limit: int = 10,
+        repo_status: Optional[str] = None,
     ) -> List[ContextItem]:
         if not scope.allowed_repo_ids:
             return []
@@ -87,7 +88,10 @@ class SemanticRetriever:
                 start_line = meta.get("start_line")
 
                 # Convert distance to normalized similarity (0.0 - 1.0)
-                sim_score = max(0.0, min(1.0, 1.0 - float(dist)))
+                raw_sim = max(0.0, min(1.0, 1.0 - float(dist)))
+                is_degraded = (repo_status == "DEGRADED_VECTOR")
+                sim_score = raw_sim * 0.5 if is_degraded else raw_sim
+                rel_score = round(raw_sim * 0.4 if is_degraded else raw_sim * 0.8, 4)
 
                 source = create_source(
                     kind="semantic",
@@ -101,20 +105,24 @@ class SemanticRetriever:
 
                 title_text = f"Code: {symbol} in {file_path}" if symbol and file_path else f"Snippet: {file_path or doc_id}"
 
+                meta_dict = {
+                    "similarity": sim_score,
+                    "symbol": symbol,
+                    "file_path": file_path,
+                    "distance": dist,
+                }
+                if is_degraded:
+                    meta_dict["degraded_vector"] = True
+
                 items.append(
                     ContextItem(
                         id=f"sem:{doc_id}",
                         type=ContextItemType.SEMANTIC_CODE,
                         title=title_text,
                         content=doc,
-                        relevance_score=round(sim_score * 0.8, 4),
+                        relevance_score=rel_score,
                         source=source,
-                        metadata={
-                            "similarity": sim_score,
-                            "symbol": symbol,
-                            "file_path": file_path,
-                            "distance": dist,
-                        },
+                        metadata=meta_dict,
                     )
                 )
 

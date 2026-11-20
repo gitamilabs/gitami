@@ -27,6 +27,7 @@ class IndexStateStatus(str, Enum):
     READY = "READY"
     STALE = "STALE"
     FAILED = "FAILED"
+    DEGRADED_VECTOR = "DEGRADED_VECTOR"
 
 
 # Valid state transitions for IndexJob
@@ -178,6 +179,8 @@ class RepositoryIndexState(BaseModel):
     parser_version: str = "1.0.0"
     status: IndexStateStatus = IndexStateStatus.INITIALIZING
     generation: int = 1
+    pending_target_sha: Optional[str] = None
+    pending_vector_entries: Optional[List[Dict[str, Any]]] = None
     stats: Dict[str, Any] = Field(default_factory=dict)
     indexing_error: Optional[str] = None
     last_successful_index_at: Optional[datetime] = None
@@ -194,6 +197,8 @@ class RepositoryIndexState(BaseModel):
         now = datetime.now(timezone.utc)
         self.previous_commit_sha = self.indexed_commit_sha
         self.indexed_commit_sha = new_commit_sha
+        self.pending_target_sha = None
+        self.pending_vector_entries = None
         self.generation += 1
         self.schema_version = schema_version
         self.parser_version = parser_version

@@ -750,6 +750,13 @@ class GraphIndexer:
             UNWIND $batch AS item
             MATCH (caller:Symbol {repo_id: item.repo_id, qualified_name: item.caller_symbol})
             MATCH (callee:Symbol {repo_id: item.repo_id, name: item.callee_name})
+            WHERE callee:Inferred
+               OR callee.file_path = caller.file_path
+               OR EXISTS {
+                   MATCH (f:File {repo_id: item.repo_id, file_path: caller.file_path})
+                   WHERE (f)-[:IMPORTS]->(callee)
+                      OR (f)-[:DEPENDS_ON_FILE]->(:File {repo_id: item.repo_id, file_path: callee.file_path})
+               }
             MERGE (caller)-[r:CALLS]->(callee)
             SET r.provenance = CASE WHEN callee:Inferred THEN 'INFERRED' ELSE 'DETERMINISTIC' END,
                 r.confidence = 0.95,
@@ -766,6 +773,10 @@ class GraphIndexer:
             UNWIND $batch AS item
             MATCH (f:File {uid: item.file_uid})
             MATCH (callee:Symbol {repo_id: item.repo_id, name: item.callee_name})
+            WHERE callee:Inferred
+               OR callee.file_path = f.file_path
+               OR (f)-[:IMPORTS]->(callee)
+               OR (f)-[:DEPENDS_ON_FILE]->(:File {repo_id: item.repo_id, file_path: callee.file_path})
             MERGE (f)-[r:CALLS]->(callee)
             SET r.provenance = CASE WHEN callee:Inferred THEN 'INFERRED' ELSE 'DETERMINISTIC' END,
                 r.confidence = 0.95,
@@ -1120,10 +1131,10 @@ class GraphIndexer:
         WITH collect(DISTINCT importer.file_path) +
              collect(DISTINCT importer_f.file_path) +
              collect(DISTINCT dep_f.file_path) +
-             collect(DISTINCT caller_f.file_path) +
-             collect(DISTINCT sub_f.file_path) +
-             collect(DISTINCT impl_f.file_path) +
-             collect(DISTINCT test_f.file_path) AS affected_paths
+             collect(DISTINCT coalesce(caller.file_path, caller_f.file_path)) +
+             collect(DISTINCT coalesce(sub.file_path, sub_f.file_path)) +
+             collect(DISTINCT coalesce(impl.file_path, impl_f.file_path)) +
+             collect(DISTINCT coalesce(t.file_path, test_f.file_path)) AS affected_paths
         UNWIND affected_paths AS p
         WITH DISTINCT p
         WHERE p IS NOT NULL AND NOT p IN $changed_paths

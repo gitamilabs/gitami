@@ -20,6 +20,8 @@ from src.indexer.contracts import (
 )
 from src.indexer.differ import GitDiffer
 from src.indexer.snapshot import RepositorySnapshot
+from src.indexer.remote import GitHubApiDiffer, RemoteGitHubSnapshot
+from src.repo.streamer import stream_and_parse_github_repo
 from src.indexer.discovery import FileDiscovery
 from src.indexer.graph_indexer import GraphIndexer, PARSER_VERSION, SCHEMA_VERSION
 from src.indexer.validator import IndexValidator
@@ -395,23 +397,39 @@ class RepositoryIndexer:
 
     async def run_incremental(
         self,
-        repo_dir: str | Path,
-        repo_id: str,
+        repo_dir: Optional[str | Path] = None,
+        repo_id: str = "default",
         target_commit_sha: str = "HEAD",
         base_commit_sha: Optional[str] = None,
         branch: str = "main",
         project_id: str = "default",
+        team_id: Optional[str] = None,
         current_state: Optional[RepositoryIndexState] = None,
         validate_only: bool = False,
+        full_name: Optional[str] = None,
+        access_token: Optional[str] = None,
+        stage_callback: Optional[Any] = None,
+        root_directory: Optional[str] = None,
     ) -> Tuple[IndexJob, RepositoryIndexState, ValidationReport]:
         """
         Execute incremental repository indexing between base commit and target commit.
+        Supports both on-disk local clones and zero-disk remote GitHub repositories.
         Falls back safely to full rebuild when safety criteria are not satisfied.
         """
         async with _get_repo_lock(repo_id, branch):
             start_time = time.time()
             fatal_errors: List[str] = []
             warnings: List[str] = []
+
+            async def emit_stage(stage_name: str, status_name: str = "RUNNING", stage_stats: Optional[Dict[str, Any]] = None, stage_error: Optional[str] = None):
+                if stage_callback:
+                    try:
+                        s_data = stage_stats if stage_stats is not None else (stats.model_dump() if 'stats' in locals() else {})
+                        res = stage_callback(stage_name, status_name, s_data, stage_error)
+                        if asyncio.iscoroutine(res):
+                            await res
+                    except Exception as cb_err:
+                        logger.debug(f"Stage callback error: {cb_err}")
 
             owns_graph_client = False
             if self.graph_client is None and not validate_only:
@@ -422,15 +440,60 @@ class RepositoryIndexer:
                 except Exception as e:
                     logger.warning(f"Could not connect to Neo4j, running in offline/dry mode: {e}")
 
+            async def fallback_to_full(reason: str):
+                logger.warning(f"{reason} Falling back to full rebuild.")
+                if owns_graph_client and self.graph_client:
+                    try:
+                        await self.graph_client.close()
+                        self.graph_client = None
+                    except Exception:
+                        pass
+                if full_name:
+                    parse_res = stream_and_parse_github_repo(
+                        full_name=full_name,
+                        token=access_token,
+                        branch=branch,
+                        root_directory=root_directory,
+                    )
+                    return await self._run(
+                        repo_id=repo_id,
+                        target_commit_sha=resolved_target_sha,
+                        branch=branch,
+                        project_id=project_id,
+                        team_id=team_id,
+                        job_type=IndexJobType.FULL_REINDEX,
+                        validate_only=validate_only,
+                        stage_callback=stage_callback,
+                        parse_results=parse_res,
+                        root_directory=root_directory,
+                    )
+                else:
+                    return await self._run(
+                        repo_dir=repo_dir,
+                        repo_id=repo_id,
+                        target_commit_sha=resolved_target_sha,
+                        branch=branch,
+                        project_id=project_id,
+                        team_id=team_id,
+                        job_type=IndexJobType.FULL_REINDEX,
+                        validate_only=validate_only,
+                        stage_callback=stage_callback,
+                        root_directory=root_directory,
+                    )
+
             # ── 1. Resolve target commit SHA ─────────────────────────────────────
             try:
-                with RepositorySnapshot(repo_dir, target_commit_sha) as snapshot:
-                    resolved_target_sha = snapshot.resolved_commit_sha
+                if full_name:
+                    resolved_target_sha = target_commit_sha
+                else:
+                    with RepositorySnapshot(repo_dir, target_commit_sha) as snapshot:
+                        resolved_target_sha = snapshot.resolved_commit_sha
             except Exception as snap_err:
                 fatal_msg = f"Failed to resolve target commit '{target_commit_sha}': {snap_err}"
                 logger.error(fatal_msg)
                 job = IndexJob(
                     project_id=project_id,
+                    team_id=team_id,
                     repository_id=repo_id,
                     type=IndexJobType.INCREMENTAL,
                     target_commit_sha=target_commit_sha,
@@ -473,161 +536,90 @@ class RepositoryIndexer:
                         resolved_base_sha = db_state["latest_commit_sha"]
 
             if not resolved_base_sha:
-                logger.info("No base commit available for incremental index. Falling back to full rebuild.")
-                if owns_graph_client and self.graph_client:
-                    try:
-                        await self.graph_client.close()
-                        self.graph_client = None
-                    except Exception:
-                        pass
-                return await self._run(
-                    repo_dir=repo_dir,
-                    repo_id=repo_id,
-                    target_commit_sha=resolved_target_sha,
-                    branch=branch,
-                    project_id=project_id,
-                    job_type=IndexJobType.FULL_REINDEX,
-                    validate_only=validate_only,
-                )
+                return await fallback_to_full("No base commit available for incremental index.")
 
             # ── 3. Validate previous state invariants ────────────────────────────
             if current_state:
                 if current_state.status != IndexStateStatus.READY:
-                    logger.warning(
-                        f"Previous index state is '{current_state.status}'. Falling back to full rebuild."
-                    )
-                    if owns_graph_client and self.graph_client:
-                        try:
-                            await self.graph_client.close()
-                            self.graph_client = None
-                        except Exception:
-                            pass
-                    return await self._run(
-                        repo_dir=repo_dir,
-                        repo_id=repo_id,
-                        target_commit_sha=resolved_target_sha,
-                        branch=branch,
-                        project_id=project_id,
-                        job_type=IndexJobType.FULL_REINDEX,
-                        validate_only=validate_only,
-                    )
+                    return await fallback_to_full(f"Previous index state is '{current_state.status}'.")
                 if (
                     current_state.schema_version != SCHEMA_VERSION
                     or current_state.parser_version != PARSER_VERSION
                 ):
-                    logger.warning(
-                        "Schema or parser version incompatibility detected. Falling back to full rebuild."
-                    )
-                    if owns_graph_client and self.graph_client:
-                        try:
-                            await self.graph_client.close()
-                            self.graph_client = None
-                        except Exception:
-                            pass
-                    return await self._run(
-                        repo_dir=repo_dir,
-                        repo_id=repo_id,
-                        target_commit_sha=resolved_target_sha,
-                        branch=branch,
-                        project_id=project_id,
-                        job_type=IndexJobType.FULL_REINDEX,
-                        validate_only=validate_only,
-                    )
+                    return await fallback_to_full("Schema or parser version incompatibility detected.")
 
             # ── 4. Git diff calculation & ancestry validation ────────────────────
-            diff_res = self.differ.compute_diff(repo_dir, resolved_base_sha, resolved_target_sha)
+            if full_name:
+                remote_differ = GitHubApiDiffer(discovery=self.discovery)
+                diff_res = remote_differ.compute_diff(
+                    full_name=full_name,
+                    base_commit_sha=resolved_base_sha,
+                    target_commit_sha=resolved_target_sha,
+                    access_token=access_token,
+                )
+            else:
+                diff_res = self.differ.compute_diff(repo_dir, resolved_base_sha, resolved_target_sha)
 
             # Check ancestry and out-of-order execution
             if not diff_res.is_ancestor:
-                # Check if target is actually an ancestor of base (out-of-order backwards roll)
-                try:
-                    repo = Repo(repo_dir, search_parent_directories=True)
+                if repo_dir:
                     try:
-                        c_target = repo.commit(resolved_target_sha)
-                        c_base = repo.commit(resolved_base_sha)
-                        if repo.is_ancestor(c_target, c_base):
-                            err_msg = (
-                                f"Out-of-order protection: target commit '{resolved_target_sha}' is older than "
-                                f"currently indexed commit '{resolved_base_sha}'."
-                            )
-                            logger.error(err_msg)
-                            job = IndexJob(
-                                project_id=project_id,
-                                repository_id=repo_id,
-                                type=IndexJobType.INCREMENTAL,
-                                base_commit_sha=resolved_base_sha,
-                                target_commit_sha=resolved_target_sha,
-                                branch=branch,
-                            )
-                            job.transition_to(IndexJobStatus.FAILED, stage="ANCESTRY_VALIDATION", error=err_msg)
-                            st = current_state or RepositoryIndexState(
-                                repository_id=repo_id,
-                                branch=branch,
-                                indexed_commit_sha=resolved_base_sha,
-                                status=IndexStateStatus.READY,
-                            )
-                            st.indexing_error = err_msg
-                            rep = ValidationReport(
-                                is_valid=False,
-                                repository_exists=True,
-                                commit_exists=True,
-                                files_discovered=0,
-                                files_parsed=0,
-                                entities_created=0,
-                                relationships_created=0,
-                                fatal_errors=[err_msg],
-                            )
-                            if owns_graph_client and self.graph_client:
-                                try:
-                                    await self.graph_client.close()
-                                except Exception:
-                                    pass
-                            return job, st, rep
-                    finally:
-                        repo.close()
-                except Exception as anc_err:
-                    logger.warning(f"Notice checking ancestor relationship: {anc_err}")
+                        repo = Repo(repo_dir, search_parent_directories=True)
+                        try:
+                            c_target = repo.commit(resolved_target_sha)
+                            c_base = repo.commit(resolved_base_sha)
+                            if repo.is_ancestor(c_target, c_base):
+                                err_msg = (
+                                    f"Out-of-order protection: target commit '{resolved_target_sha}' is older than "
+                                    f"currently indexed commit '{resolved_base_sha}'."
+                                )
+                                logger.error(err_msg)
+                                job = IndexJob(
+                                    project_id=project_id,
+                                    team_id=team_id,
+                                    repository_id=repo_id,
+                                    type=IndexJobType.INCREMENTAL,
+                                    base_commit_sha=resolved_base_sha,
+                                    target_commit_sha=resolved_target_sha,
+                                    branch=branch,
+                                )
+                                job.transition_to(IndexJobStatus.FAILED, stage="ANCESTRY_VALIDATION", error=err_msg)
+                                st = current_state or RepositoryIndexState(
+                                    repository_id=repo_id,
+                                    branch=branch,
+                                    indexed_commit_sha=resolved_base_sha,
+                                    status=IndexStateStatus.READY,
+                                )
+                                st.indexing_error = err_msg
+                                rep = ValidationReport(
+                                    is_valid=False,
+                                    repository_exists=True,
+                                    commit_exists=True,
+                                    files_discovered=0,
+                                    files_parsed=0,
+                                    entities_created=0,
+                                    relationships_created=0,
+                                    fatal_errors=[err_msg],
+                                )
+                                if owns_graph_client and self.graph_client:
+                                    try:
+                                        await self.graph_client.close()
+                                    except Exception:
+                                        pass
+                                return job, st, rep
+                        finally:
+                            repo.close()
+                    except Exception as anc_err:
+                        logger.warning(f"Notice checking ancestor relationship: {anc_err}")
 
-                # Base not ancestor of target and not newer -> branch diverged or rebased.
-                logger.warning(
-                    f"Base commit '{resolved_base_sha}' is not an ancestor of '{resolved_target_sha}'. "
-                    "Falling back to full rebuild."
-                )
-                if owns_graph_client and self.graph_client:
-                    try:
-                        await self.graph_client.close()
-                        self.graph_client = None
-                    except Exception:
-                        pass
-                return await self._run(
-                    repo_dir=repo_dir,
-                    repo_id=repo_id,
-                    target_commit_sha=resolved_target_sha,
-                    branch=branch,
-                    project_id=project_id,
-                    job_type=IndexJobType.FULL_REINDEX,
-                    validate_only=validate_only,
+                return await fallback_to_full(
+                    f"Base commit '{resolved_base_sha}' is not an ancestor of '{resolved_target_sha}'."
                 )
 
             # Safety threshold check
             if not diff_res.is_safe_incremental:
-                logger.info(
-                    f"Incremental indexing unsafe ({diff_res.fallback_reason}). Falling back to full rebuild."
-                )
-                if owns_graph_client and self.graph_client:
-                    try:
-                        await self.graph_client.close()
-                        self.graph_client = None
-                    except Exception:
-                        pass
-                return await self._run(
-                    repo_dir=repo_dir,
-                    repo_id=repo_id,
-                    target_commit_sha=resolved_target_sha,
-                    branch=branch,
-                    project_id=project_id,
-                    job_type=IndexJobType.FULL_REINDEX,
-                    validate_only=validate_only,
+                return await fallback_to_full(
+                    f"Incremental indexing unsafe ({diff_res.fallback_reason})."
                 )
 
             # Trivial idempotency check (same commit)
@@ -635,6 +627,7 @@ class RepositoryIndexer:
                 logger.info(f"Target commit {resolved_target_sha} == base commit {resolved_base_sha}. Idempotent no-op.")
                 job = IndexJob(
                     project_id=project_id,
+                    team_id=team_id,
                     repository_id=repo_id,
                     type=IndexJobType.INCREMENTAL,
                     base_commit_sha=resolved_base_sha,
@@ -669,6 +662,7 @@ class RepositoryIndexer:
             # ── 5. Incremental Pipeline Execution ────────────────────────────────
             job = IndexJob(
                 project_id=project_id,
+                team_id=team_id,
                 repository_id=repo_id,
                 type=IndexJobType.INCREMENTAL,
                 base_commit_sha=resolved_base_sha,
@@ -676,6 +670,7 @@ class RepositoryIndexer:
                 branch=branch,
             )
             job.transition_to(IndexJobStatus.RUNNING, stage="AFFECTED_DISCOVERY")
+            await emit_stage("AFFECTED_DISCOVERY")
 
             stats = IncrementalIndexingStats(
                 base_commit_sha=resolved_base_sha,
@@ -688,7 +683,16 @@ class RepositoryIndexer:
             )
 
             try:
-                with RepositorySnapshot(repo_dir, resolved_target_sha) as snapshot:
+                if full_name:
+                    snapshot_ctx = RemoteGitHubSnapshot(
+                        full_name=full_name,
+                        commit_sha=resolved_target_sha,
+                        access_token=access_token,
+                    )
+                else:
+                    snapshot_ctx = RepositorySnapshot(repo_dir, resolved_target_sha)
+
+                with snapshot_ctx as snapshot:
                     all_directly_changed = set(f.path for f in diff_res.changed_files)
                     for rf in diff_res.renamed:
                         if rf.old_path:
@@ -712,6 +716,7 @@ class RepositoryIndexer:
                         # Process deletions (deleted files + old paths of renamed files)
                         job.stage = "DELETIONS"
                         job.progress = 20
+                        await emit_stage("DELETIONS")
                         for df in diff_res.deleted:
                             await graph_indexer.delete_file_and_symbols(repo_id, df.path)
                         for rf in diff_res.renamed:
@@ -721,6 +726,7 @@ class RepositoryIndexer:
                     # Parse directly changed files from target snapshot
                     job.stage = "AST_ANALYSIS"
                     job.progress = 40
+                    await emit_stage("AST_ANALYSIS")
                     added_prs: List[ParseResult] = []
                     modified_prs: List[ParseResult] = []
 
@@ -844,6 +850,8 @@ class RepositoryIndexer:
                         )
 
                     # ── Incremental Vector Sync ─────────────────────────────────
+                    vector_sync_failed = False
+                    pending_vector_batch = None
                     if self.vector_client and not validate_only:
                         try:
                             # 1. Purge vector entries for deleted files and renamed old paths
@@ -905,6 +913,7 @@ class RepositoryIndexer:
                                     "code_body": sym.code_body,
                                     "commit_hash": resolved_target_sha,
                                 })
+                            pending_vector_batch = inc_vector_entries
                             if inc_vector_entries:
                                 self.vector_client.add_code_entries_batch(inc_vector_entries)
 
@@ -916,6 +925,7 @@ class RepositoryIndexer:
                                 new_commit_hash=resolved_target_sha,
                             )
                         except Exception as vec_err:
+                            vector_sync_failed = True
                             warnings.append(f"Incremental vector sync warning (non-fatal): {vec_err}")
 
             except Exception as e:
@@ -938,29 +948,45 @@ class RepositoryIndexer:
             # ── 7. State Transition ──────────────────────────────────────────────
             current_gen = current_state.generation if current_state else 1
             if report.is_valid:
-                job.transition_to(IndexJobStatus.COMPLETED, stage="COMPLETED")
-                if current_state:
-                    current_state.advance_to(
-                        new_commit_sha=resolved_target_sha,
-                        stats=stats.model_dump(),
-                        schema_version=SCHEMA_VERSION,
-                        parser_version=PARSER_VERSION,
-                    )
-                    state = current_state
-                else:
-                    state = RepositoryIndexState(
+                if vector_sync_failed:
+                    # Self-healing dual store contract:
+                    # Graph writes succeeded, but vector store failed (e.g. 429 quota exhaustion).
+                    # Preserve graph state, transition status to DEGRADED_VECTOR, and queue pending retry.
+                    job.transition_to(IndexJobStatus.COMPLETED, stage="DEGRADED_VECTOR")
+                    state = current_state or RepositoryIndexState(
                         repository_id=repo_id,
                         branch=branch,
-                        indexed_commit_sha=resolved_target_sha,
-                        previous_commit_sha=resolved_base_sha,
-                        index_version="v1",
-                        schema_version=SCHEMA_VERSION,
-                        parser_version=PARSER_VERSION,
-                        status=IndexStateStatus.READY,
-                        generation=current_gen + 1,
-                        last_successful_index_at=datetime.now(timezone.utc),
-                        stats=stats.model_dump(),
+                        indexed_commit_sha=resolved_base_sha,
+                        status=IndexStateStatus.DEGRADED_VECTOR,
                     )
+                    state.status = IndexStateStatus.DEGRADED_VECTOR
+                    state.pending_target_sha = resolved_target_sha
+                    state.pending_vector_entries = pending_vector_batch
+                    state.indexing_error = "Vector store embedding failed. Code graph synchronized in DEGRADED_VECTOR state."
+                else:
+                    job.transition_to(IndexJobStatus.COMPLETED, stage="COMPLETED")
+                    if current_state:
+                        current_state.advance_to(
+                            new_commit_sha=resolved_target_sha,
+                            stats=stats.model_dump(),
+                            schema_version=SCHEMA_VERSION,
+                            parser_version=PARSER_VERSION,
+                        )
+                        state = current_state
+                    else:
+                        state = RepositoryIndexState(
+                            repository_id=repo_id,
+                            branch=branch,
+                            indexed_commit_sha=resolved_target_sha,
+                            previous_commit_sha=resolved_base_sha,
+                            index_version="v1",
+                            schema_version=SCHEMA_VERSION,
+                            parser_version=PARSER_VERSION,
+                            status=IndexStateStatus.READY,
+                            generation=current_gen + 1,
+                            last_successful_index_at=datetime.now(timezone.utc),
+                            stats=stats.model_dump(),
+                        )
             else:
                 err_summary = "; ".join(report.fatal_errors) or "Validation failed"
                 job.transition_to(IndexJobStatus.FAILED, stage="FAILED", error=err_summary)
@@ -990,4 +1016,56 @@ class RepositoryIndexer:
                     pass
 
             return job, state, report
+
+    async def retry_pending_vectors(
+        self,
+        repo_id: str,
+        branch: str = "main",
+        current_state: Optional[RepositoryIndexState] = None,
+        pending_entries: Optional[List[Dict[str, Any]]] = None,
+        target_commit_sha: Optional[str] = None,
+    ) -> RepositoryIndexState:
+        """
+        Asynchronously replay pending or rate-limited vector embeddings without re-parsing ASTs.
+        Once the vector store write succeeds, rolls the index state forward to READY.
+        """
+        if not self.vector_client:
+            raise RuntimeError("No vector_client configured for vector retry")
+
+        entries = pending_entries
+        if entries is None and current_state:
+            entries = current_state.pending_vector_entries
+
+        target_sha = target_commit_sha
+        if target_sha is None and current_state:
+            target_sha = current_state.pending_target_sha or current_state.indexed_commit_sha
+
+        if entries:
+            self.vector_client.add_code_entries_batch(entries)
+
+        base_sha = current_state.indexed_commit_sha if current_state else "base"
+        if target_sha:
+            self.vector_client.roll_forward_commit(
+                repo=repo_id,
+                branch=branch,
+                old_commit_hash=base_sha,
+                new_commit_hash=target_sha,
+            )
+
+        if current_state:
+            if target_sha and target_sha != current_state.indexed_commit_sha:
+                current_state.advance_to(target_sha)
+            else:
+                current_state.status = IndexStateStatus.READY
+                current_state.pending_target_sha = None
+                current_state.pending_vector_entries = None
+                current_state.indexing_error = None
+            return current_state
+
+        return RepositoryIndexState(
+            repository_id=repo_id,
+            branch=branch,
+            indexed_commit_sha=target_sha or "HEAD",
+            status=IndexStateStatus.READY,
+        )
 
