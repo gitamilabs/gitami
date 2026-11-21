@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from src.agents.llm_client import GEMINI_MODELS, GROQ_MODELS, LOCAL_MODELS
+from src.agents.llm_client import DualLLMClient, GEMINI_MODELS, GROQ_MODELS, LOCAL_MODELS
 from src.config import settings
 
 router = APIRouter(tags=["health"])
@@ -19,12 +19,12 @@ async def get_system_config():
     orch_model = (
         f"local/{settings.local_orchestrator_model}"
         if settings.orchestrator_provider == "local"
-        else (GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-3.6-flash")
+        else DualLLMClient.get_default_model("gemini")
     )
     worker_model = (
         f"local/{settings.local_worker_model}"
         if settings.worker_provider == "local"
-        else (GROQ_MODELS[0] if GROQ_MODELS else "openai/gpt-oss-120b")
+        else DualLLMClient.get_default_model("groq")
     )
 
     return {

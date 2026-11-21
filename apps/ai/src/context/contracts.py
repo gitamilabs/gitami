@@ -34,6 +34,12 @@ class ContextSource:
     pr_number: Optional[int] = None
     confidence: float = 1.0
 
+    @property
+    def line_range(self) -> Optional[str]:
+        if self.start_line and self.end_line:
+            return f"{self.start_line}-{self.end_line}"
+        return None
+
 
 @dataclass
 class ContextItem:
@@ -45,6 +51,22 @@ class ContextItem:
     relevance_score: float = 0.0
     source: ContextSource = field(default_factory=lambda: ContextSource(kind="unknown", repository_id=""))
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def file_path(self) -> Optional[str]:
+        return self.source.file_path or self.metadata.get("file_path")
+
+    @property
+    def symbol(self) -> Optional[str]:
+        return self.metadata.get("symbol") or self.metadata.get("name") or self.source.entity_uid
+
+    @property
+    def score(self) -> float:
+        return self.relevance_score
+
+    @property
+    def line_range(self) -> Optional[str]:
+        return self.source.line_range or self.metadata.get("line_range")
 
 
 @dataclass

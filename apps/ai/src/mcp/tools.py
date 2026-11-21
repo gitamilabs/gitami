@@ -240,15 +240,14 @@ async def tool_hybrid_search(
 ) -> str:
     """Perform hybrid search combining vector semantic search and graph structural search via ContextEngine."""
     from dataclasses import asdict
-    from src.context import ContextEngine, ContextRequest, ContextAuthorizer, StaticAuthResolver
+    from src.context import ContextRequest, get_governed_engine
 
     effective_project = project_id or repo_id
-    resolver = StaticAuthResolver({effective_project: {repo_id: None}})
-    authorizer = ContextAuthorizer(resolver=resolver, graph_client=graph_client)
-    engine = ContextEngine(
+    engine = get_governed_engine(
+        repo_id,
         graph_client=graph_client,
         vector_client=vector_client,
-        authorizer=authorizer,
+        project_id=effective_project,
     )
     req = ContextRequest(
         project_id=effective_project,
@@ -376,13 +375,13 @@ async def tool_retrieve_context(
 ) -> str:
     """Retrieve governed multi-provider context (graph, vector, source, PRs) via ContextEngine."""
     from dataclasses import asdict
-    from src.context import ContextEngine, ContextRequest, ContextAuthorizer, StaticAuthResolver
+    from src.context import ContextRequest, get_governed_engine
     effective_project = project_id or repo_id
-    resolver = StaticAuthResolver({effective_project: {repo_id: None}})
-    engine = ContextEngine(
+    engine = get_governed_engine(
+        repo_id,
         graph_client=graph_client,
         vector_client=vector_client,
-        authorizer=ContextAuthorizer(resolver=resolver, graph_client=graph_client),
+        project_id=effective_project,
     )
     req = ContextRequest(
         project_id=effective_project,

@@ -252,3 +252,26 @@ class ContextEngine:
             include_github=False,
         )
         return await self.retrieve(req)
+
+
+def get_governed_engine(
+    repo_id: str,
+    graph_client: Optional[Neo4jClient] = None,
+    vector_client: Optional[VectorKBClient] = None,
+    project_id: Optional[str] = None,
+    default_repo_root: Optional[str | Path] = None,
+) -> ContextEngine:
+    """
+    Canonical factory constructing an authorized ContextEngine for a repository.
+    Applies StaticAuthResolver scoping access to repo_id under the specified project_id.
+    """
+    effective_project = project_id or repo_id
+    resolver = StaticAuthResolver({effective_project: {repo_id: None}})
+    authorizer = ContextAuthorizer(resolver=resolver, graph_client=graph_client)
+    return ContextEngine(
+        graph_client=graph_client,
+        vector_client=vector_client,
+        authorizer=authorizer,
+        default_repo_root=default_repo_root,
+    )
+

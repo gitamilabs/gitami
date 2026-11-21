@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from src.agents.llm_client import DualLLMClient
-from src.context import ContextAuthorizer, ContextEngine, ContextRequest, StaticAuthResolver
+from src.context import ContextEngine, ContextRequest, get_governed_engine
 from src.graph.client import Neo4jClient
 from src.vector.client import VectorKBClient
 
@@ -67,13 +67,7 @@ class BaseAgent:
 
     def get_context_engine(self, repo_id: str) -> ContextEngine:
         """Constructs an authorized ContextEngine instance for the target repository."""
-        resolver = StaticAuthResolver({repo_id: {repo_id: None}})
-        authorizer = ContextAuthorizer(resolver=resolver, graph_client=self.graph_client)
-        return ContextEngine(
-            graph_client=self.graph_client,
-            vector_client=self.vector_client,
-            authorizer=authorizer,
-        )
+        return get_governed_engine(repo_id, self.graph_client, self.vector_client)
 
     async def fetch_governed_context(
         self,

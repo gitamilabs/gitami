@@ -40,10 +40,11 @@ from src.context.graph_retriever import GraphRetriever
 from src.context.semantic_retriever import SemanticRetriever
 from src.context.source_retriever import SourceRetriever
 from src.context.github_retriever import GitHubRetriever
-from src.context.engine import ContextEngine
+from src.context.engine import ContextEngine, get_governed_engine
 
 __all__ = [
     "ContextEngine",
+    "get_governed_engine",
     "ContextItemType",
     "ContextSource",
     "ContextItem",

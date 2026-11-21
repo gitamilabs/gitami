@@ -68,13 +68,8 @@ class AutonomousAgentLoop:
         # Pre-fetch high-confidence governed context via ContextEngine
         initial_context_str = ""
         try:
-            from src.context import ContextEngine, ContextRequest, ContextAuthorizer, StaticAuthResolver
-            resolver = StaticAuthResolver({repo_id: {repo_id: None}})
-            engine = ContextEngine(
-                graph_client=graph_client,
-                vector_client=vector_client,
-                authorizer=ContextAuthorizer(resolver=resolver, graph_client=graph_client),
-            )
+            from src.context import ContextRequest, get_governed_engine
+            engine = get_governed_engine(repo_id, graph_client, vector_client)
             ctx_res = await engine.retrieve(ContextRequest(
                 project_id=repo_id,
                 query=user_query,

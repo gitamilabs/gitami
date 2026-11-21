@@ -10,9 +10,6 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 GEMINI_MODELS = [
-    "gemini-3.5-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.8-flash",
     "gemini-2.5-flash",
     "gemini-2.0-flash",
     "gemini-1.5-flash",
@@ -20,10 +17,8 @@ GEMINI_MODELS = [
 ]
 
 GROQ_MODELS = [
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "qwen/qwen3.6-27b",
-    "qwen/qwen3.8-27b",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
 ]
 
 LOCAL_MODELS = [
@@ -47,6 +42,13 @@ class DualLLMClient:
     Hybrid LLM Client supporting Cloud (Google Gemini, Groq) and Local LLMs (Ollama, vLLM, LM Studio).
     Configurable for both Orchestration and Worker node roles with automatic fallback.
     """
+
+    @classmethod
+    def get_default_model(cls, provider: str = "gemini") -> str:
+        """Returns the primary production model identifier for a given provider."""
+        if provider.lower() == "groq":
+            return GROQ_MODELS[0] if GROQ_MODELS else "llama-3.3-70b-versatile"
+        return GEMINI_MODELS[0] if GEMINI_MODELS else "gemini-2.5-flash"
 
     def __init__(
         self,
@@ -137,8 +139,8 @@ class DualLLMClient:
     def _get_groq_client(self):
         if not self._groq_client and self.has_groq:
             try:
-                from groq import Groq
-                self._groq_client = Groq(api_key=self.groq_key)
+                from groq import AsyncGroq
+                self._groq_client = AsyncGroq(api_key=self.groq_key)
             except Exception as e:
                 logger.error(f"Failed to instantiate Groq Client: {e}")
         return self._groq_client
@@ -254,7 +256,7 @@ class DualLLMClient:
                 }
                 if config:
                     kwargs["config"] = config
-                res = client.models.generate_content(**kwargs)
+                res = await client.aio.models.generate_content(**kwargs)
                 if res and res.text:
                     return res.text
             except Exception as e:
@@ -287,7 +289,7 @@ class DualLLMClient:
                 if json_mode:
                     kwargs["response_format"] = {"type": "json_object"}
 
-                completion = client.chat.completions.create(**kwargs)
+                completion = await client.chat.completions.create(**kwargs)
                 if completion.choices and completion.choices[0].message.content:
                     return completion.choices[0].message.content
             except Exception as e:

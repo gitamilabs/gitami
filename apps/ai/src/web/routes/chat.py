@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from src.agents.agent_loop import AutonomousAgentLoop
 from src.agents.llm_client import DualLLMClient
+from src.context import ContextRequest, get_governed_engine
 from src.graph.client import Neo4jClient
 from src.mcp.tools import (
     tool_get_blast_radius,
@@ -229,18 +230,17 @@ async def _execute_single_tool(
         elif t_name in ("retrieve_context", "get_governed_context", "context_engine"):
             t_title = "Governed Context Engine"
             from dataclasses import asdict
-            from src.context import ContextAuthorizer, ContextEngine, ContextRequest, StaticAuthResolver
 
-            resolver = StaticAuthResolver({req.repo_id: {req.repo_id: None}})
-            engine = ContextEngine(
+            engine = get_governed_engine(
+                req.repo_id,
                 graph_client=graph_client,
                 vector_client=vector_client,
-                authorizer=ContextAuthorizer(resolver=resolver, graph_client=graph_client),
+                project_id=req.project_id,
             )
             q = t_args.get("query", req.message)
             ctx_res = await engine.retrieve(
                 ContextRequest(
-                    project_id=req.repo_id,
+                    project_id=req.project_id or req.repo_id,
                     query=q,
                     repository_ids=[req.repo_id],
                     branch=req.branch or "main",
@@ -422,7 +422,7 @@ async def agent_chat_query(req: ChatRequest):
             title="Google Gemini Dual-LLM Orchestrator",
             status="completed",
             latency_ms=round(t_synth_latency, 2),
-            args={"model": "gemini-3.6-flash", "citations_count": len(citations)},
+            args={"model": DualLLMClient.get_default_model("gemini"), "citations_count": len(citations)},
             summary="Synthesized Knowledge Base context into a cited response.",
             raw_output={"response_length": len(synthesis_response)},
         )
