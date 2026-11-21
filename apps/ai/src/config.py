@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     orchestrator_provider: str = "gemini"
     worker_provider: str = "local"
 
+    # ── Internal Service Authentication ───────────────────────────────────────
+    # Shared secret for gateway-to-ai service HMAC-SHA256 authentication
+    internal_api_secret: str = "gitami_dev_internal_api_secret_default_32bytes"
+
     model_config = SettingsConfigDict(
         env_file=(
             ".env",

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
+from src.web.middleware import InternalServiceAuthMiddleware
 from src.web.deps import (
     close_shared_clients,
     get_shared_graph_client,
@@ -47,6 +48,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Mount internal service authentication middleware (rejects unsigned / expired requests)
+app.add_middleware(InternalServiceAuthMiddleware)
 
 # Enable CORS for local Next.js frontend and API gateway
 app.add_middleware(
