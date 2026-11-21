@@ -1,12 +1,12 @@
+import asyncio
 import json
 import pytest
-from pathlib import Path
 from pathlib import Path
 from src.graph.client import Neo4jClient
 from src.parsing.parser import CodeParser
 from src.graph.writer import upsert_file_and_symbols, upsert_call_edges, upsert_import_edges, delete_repo_data
 from src.graph.resolver import resolve_repo_imports
-from src.jobs.init_job import run_init_job
+from src.indexer.pipeline import RepositoryIndexer
 from src.mcp.tools import (
     tool_get_repo_structure,
     tool_get_symbol_details,
@@ -19,7 +19,10 @@ from src.mcp.tools import (
 @pytest.mark.asyncio
 async def test_mcp_tools_against_neo4j():
     client = Neo4jClient()
-    await client.connect()
+    try:
+        await asyncio.wait_for(client.verify_connectivity(), timeout=1.5)
+    except Exception:
+        pytest.skip("Neo4j database is not running, skipping live MCP test")
     try:
         # Seed test data for demo-mern
         fixtures_dir = Path(__file__).parent.parent / "fixtures" / "mern_sample"
@@ -38,11 +41,11 @@ async def test_mcp_tools_against_neo4j():
         if len(struct.get("files", [])) == 0:
             fixture_dir = Path(__file__).parent.parent / "fixtures" / "mern_sample"
             if fixture_dir.exists():
-                await run_init_job(
+                indexer = RepositoryIndexer(graph_client=client)
+                await indexer.run(
                     repo_id="demo-mern",
                     branch="main",
                     repo_dir=fixture_dir,
-                    client=client,
                 )
                 struct_json = await tool_get_repo_structure(client, repo_id="demo-mern", branch="main")
                 struct = json.loads(struct_json)

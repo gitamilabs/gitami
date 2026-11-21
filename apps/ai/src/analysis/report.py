@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 
 def generate_graph_report(
@@ -11,31 +11,13 @@ def generate_graph_report(
     god_nodes: List[Dict[str, Any]],
     surprising: List[Dict[str, Any]],
     cycles: List[List[str]],
-    out_dir: str | Path = "."
-) -> Path:
-    """Generate GRAPH_REPORT.md and graph.json (Graphify Stage 6)."""
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    
-    # 1. Export JSON
-    graph_data = {
-        "repo_id": repo_id,
-        "nodes": nodes,
-        "edges": edges,
-        "communities": communities,
-        "analysis": {
-            "god_nodes": god_nodes,
-            "surprising_connections": surprising,
-            "import_cycles": cycles
-        }
-    }
-    json_path = out_dir / "graph.json"
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(graph_data, f, indent=2)
-
-    # 2. Export Markdown Report
-    md_path = out_dir / "GRAPH_REPORT.md"
-    
+    out_dir: Optional[str | Path] = None,
+) -> str:
+    """
+    Generate Graphify architectural report (GRAPH_REPORT.md) in-memory.
+    If out_dir is provided, also saves graph.json and GRAPH_REPORT.md to disk.
+    Returns the markdown report string directly.
+    """
     lines = [
         f"# Graphify Architectural Report: {repo_id}",
         "",
@@ -45,9 +27,9 @@ def generate_graph_report(
         f"- **Number of Communities**: {len(communities)}",
         "",
         "## Communities",
-        "Communities represent clusters of highly connected files/symbols."
+        "Communities represent clusters of highly connected files/symbols.",
     ]
-    
+
     for c_id, members in communities.items():
         lines.append(f"- **Community {c_id}**: {len(members)} nodes")
         # List up to 5 members as preview
@@ -55,7 +37,7 @@ def generate_graph_report(
         if len(members) > 5:
             preview.append("...")
         lines.append(f"  - Members: {', '.join(preview)}")
-        
+
     lines.append("")
     lines.append("## God Nodes (Highest Degree)")
     lines.append("These are the most central, highly coupled nodes in the architecture.")
@@ -63,7 +45,7 @@ def generate_graph_report(
     lines.append("|------|------|--------------|-----------|------------|")
     for n in god_nodes:
         lines.append(f"| `{n['label']}` | {n['type']} | {n['degree']} | {n['in_degree']} | {n['out_degree']} |")
-        
+
     lines.append("")
     lines.append("## Surprising Connections (Cross-Community)")
     lines.append("These connections bridge different modules/communities and may indicate architectural leakage.")
@@ -85,8 +67,52 @@ def generate_graph_report(
             lines.append(f"**Cycle {idx+1}**:")
             cycle_str = " -> ".join([f"`{node}`" for node in cycle]) + f" -> `{cycle[0]}`"
             lines.append(f"- {cycle_str}")
-            
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
-        
-    return md_path
+
+    report_content = "\n".join(lines)
+
+    if out_dir is not None:
+        target_dir = Path(out_dir)
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        graph_data = {
+            "repo_id": repo_id,
+            "nodes": nodes,
+            "edges": edges,
+            "communities": communities,
+            "analysis": {
+                "god_nodes": god_nodes,
+                "surprising_connections": surprising,
+                "import_cycles": cycles,
+            },
+        }
+        json_path = target_dir / "graph.json"
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(graph_data, f, indent=2)
+
+        md_path = target_dir / "GRAPH_REPORT.md"
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(report_content)
+
+    return report_content
+
+
+def render_graph_report(
+    repo_id: str,
+    nodes: List[Dict[str, Any]],
+    edges: List[Dict[str, Any]],
+    communities: Dict[int, List[str]],
+    god_nodes: List[Dict[str, Any]],
+    surprising: List[Dict[str, Any]],
+    cycles: List[List[str]],
+) -> str:
+    """Render Graphify architectural report markdown directly in memory."""
+    return generate_graph_report(
+        repo_id=repo_id,
+        nodes=nodes,
+        edges=edges,
+        communities=communities,
+        god_nodes=god_nodes,
+        surprising=surprising,
+        cycles=cycles,
+        out_dir=None,
+    )

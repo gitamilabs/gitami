@@ -1,5 +1,3 @@
-from pathlib import Path
-import tempfile
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -12,7 +10,7 @@ from src.analysis.graph_analysis import (
     find_import_cycles,
     find_surprising_connections,
 )
-from src.analysis.report import generate_graph_report
+from src.analysis.report import render_graph_report
 from src.graph.reader import get_entire_graph
 from src.web.deps import get_shared_graph_client
 
@@ -72,8 +70,7 @@ async def get_graph_report(repo_id: str, branch: str = "main"):
         surprising = find_surprising_connections(G, communities)
         cycles = find_import_cycles(G)
 
-        tmp_dir = Path(tempfile.gettempdir()) / "graphify_reports" / repo_id.replace("/", "_")
-        md_path = generate_graph_report(
+        report_markdown = render_graph_report(
             repo_id=repo_id,
             nodes=graph_data["nodes"],
             edges=graph_data["edges"],
@@ -81,15 +78,9 @@ async def get_graph_report(repo_id: str, branch: str = "main"):
             god_nodes=god_nodes,
             surprising=surprising,
             cycles=cycles,
-            out_dir=tmp_dir,
         )
 
-        if md_path.exists():
-            with open(md_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            return {"status": "success", "repo_id": repo_id, "report_markdown": content}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to generate report file.")
+        return {"status": "success", "repo_id": repo_id, "report_markdown": report_markdown}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

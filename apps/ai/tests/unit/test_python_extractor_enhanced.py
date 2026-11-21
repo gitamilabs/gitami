@@ -5,6 +5,10 @@ DISCORD_BOT_DIR = Path(__file__).parent.parent.parent / ".system_generated" if F
 
 
 def test_enhanced_python_extractor_discord_bot():
+    if not (DISCORD_BOT_DIR / "main.py").exists():
+        import pytest
+        pytest.skip("Scratch discord_bot directory not present")
+
     parser = CodeParser()
     main_file = DISCORD_BOT_DIR / "main.py"
     test_file = DISCORD_BOT_DIR / "test.py"

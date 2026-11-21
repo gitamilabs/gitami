@@ -7,7 +7,6 @@ import click
 
 from src.graph.client import Neo4jClient
 from src.vector.client import VectorKBClient
-from src.jobs.pr_eval_job import run_pr_eval_job
 from src.indexer.pipeline import RepositoryIndexer
 from src.indexer.contracts import IndexJobType
 
@@ -121,17 +120,27 @@ def eval_pr(repo_id: str, branch: str, repo_dir: str, base_ref: str, head_ref: s
         await graph_client.connect()
         vector_client = VectorKBClient()
         try:
-            res = await run_pr_eval_job(
+            from src.agents.review_agent import ReviewAgent
+            from git import Repo
+
+            root = Path(repo_dir)
+            try:
+                git_repo = Repo(root, search_parent_directories=True)
+                raw_diff_text = git_repo.git.diff(base_ref, head_ref)
+                git_repo.close()
+            except Exception:
+                raw_diff_text = f"Diff between {base_ref} and {head_ref}"
+
+            reviewer = ReviewAgent(graph_client=graph_client, vector_client=vector_client)
+            result = await reviewer.run(
                 repo_id=repo_id,
-                branch=branch,
-                repo_dir=Path(repo_dir),
-                base_ref=base_ref,
-                head_ref=head_ref,
-                client=graph_client,
-                vector_client=vector_client,
-                use_agent=agent,
+                pr_number=1,
+                base_branch=base_ref,
+                head_branch=head_ref,
+                title=f"PR review: {base_ref}..{head_ref}",
+                diff_text=raw_diff_text,
             )
-            click.echo(json.dumps(dataclasses.asdict(res), indent=2))
+            click.echo(json.dumps(result.to_dict(), indent=2))
         finally:
             await graph_client.close()
 
@@ -380,7 +389,7 @@ def analyze(repo_id: str, branch: str, out_dir: str):
             cycles = find_import_cycles(G)
             
             click.echo(f"Generating report in {out_dir}...")
-            md_path = generate_graph_report(
+            generate_graph_report(
                 repo_id=repo_id,
                 nodes=graph_data["nodes"],
                 edges=graph_data["edges"],
@@ -388,9 +397,9 @@ def analyze(repo_id: str, branch: str, out_dir: str):
                 god_nodes=god_nodes,
                 surprising=surprising,
                 cycles=cycles,
-                out_dir=out_dir
+                out_dir=out_dir,
             )
-            click.echo(f"Successfully generated architectural report at: {md_path.resolve()}")
+            click.echo(f"Successfully generated architectural report at: {(Path(out_dir) / 'GRAPH_REPORT.md').resolve()}")
             
         finally:
             await graph_client.close()

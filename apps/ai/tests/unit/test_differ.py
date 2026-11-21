@@ -1,7 +1,7 @@
 import tempfile
 from pathlib import Path
 from git import Repo
-from src.repo.differ import get_changed_files, get_changed_symbols
+from src.indexer.differ import get_changed_files, get_changed_symbols
 
 
 def test_differ_git_repository():

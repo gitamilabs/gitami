@@ -7,13 +7,13 @@ during benchmark test execution, and guarantees clean teardown after completion.
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from src.graph.client import Neo4jClient
 from src.graph.writer import delete_repo_data
 from src.vector.client import VectorKBClient
 from src.vector.cache import VectorCacheManager
-from src.jobs.init_job import run_init_job, InitResult
+from src.indexer.pipeline import RepositoryIndexer
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class KBContextInfo:
     branch: str
     graph_client: Neo4jClient
     vector_client: VectorKBClient
-    init_result: Optional[InitResult] = None
+    init_result: Optional[Any] = None
 
 
 class BenchmarkKBContext:
@@ -62,16 +62,20 @@ class BenchmarkKBContext:
                 logger.info(
                     f"[BenchmarkKB] Ingesting repository '{self.repo_id}' from {self.repo_dir} into Neo4j & Vector DB..."
                 )
-                self.init_result = await run_init_job(
-                    repo_id=self.repo_id,
-                    branch=self.branch,
-                    repo_dir=self.repo_dir,
-                    client=self.graph_client,
+                indexer = RepositoryIndexer(
+                    graph_client=self.graph_client,
                     vector_client=self.vector_client,
                 )
+                job, state, report = await indexer.run(
+                    repo_dir=self.repo_dir,
+                    repo_id=self.repo_id,
+                    target_commit_sha=self.branch or "HEAD",
+                    branch=self.branch or "main",
+                )
+                self.init_result = job
                 logger.info(
-                    f"[BenchmarkKB] Ingestion complete: {self.init_result.symbols_count} symbols, "
-                    f"{self.init_result.edges_count} edges, {self.init_result.vector_entries_count} vectors."
+                    f"[BenchmarkKB] Ingestion complete: {job.stats.entities_created} symbols, "
+                    f"{job.stats.relationships_created} edges, {job.stats.files_parsed} files."
                 )
             except Exception as e:
                 logger.warning(

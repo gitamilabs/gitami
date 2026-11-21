@@ -4,7 +4,7 @@ The backend is selected entirely by the .env keys:
     VECTOR_DB : chroma_local | chroma_cloud | qdrant | pinecone | supabase | memory
     EMBEDDER  : gemini | openai | fastembed
 
-All callers (cli.py, init_job.py, pr_eval_job.py, web/app.py, mcp/server.py, etc.)
+All callers (cli.py, pipeline.py, web/app.py, mcp/server.py, etc.)
 continue to instantiate VectorKBClient() with no arguments — the factories handle
 backend selection transparently.
 """

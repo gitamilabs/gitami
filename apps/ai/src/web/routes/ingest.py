@@ -10,7 +10,8 @@ from fastapi.responses import StreamingResponse
 
 from src.web.deps import get_shared_graph_client, get_shared_vector_client
 from src.web.schemas import IngestRequest, IngestUrlRequest, ReindexRequest
-from src.jobs.init_job import run_init_job
+from src.indexer.pipeline import RepositoryIndexer
+from src.indexer.contracts import IndexJobType
 from src.repo.streamer import stream_and_parse_github_repo
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,11 @@ async def ingest_repository(req: IngestRequest):
 
                 target_full_name = req.full_name or (req.repo_id if "/" in req.repo_id else None)
 
+                indexer = RepositoryIndexer(
+                    graph_client=graph_client,
+                    vector_client=vector_client,
+                )
+
                 if target_full_name:
                     parse_results = stream_and_parse_github_repo(
                         full_name=target_full_name,
@@ -52,16 +58,16 @@ async def ingest_repository(req: IngestRequest):
                         branch=req.branch or "main",
                         root_directory=req.root_directory,
                     )
-                    result = await run_init_job(
+                    job, state, report = await indexer.run(
                         repo_id=req.repo_id,
+                        target_commit_sha=req.branch or "HEAD",
                         branch=req.branch or "main",
                         parse_results=parse_results,
-                        client=graph_client,
-                        vector_client=vector_client,
-                        extraction_mode=req.extraction_mode or "fast",
                         stage_callback=queue_cb,
                         project_id=req.project_id or "default",
                         team_id=req.team_id,
+                        job_type=IndexJobType.INITIAL,
+                        validate_only=(graph_client is None),
                         root_directory=req.root_directory,
                     )
                 elif req.repo_dir:
@@ -70,32 +76,32 @@ async def ingest_repository(req: IngestRequest):
                         await queue_cb("FAILED", "FAILED", {}, f"Directory '{req.repo_dir}' does not exist")
                         return
 
-                    result = await run_init_job(
+                    job, state, report = await indexer.run(
                         repo_id=req.repo_id,
+                        target_commit_sha=req.branch or "HEAD",
                         branch=req.branch or "main",
                         repo_dir=repo_path,
-                        client=graph_client,
-                        vector_client=vector_client,
-                        extraction_mode=req.extraction_mode or "fast",
                         stage_callback=queue_cb,
                         project_id=req.project_id or "default",
                         team_id=req.team_id,
+                        job_type=IndexJobType.INITIAL,
+                        validate_only=(graph_client is None),
                         root_directory=req.root_directory,
                     )
                 else:
                     await queue_cb("FAILED", "FAILED", {}, "Must provide either 'full_name' or 'repo_dir'")
                     return
 
-                if getattr(result, "status", "") == "ERROR":
-                    err_msg = "; ".join(getattr(result, "errors", [])) or "Ingestion validation failed"
+                if not report.is_valid:
+                    err_msg = "; ".join(report.fatal_errors) or "Ingestion validation failed"
                     await queue_cb("FAILED", "FAILED", {}, err_msg)
                 else:
                     final_stats = {
-                        "symbols_parsed": getattr(result, "symbols_count", getattr(result, "total_symbols", 0)),
-                        "files_parsed": getattr(result, "vector_entries_count", getattr(result, "total_files", 0)),
-                        "packages": getattr(result, "total_packages", 0),
-                        "edges_count": getattr(result, "edges_count", 0),
-                        "duration_seconds": getattr(result, "duration_seconds", 0.0),
+                        "symbols_parsed": job.stats.entities_created,
+                        "files_parsed": job.stats.files_parsed,
+                        "packages": 0,
+                        "edges_count": job.stats.relationships_created,
+                        "duration_seconds": job.stats.duration_seconds,
                     }
                     await queue_cb("COMPLETED", "COMPLETED", final_stats)
             except Exception as e:
@@ -154,23 +160,28 @@ async def ingest_from_github_url(req: IngestUrlRequest):
         graph_client = await get_shared_graph_client()
         vector_client = get_shared_vector_client()
         try:
-            init_res = await run_init_job(
+            indexer = RepositoryIndexer(
+                graph_client=graph_client,
+                vector_client=vector_client,
+            )
+            job, state, report = await indexer.run(
                 repo_id=repo_id,
+                target_commit_sha=req.branch or "HEAD",
                 branch=req.branch or "main",
                 repo_dir=target_dir,
-                client=graph_client,
-                vector_client=vector_client,
-                extraction_mode=req.extraction_mode or "fast",
                 project_id=req.project_id or "default",
                 team_id=req.team_id,
+                job_type=IndexJobType.INITIAL,
+                validate_only=(graph_client is None),
                 root_directory=req.root_directory,
             )
 
+            status_str = "SUCCESS" if report.is_valid else "ERROR"
             return {
-                "status": init_res.status,
+                "status": status_str,
                 "repo_id": repo_id,
-                "symbols_parsed": getattr(init_res, "symbols_count", getattr(init_res, "total_symbols", 0)),
-                "files_parsed": getattr(init_res, "vector_entries_count", getattr(init_res, "total_files", 0)),
+                "symbols_parsed": job.stats.entities_created,
+                "files_parsed": job.stats.files_parsed,
             }
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Ingestion from GitHub URL failed: {str(e)}")
