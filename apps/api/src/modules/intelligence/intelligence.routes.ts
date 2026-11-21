@@ -14,6 +14,7 @@ import {
   fetchWithInternalAuth,
   INTERNAL_AUTH_HEADER,
 } from "../../utils/internal-auth";
+import { aiCircuitBreaker } from "../../utils/circuit-breaker";
 
 export interface EnrichedTenancyPayload {
   repo_id: string;
@@ -127,13 +128,29 @@ export async function verifyAndEnrichTenancy(
 
 /**
  * Outbound HTTP client wrapper for AI intelligence service requests.
- * Delegates to fetchWithInternalAuth to attach timestamp-bounded HMAC tokens.
+ * Delegates to fetchWithInternalAuth to attach timestamp-bounded HMAC tokens
+ * and wraps calls with aiCircuitBreaker to prevent socket and thread exhaustion.
  */
 function fetchFromAIService(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  return fetchWithInternalAuth(`${AI_SERVICE_URL}${path}`, init);
+  return aiCircuitBreaker.execute(() =>
+    fetchWithInternalAuth(`${AI_SERVICE_URL}${path}`, init),
+  );
+}
+
+/**
+ * Maps downstream gateway and circuit breaker errors to proper HTTP statuses.
+ * Returns HTTP 503 when the circuit breaker is OPEN, and 502 for unhandled network/transport errors.
+ */
+function handleGatewayError(
+  c: Context,
+  err: any,
+  extra: Record<string, any> = {},
+) {
+  const status = typeof err?.status === "number" ? err.status : 502;
+  return c.json({ error: err.message, ...extra }, status as any);
 }
 
 /**
@@ -154,12 +171,13 @@ async function forwardTenancyPost(
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
-    return c.json({ error: err.message }, 502);
+    return handleGatewayError(c, err);
   }
 }
 
 /**
- * Health check proxy (public, no auth required)
+ * Health check proxy (public, no auth required).
+ * Probes the downstream AI service directly without polluting functional circuit breaker state.
  */
 intelligenceRouter.get("/health", async (c) => {
   try {
@@ -167,7 +185,7 @@ intelligenceRouter.get("/health", async (c) => {
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
-    return c.json({ status: "error", error: err.message }, 502);
+    return handleGatewayError(c, err, { status: "error" });
   }
 });
 
@@ -185,7 +203,7 @@ intelligenceRouter.get("/repos", async (c) => {
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
-    return c.json({ repos: [], error: err.message }, 502);
+    return handleGatewayError(c, err, { repos: [] });
   }
 });
 
@@ -198,7 +216,7 @@ intelligenceRouter.get("/config", async (c) => {
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
-    return c.json({ error: err.message }, 502);
+    return handleGatewayError(c, err);
   }
 });
 
@@ -211,7 +229,7 @@ intelligenceRouter.get("/prompts", async (c) => {
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
-    return c.json({ error: err.message }, 502);
+    return handleGatewayError(c, err);
   }
 });
 
@@ -225,7 +243,7 @@ intelligenceRouter.get("/prompts/:key", async (c) => {
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
-    return c.json({ error: err.message }, 502);
+    return handleGatewayError(c, err);
   }
 });
 
@@ -244,7 +262,7 @@ intelligenceRouter.put("/prompts/:key", async (c) => {
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
-    return c.json({ error: err.message }, 502);
+    return handleGatewayError(c, err);
   }
 });
 
@@ -260,7 +278,7 @@ intelligenceRouter.post("/prompts/:key/reset", async (c) => {
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
-    return c.json({ error: err.message }, 502);
+    return handleGatewayError(c, err);
   }
 });
 
@@ -278,7 +296,7 @@ intelligenceRouter.get("/graph-report/:repoId{.+}", async (c) => {
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
-    return c.json({ error: err.message }, 502);
+    return handleGatewayError(c, err);
   }
 });
 
@@ -317,7 +335,7 @@ intelligenceRouter.post("/chat/stream", async (c) => {
       "X-Accel-Buffering": "no",
     });
   } catch (err: any) {
-    return c.json({ error: err.message }, 502);
+    return handleGatewayError(c, err);
   }
 });
 

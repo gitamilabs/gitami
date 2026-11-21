@@ -74,9 +74,11 @@ mock.module(projectsServicePath, () => ({
 // Dynamically import intelligenceRouter after registering mocks
 const { default: intelligenceRouter, verifyAndEnrichTenancy } = await import("./intelligence.routes");
 const { verifyInternalServiceToken, INTERNAL_AUTH_HEADER } = await import("../../utils/internal-auth");
+const { aiCircuitBreaker, CircuitBreakerOpenError } = await import("../../utils/circuit-breaker");
 
 describe("Secure Intelligence Gateway Routes & Tenancy", () => {
   beforeEach(() => {
+    aiCircuitBreaker.reset();
     mockDbRepos = {};
     mockUserProjects = {};
     globalThis.fetch = mock(() =>
@@ -582,6 +584,85 @@ describe("Secure Intelligence Gateway Routes & Tenancy", () => {
           })
         );
       }
+    });
+  });
+
+  describe("Slice 8: Gateway Resiliency Circuit Breaker Guard", () => {
+    beforeEach(() => {
+      mockDbRepos["tenant-a/repo"] = {
+        id: "repo-1",
+        projectId: "project-alpha",
+        userId: "user-alice",
+        rootDirectory: "src",
+      };
+      mockUserProjects["user-alice"] = new Set(["project-alpha"]);
+      aiCircuitBreaker.reset();
+    });
+
+    it("trips circuit breaker to OPEN after 5 consecutive downstream network failures and fast-fails with 503", async () => {
+      let fetchAttemptCount = 0;
+      globalThis.fetch = mock(() => {
+        fetchAttemptCount++;
+        return Promise.reject(new Error("Downstream connection refused (ECONNREFUSED)"));
+      }) as any;
+
+      // Make 5 requests that fail with network errors
+      for (let i = 1; i <= 5; i++) {
+        const res = await intelligenceRouter.request("/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer token-alice",
+          },
+          body: JSON.stringify({ message: `msg ${i}`, repo_id: "tenant-a/repo" }),
+        });
+        expect(res.status).toBe(502);
+      }
+
+      expect(fetchAttemptCount).toBe(5);
+      expect(aiCircuitBreaker.getState()).toBe("OPEN");
+
+      // 6th request must immediately fast-fail with HTTP 503 WITHOUT calling fetch
+      const fastFailRes = await intelligenceRouter.request("/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer token-alice",
+        },
+        body: JSON.stringify({ message: "msg 6", repo_id: "tenant-a/repo" }),
+      });
+
+      expect(fastFailRes.status).toBe(503);
+      const data = (await fastFailRes.json()) as any;
+      expect(data.error).toContain("circuit breaker is OPEN");
+
+      // Fetch count should STILL be 5 (network call was bypassed)
+      expect(fetchAttemptCount).toBe(5);
+    });
+
+    it("guards GET proxy endpoints like /repos with circuit breaker fast-failing with 503", async () => {
+      globalThis.fetch = mock(() =>
+        Promise.reject(new Error("AI service timeout"))
+      ) as any;
+
+      for (let i = 0; i < 5; i++) {
+        const res = await intelligenceRouter.request("/repos", {
+          method: "GET",
+          headers: { Authorization: "Bearer token-alice" },
+        });
+        expect(res.status).toBe(502);
+      }
+
+      expect(aiCircuitBreaker.getState()).toBe("OPEN");
+
+      // 6th call returns 503
+      const res = await intelligenceRouter.request("/repos", {
+        method: "GET",
+        headers: { Authorization: "Bearer token-alice" },
+      });
+      expect(res.status).toBe(503);
+      const data = (await res.json()) as any;
+      expect(data.error).toContain("circuit breaker is OPEN");
     });
   });
 });
