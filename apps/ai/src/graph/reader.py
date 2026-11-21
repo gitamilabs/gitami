@@ -172,7 +172,7 @@ async def get_entire_graph(
     file_query = """
     MATCH (f:File)
     WHERE toLower(f.repo_id) = toLower($canonical_repo_id)
-      AND (f.branch IS NULL OR f.branch = $branch OR $branch = '' OR $branch = 'main')
+      AND (f.branch IS NULL OR f.branch = $branch OR ($branch = '' AND f.branch = 'main'))
       AND ($project_id IS NULL OR f.project_id = $project_id OR f.project_id = 'default')
       AND ($clean_root IS NULL OR f.file_path = $clean_root OR f.file_path STARTS WITH ($clean_root + '/'))
     RETURN f.file_path AS id,
@@ -218,7 +218,7 @@ async def get_entire_graph(
     MATCH (s)
     WHERE (s:Symbol OR s:Function OR s:Class OR s:Method OR s:Interface OR s:Type OR s:Test OR s:Schema OR s:Enum OR s:Router OR s:Relation OR s:Variable OR s:Inferred)
       AND toLower(s.repo_id) = toLower($canonical_repo_id)
-      AND (s.branch IS NULL OR s.branch = $branch OR $branch = '' OR $branch = 'main')
+      AND (s.branch IS NULL OR s.branch = $branch OR ($branch = '' AND s.branch = 'main'))
       AND ($project_id IS NULL OR s.project_id = $project_id OR s.project_id = 'default')
       AND NOT (s.name STARTS WITH "{" OR s.name STARTS WITH "[" OR s.name CONTAINS ",")
       AND ($clean_root IS NULL OR s.file_path IS NULL OR s.file_path = $clean_root OR s.file_path STARTS WITH ($clean_root + '/'))

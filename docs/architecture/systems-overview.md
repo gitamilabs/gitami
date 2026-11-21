@@ -211,13 +211,13 @@ Stores dense vector embeddings of code symbols and natural language descriptions
 
 ---
 
-### 4.4 Unified Knowledge Base & Hybrid Search (`kb_unified.py`)
+### 4.4 Governed Context Retrieval & Hybrid Search (`src/context/`)
 
 #### Purpose
-Acts as a unified facade over both ChromaDB and Neo4j, executing **Hybrid Retrieval-Augmented Generation (Hybrid RAG)**.
+Governed retrieval and context-assembly layer sitting between indexed project intelligence (Neo4j, VectorKB, Git, GitHub) and all agents/chat interfaces, executing **Governed Hybrid Retrieval-Augmented Generation (Hybrid RAG)** via `ContextEngine`.
 1. Vector similarity search over ChromaDB code/PR/commit/issue embeddings.
 2. Tokenized regex & Cypher MATCH search across Neo4j Symbol and File nodes.
-3. Merges and deduplicates hits into a single rich context object.
+3. Merges, deduplicates, and bounds hits within deterministic LLM token budgets while enforcing tenant authorization boundaries.
 
 ---
 

@@ -238,24 +238,56 @@ async def tool_hybrid_search(
     n_results: int = 5,
     project_id: Optional[str] = None,
 ) -> str:
-    """Perform hybrid search combining vector semantic search and graph structural search."""
-    from src.kb_unified import UnifiedKB
-    unified = UnifiedKB(neo4j_client=graph_client, vector_client=vector_client)
-    res = await unified.hybrid_search(
-        repo_id=repo_id,
-        query_text=query_text,
-        branch=branch,
-        n_results=n_results,
-        project_id=project_id,
+    """Perform hybrid search combining vector semantic search and graph structural search via ContextEngine."""
+    from dataclasses import asdict
+    from src.context import ContextEngine, ContextRequest, ContextAuthorizer, StaticAuthResolver
+
+    effective_project = project_id or repo_id
+    resolver = StaticAuthResolver({effective_project: {repo_id: None}})
+    authorizer = ContextAuthorizer(resolver=resolver, graph_client=graph_client)
+    engine = ContextEngine(
+        graph_client=graph_client,
+        vector_client=vector_client,
+        authorizer=authorizer,
     )
-    return json.dumps(res, indent=2)
+    req = ContextRequest(
+        project_id=effective_project,
+        query=query_text,
+        repository_ids=[repo_id],
+        branch=branch,
+        max_items=n_results,
+        include_graph=True,
+        include_semantic=True,
+        include_source=False,
+        include_github=False,
+    )
+    res = await engine.retrieve(req)
+    res_dict = asdict(res)
+
+    # Provide backward-compatible views for callers expecting vector_hits and graph_hits
+    items = res_dict.get("items", [])
+    res_dict["vector_hits"] = [
+        {"document": it.get("content", ""), "metadata": it.get("metadata", {})}
+        for it in items
+        if it.get("source", {}).get("kind") == "semantic" or it.get("source", {}).get("provider") in ("semantic", "vector")
+    ]
+    res_dict["graph_hits"] = [
+        {
+            "name": it.get("title", "").replace("Symbol: ", "").replace("File: ", ""),
+            "qualified_name": it.get("source", {}).get("entity_uid") or it.get("source", {}).get("file_path", ""),
+            "file_path": it.get("source", {}).get("file_path", ""),
+        }
+        for it in items
+        if it.get("source", {}).get("kind") == "graph" or it.get("source", {}).get("provider") in ("graph", "neo4j")
+    ]
+    return json.dumps(res_dict, indent=2)
 
 
 async def tool_get_file_content(repo_id: str, file_path: str, branch: str = "main") -> str:
     """Fetch raw source code, documentation, or configuration file contents from repository (GitHub remote or in-memory)."""
     import os
-    import urllib.request
     from pathlib import Path
+    import httpx
     from src.config import settings
 
     clean_path = file_path.strip().lstrip("/").lstrip("\\")
@@ -280,14 +312,14 @@ async def tool_get_file_content(repo_id: str, file_path: str, branch: str = "mai
                 if cand_rel not in path_variations:
                     path_variations.append(cand_rel)
 
-        for br in candidate_branches:
-            for p_cand in path_variations:
-                url = f"https://raw.githubusercontent.com/{repo_id}/{br}/{p_cand}"
-                try:
-                    req = urllib.request.Request(url, headers=headers)
-                    with urllib.request.urlopen(req, timeout=8) as response:
-                        if response.status == 200:
-                            text = response.read().decode("utf-8", errors="ignore")
+        async with httpx.AsyncClient(timeout=8.0) as http_client:
+            for br in candidate_branches:
+                for p_cand in path_variations:
+                    url = f"https://raw.githubusercontent.com/{repo_id}/{br}/{p_cand}"
+                    try:
+                        resp = await http_client.get(url, headers=headers)
+                        if resp.status_code == 200:
+                            text = resp.text
                             lines = text.splitlines()
                             return json.dumps({
                                 "file_path": p_cand,
@@ -296,8 +328,8 @@ async def tool_get_file_content(repo_id: str, file_path: str, branch: str = "mai
                                 "truncated": len(text) > 5000,
                                 "source": "github_remote",
                             }, indent=2)
-                except Exception:
-                    continue
+                    except Exception:
+                        continue
 
     # Priority 2: Dedicated local repo directory ONLY if explicitly configured (local development)
     repos_dir = os.environ.get("REPOS_DIR")
