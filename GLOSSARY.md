@@ -36,4 +36,7 @@ The unified, production-grade agent implementations under `src/agents/` that sup
 
 - **Control Plane (`apps/api`):** The Bun/Hono service managing authentication, GitHub App OAuth/webhooks, team/project RBAC, and background task queues.
 - **Intelligence Worker (`apps/ai`):** The Python/FastAPI service hosting Tree-sitter extractors, the Context Engine, Neo4j drivers, and Curated Agents.
+- **Secure Intelligence Gateway:** The hardened reverse-proxy boundary in `apps/api` (`intelligence.routes.ts`) that authenticates user JWTs, enforces project-level RBAC tenancy, signs requests with HMAC tokens, and isolates AI service calls behind a circuit breaker.
+- **Internal Service Authentication:** The cryptographic trust mechanism (`X-Gitami-Internal-Auth`) that signs service-to-service requests between `apps/api` and `apps/ai` using an HMAC-SHA256 signature and a 60-second replay window.
+- **Intelligence Circuit Breaker:** The fault-tolerance wrapper (`aiCircuitBreaker`) that monitors failure rates for the downstream AI service and trips to `OPEN` (returning HTTP 503) to prevent gateway thread exhaustion.
 - **Index Job:** A durable task tracking repository ingestion progress across lifecycle stages (`QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`).
