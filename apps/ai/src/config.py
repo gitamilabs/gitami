@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment or .env file."""
 
     # ── Selector keys ─────────────────────────────────────────────────────────
-    # VECTOR_DB: chroma_local | chroma_cloud | qdrant | pinecone | supabase | memory
+    # VECTOR_DB: chroma_local | chroma_cloud | memory
     vector_db: str = "chroma_local"
     # EMBEDDER: gemini | openai | fastembed
     embedder: str = "fastembed"
@@ -23,24 +23,6 @@ class Settings(BaseSettings):
     chroma_tenant: str = ""
     chroma_database: str = ""
     chroma_batch_size: int = 40
-
-    # ── Qdrant ────────────────────────────────────────────────────────────────
-    qdrant_url: str = ""
-    qdrant_api_key: str = ""
-    qdrant_collection: str = "knowledge_base"
-    qdrant_batch_size: int = 100
-
-    # ── Pinecone ──────────────────────────────────────────────────────────────
-    pinecone_api_key: str = ""
-    pinecone_index: str = "knowledge-base"
-    pinecone_environment: str = ""
-    pinecone_batch_size: int = 100
-
-    # ── Supabase pgvector ─────────────────────────────────────────────────────
-    supabase_url: str = ""
-    supabase_service_key: str = ""
-    supabase_table: str = "knowledge_base"
-    supabase_batch_size: int = 50
 
     # ── Gemini embedder ───────────────────────────────────────────────────────
     gemini_api_key: str = ""

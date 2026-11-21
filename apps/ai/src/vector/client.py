@@ -1,7 +1,7 @@
 """VectorKBClient — public facade over pluggable vector store and embedding model.
 
 The backend is selected entirely by the .env keys:
-    VECTOR_DB : chroma_local | chroma_cloud | qdrant | pinecone | supabase | memory
+    VECTOR_DB : chroma_local | chroma_cloud | memory
     EMBEDDER  : gemini | openai | fastembed
 
 All callers (cli.py, pipeline.py, web/app.py, mcp/server.py, etc.)

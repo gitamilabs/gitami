@@ -17,18 +17,6 @@ class MockSettings:
     chroma_tenant = ""
     chroma_database = ""
     chroma_batch_size = 40
-    qdrant_url = "http://localhost:6333"
-    qdrant_api_key = ""
-    qdrant_collection = "knowledge_base"
-    qdrant_batch_size = 100
-    pinecone_api_key = "pk-test"
-    pinecone_index = "knowledge-base"
-    pinecone_environment = "us-east-1"
-    pinecone_batch_size = 100
-    supabase_url = "https://test.supabase.co"
-    supabase_service_key = "svc-key"
-    supabase_table = "knowledge_base"
-    supabase_batch_size = 50
 
 
 def make_settings(vector_db="memory"):
@@ -45,11 +33,39 @@ def test_factory_returns_memory_store():
     assert isinstance(store, MemoryStore)
 
 
+def test_factory_returns_chroma_store(monkeypatch):
+    from src.vector.stores.factory import get_vector_store
+    from src.vector.stores.chroma_store import ChromaStore
+
+    mock_chroma_init = MagicMock(return_value=None)
+    monkeypatch.setattr(ChromaStore, "__init__", mock_chroma_init)
+
+    store_local = get_vector_store(make_settings("chroma_local"), MockEmbedder())
+    assert isinstance(store_local, ChromaStore)
+
+    store_cloud = get_vector_store(make_settings("chroma_cloud"), MockEmbedder())
+    assert isinstance(store_cloud, ChromaStore)
+
+
 def test_factory_raises_on_unknown_backend():
     from src.vector.stores.factory import get_vector_store
 
     with pytest.raises(ValueError, match="Unknown VECTOR_DB"):
         get_vector_store(make_settings("not_a_store"), MockEmbedder())
+
+
+@pytest.mark.parametrize("deprecated_backend", ["pinecone", "qdrant", "supabase"])
+def test_factory_rejects_deprecated_backends(deprecated_backend):
+    from src.vector.stores.factory import get_vector_store
+
+    with pytest.raises(ValueError, match="Unknown VECTOR_DB"):
+        get_vector_store(make_settings(deprecated_backend), MockEmbedder())
+
+
+def test_factory_valid_stores_constant():
+    from src.vector.stores.factory import _VALID_STORES
+
+    assert _VALID_STORES == ("chroma_local", "chroma_cloud", "memory")
 
 
 # ── In-memory store integration tests ────────────────────────────────────────

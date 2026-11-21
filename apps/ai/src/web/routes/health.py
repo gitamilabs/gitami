@@ -48,9 +48,6 @@ async def get_system_config():
             "has_local_llm": bool(settings.local_llm_url),
         },
         "storage": {
-            "qdrant_collection": settings.qdrant_collection,
-            "pinecone_index": settings.pinecone_index,
-            "supabase_table": settings.supabase_table,
             "chroma_persist_dir": settings.chroma_persist_dir,
         },
         "chroma_tenant": settings.chroma_tenant,
