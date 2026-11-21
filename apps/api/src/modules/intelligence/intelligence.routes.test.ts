@@ -73,6 +73,7 @@ mock.module(projectsServicePath, () => ({
 
 // Dynamically import intelligenceRouter after registering mocks
 const { default: intelligenceRouter, verifyAndEnrichTenancy } = await import("./intelligence.routes");
+const { verifyInternalServiceToken, INTERNAL_AUTH_HEADER } = await import("../../utils/internal-auth");
 
 describe("Secure Intelligence Gateway Routes & Tenancy", () => {
   beforeEach(() => {
@@ -448,6 +449,139 @@ describe("Secure Intelligence Gateway Routes & Tenancy", () => {
       expect(enriched.root_directory).toBe("subfolder");
       expect(enriched.team_id).toBe("org-alpha");
       expect(enriched.message).toBe("hi");
+    });
+  });
+
+  describe("Slice 7: Outbound Internal Service Authentication Header Forwarding", () => {
+    beforeEach(() => {
+      mockDbRepos["tenant-a/repo"] = {
+        id: "repo-1",
+        projectId: "project-alpha",
+        userId: "user-alice",
+        rootDirectory: "src",
+      };
+      mockUserProjects["user-alice"] = new Set(["project-alpha"]);
+    });
+
+    async function assertInternalAuthAttached(action: () => Response | Promise<Response>) {
+      let forwardedHeaders: Headers | null = null;
+      globalThis.fetch = mock((_url: string, init?: any) => {
+        forwardedHeaders = new Headers(init?.headers);
+        const isStream = _url.includes("/stream");
+        return Promise.resolve(
+          new Response(isStream ? "data: ok\n\n" : JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { "Content-Type": isStream ? "text/event-stream" : "application/json" },
+          }),
+        );
+      }) as any;
+
+      const res = await action();
+      expect(res.status).toBe(200);
+      expect(forwardedHeaders).not.toBeNull();
+      const internalToken = forwardedHeaders!.get(INTERNAL_AUTH_HEADER);
+      expect(internalToken).toBeDefined();
+      expect(internalToken).not.toBeNull();
+      const verification = await verifyInternalServiceToken(internalToken!);
+      expect(verification.valid).toBe(true);
+    }
+
+    it("attaches valid X-Gitami-Internal-Auth token to GET /repos proxy request", async () => {
+      await assertInternalAuthAttached(() =>
+        intelligenceRouter.request("/repos", {
+          method: "GET",
+          headers: { Authorization: "Bearer token-alice" },
+        })
+      );
+    });
+
+    it("attaches valid X-Gitami-Internal-Auth token to GET /config proxy request", async () => {
+      await assertInternalAuthAttached(() =>
+        intelligenceRouter.request("/config", {
+          method: "GET",
+          headers: { Authorization: "Bearer token-alice" },
+        })
+      );
+    });
+
+    it("attaches valid X-Gitami-Internal-Auth token to prompts management endpoints", async () => {
+      const endpoints: Array<{ path: string; method: string; body?: any }> = [
+        { path: "/prompts", method: "GET" },
+        { path: "/prompts/system", method: "GET" },
+        { path: "/prompts/system", method: "PUT", body: { content: "new prompt" } },
+        { path: "/prompts/system/reset", method: "POST" },
+      ];
+
+      for (const ep of endpoints) {
+        await assertInternalAuthAttached(() =>
+          intelligenceRouter.request(ep.path, {
+            method: ep.method,
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer token-alice",
+            },
+            body: ep.body ? JSON.stringify(ep.body) : undefined,
+          })
+        );
+      }
+    });
+
+    it("attaches valid X-Gitami-Internal-Auth token to GET /graph-report proxy call", async () => {
+      await assertInternalAuthAttached(() =>
+        intelligenceRouter.request("/graph-report/tenant-a/repo", {
+          method: "GET",
+          headers: { Authorization: "Bearer token-alice" },
+        })
+      );
+    });
+
+    it("attaches valid X-Gitami-Internal-Auth token to POST /chat and /chat/stream proxy calls", async () => {
+      // POST /chat
+      await assertInternalAuthAttached(() =>
+        intelligenceRouter.request("/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer token-alice",
+          },
+          body: JSON.stringify({ message: "hello", repo_id: "tenant-a/repo" }),
+        })
+      );
+
+      // POST /chat/stream
+      await assertInternalAuthAttached(() =>
+        intelligenceRouter.request("/chat/stream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer token-alice",
+          },
+          body: JSON.stringify({ message: "hello", repo_id: "tenant-a/repo" }),
+        })
+      );
+    });
+
+    it("attaches valid X-Gitami-Internal-Auth token across all curated agent endpoints", async () => {
+      const endpoints = [
+        "/investigate",
+        "/issue/analyze",
+        "/doc/generate",
+        "/code/plan",
+        "/code/execute",
+      ];
+
+      for (const endpoint of endpoints) {
+        await assertInternalAuthAttached(() =>
+          intelligenceRouter.request(endpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer token-alice",
+            },
+            body: JSON.stringify({ repo_id: "tenant-a/repo", query: "investigate" }),
+          })
+        );
+      }
     });
   });
 });

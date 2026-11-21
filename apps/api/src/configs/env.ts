@@ -31,6 +31,9 @@ const envSchema = z.object({
   JWT_SECRET: z
     .string()
     .default("super_secret_jwt_key_change_in_production_32bytes"),
+  INTERNAL_API_SECRET: z
+    .string()
+    .default("gitami_dev_internal_api_secret_default_32bytes"),
   FRONTEND_URL: z.string().default("http://localhost:3000"),
   AI_SERVICE_URL: z.string().default("http://localhost:8000"),
 });

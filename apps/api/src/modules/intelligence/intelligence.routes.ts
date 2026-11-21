@@ -9,6 +9,11 @@ import {
   type AuthContextVariables,
 } from "../../middlewares/auth.middleware";
 import { getProjectForUser } from "../projects/projects.service";
+import {
+  signInternalServiceToken,
+  fetchWithInternalAuth,
+  INTERNAL_AUTH_HEADER,
+} from "../../utils/internal-auth";
 
 export interface EnrichedTenancyPayload {
   repo_id: string;
@@ -121,6 +126,17 @@ export async function verifyAndEnrichTenancy(
 }
 
 /**
+ * Outbound HTTP client wrapper for AI intelligence service requests.
+ * Delegates to fetchWithInternalAuth to attach timestamp-bounded HMAC tokens.
+ */
+function fetchFromAIService(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  return fetchWithInternalAuth(`${AI_SERVICE_URL}${path}`, init);
+}
+
+/**
  * Standard forwarder for JSON POST requests with verified tenancy.
  */
 async function forwardTenancyPost(
@@ -130,7 +146,7 @@ async function forwardTenancyPost(
   const body = await c.req.json().catch(() => ({}));
   const payload = await verifyAndEnrichTenancy(body, c.get("user"));
   try {
-    const res = await fetch(`${AI_SERVICE_URL}${path}`, {
+    const res = await fetchFromAIService(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -165,7 +181,7 @@ intelligenceRouter.use("*", authMiddleware);
  */
 intelligenceRouter.get("/repos", async (c) => {
   try {
-    const res = await fetch(`${AI_SERVICE_URL}/api/repos`);
+    const res = await fetchFromAIService("/api/repos");
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
@@ -178,7 +194,7 @@ intelligenceRouter.get("/repos", async (c) => {
  */
 intelligenceRouter.get("/config", async (c) => {
   try {
-    const res = await fetch(`${AI_SERVICE_URL}/api/config`);
+    const res = await fetchFromAIService("/api/config");
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
@@ -191,7 +207,7 @@ intelligenceRouter.get("/config", async (c) => {
  */
 intelligenceRouter.get("/prompts", async (c) => {
   try {
-    const res = await fetch(`${AI_SERVICE_URL}/api/prompts`);
+    const res = await fetchFromAIService("/api/prompts");
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
@@ -205,7 +221,7 @@ intelligenceRouter.get("/prompts", async (c) => {
 intelligenceRouter.get("/prompts/:key", async (c) => {
   const key = c.req.param("key");
   try {
-    const res = await fetch(`${AI_SERVICE_URL}/api/prompts/${key}`);
+    const res = await fetchFromAIService(`/api/prompts/${key}`);
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
   } catch (err: any) {
@@ -220,7 +236,7 @@ intelligenceRouter.put("/prompts/:key", async (c) => {
   const key = c.req.param("key");
   const body = await c.req.json().catch(() => ({}));
   try {
-    const res = await fetch(`${AI_SERVICE_URL}/api/prompts/${key}`, {
+    const res = await fetchFromAIService(`/api/prompts/${key}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -238,7 +254,7 @@ intelligenceRouter.put("/prompts/:key", async (c) => {
 intelligenceRouter.post("/prompts/:key/reset", async (c) => {
   const key = c.req.param("key");
   try {
-    const res = await fetch(`${AI_SERVICE_URL}/api/prompts/${key}/reset`, {
+    const res = await fetchFromAIService(`/api/prompts/${key}/reset`, {
       method: "POST",
     });
     const data = await res.json().catch(() => ({}));
@@ -256,8 +272,8 @@ intelligenceRouter.get("/graph-report/:repoId{.+}", async (c) => {
   const branch = c.req.query("branch") || "main";
   const tenancy = await verifyAndEnrichTenancy({ repo_id: repoId }, c.get("user"));
   try {
-    const res = await fetch(
-      `${AI_SERVICE_URL}/api/graph-report/${encodeURIComponent(repoId)}?branch=${encodeURIComponent(branch)}&project_id=${encodeURIComponent(tenancy.project_id)}&team_id=${encodeURIComponent(tenancy.team_id)}`,
+    const res = await fetchFromAIService(
+      `/api/graph-report/${encodeURIComponent(repoId)}?branch=${encodeURIComponent(branch)}&project_id=${encodeURIComponent(tenancy.project_id)}&team_id=${encodeURIComponent(tenancy.team_id)}`,
     );
     const data = await res.json().catch(() => ({}));
     return c.json(data, res.status as any);
@@ -281,7 +297,7 @@ intelligenceRouter.post("/chat/stream", async (c) => {
   const payload = await verifyAndEnrichTenancy(body, c.get("user"));
 
   try {
-    const res = await fetch(`${AI_SERVICE_URL}/api/chat/stream`, {
+    const res = await fetchFromAIService("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
